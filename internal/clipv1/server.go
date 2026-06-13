@@ -53,6 +53,8 @@ type Server struct {
 	DescriptionProfile string
 	// MediaServerAlias makes /description.xml match the opt-in SSDP MediaServer:1 alias.
 	MediaServerAlias bool
+	// MediaServerBasicBody keeps the ms1 alias URL but serves a Hue Basic descriptor body.
+	MediaServerBasicBody bool
 
 	mu       sync.Mutex
 	lastLink time.Time
@@ -163,9 +165,10 @@ func (s *Server) linkActive() bool {
 
 func (s *Server) handleDescription(w http.ResponseWriter, r *http.Request) {
 	relumeVariant := r.URL.Query().Get("relume")
-	// relume=ms1 is the only variant that changes the descriptor body to MediaServer.
-	// Other relume query variants keep the Hue Basic body but use short cache headers.
-	mediaServerAlias := s.MediaServerAlias && relumeVariant == "ms1"
+	// relume=ms1 normally changes the descriptor body to MediaServer. The
+	// MediaServerBasicBody experiment keeps that followed URL but serves Basic:1.
+	// Other relume query variants keep the Hue Basic body and short cache headers.
+	mediaServerAlias := s.MediaServerAlias && relumeVariant == "ms1" && !s.MediaServerBasicBody
 	xml, err := upnp.RenderWithOptions(s.cfg.Identity, s.advIP, s.httpPort, upnp.Options{
 		Profile:            s.IdentityProfile,
 		DescriptionProfile: s.DescriptionProfile,

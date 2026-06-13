@@ -18,6 +18,7 @@ func TestParseServeOptions_discoveryDiagnostics(t *testing.T) {
 		"-identity-profile", "ambilight",
 		"-description-profile", "ambilight-reference",
 		"-ssdp-media-server-alias",
+		"-ssdp-media-server-basic-body",
 		"-ssdp-descriptor-variants",
 	})
 
@@ -54,6 +55,9 @@ func TestParseServeOptions_discoveryDiagnostics(t *testing.T) {
 	}
 	if !opts.ssdpMediaServerAlias {
 		t.Fatal("ssdpMediaServerAlias = false")
+	}
+	if !opts.ssdpMediaServerBasicBody {
+		t.Fatal("ssdpMediaServerBasicBody = false")
 	}
 	if !opts.ssdpDescriptorVariants {
 		t.Fatal("ssdpDescriptorVariants = false")

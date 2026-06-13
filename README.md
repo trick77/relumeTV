@@ -54,6 +54,8 @@ questions from that TV), `-discovery-burst-duration`, `-discovery-burst-interval
 format matching the Ambilight OSS bridge more closely),
 `-ssdp-media-server-alias` (experimental UPnP MediaServer:1 NOTIFY/response and
 query-scoped `description.xml` device type alias; uses a cache-busted SSDP location),
+`-ssdp-media-server-basic-body` (keep the `?relume=ms1` MediaServer alias URL but serve
+a Hue Basic descriptor body),
 `-ssdp-descriptor-variants` (extra query-scoped SSDP locations for one-scan
 descriptor-body experiments; use together with `-ssdp-media-server-alias`).
 
@@ -96,6 +98,11 @@ relume serve -debug -advertise-ip <nas-lan-ip> -tv-ip <tv-ip> \
   -identity-profile ambilight -description-profile ambilight-reference \
   -ssdp-media-server-alias
 
+# To test whether the TV follows only ?relume=ms1 but wants a Basic descriptor body:
+relume serve -debug -advertise-ip <nas-lan-ip> -tv-ip <tv-ip> \
+  -identity-profile ambilight -description-profile ambilight-reference \
+  -ssdp-media-server-alias -ssdp-media-server-basic-body
+
 sudo tcpdump -ni <iface> 'host <tv-ip> or udp port 5353 or udp port 1900 or tcp port 80'
 ```
 
@@ -128,7 +135,11 @@ Discovery experiments already tried on the real TV:
   `?relume=ms1`; still no `/api`.
 - `0.1.15`: adds `-description-profile ambilight-reference`, keeping discovery identity
   stable while making `description.xml` formatting/friendlyName match the active
-  Ambilight OSS bridge more closely. Pending real-TV result.
+  Ambilight OSS bridge more closely. Result: TV fetched `?relume=ms1` with the changed
+  descriptor bytes but still did not call `/api`.
+- `0.1.16`: adds `-ssdp-media-server-basic-body`, keeping the `?relume=ms1` URL that
+  the TV actually follows but serving a Hue Basic descriptor body from it. Pending
+  real-TV result.
 
 relume announces `Philips Hue - XXXXXX` / `modelid=BSB002`. The real Bridge Pro
 announces itself as `BSB003`, which the TV likely rejects as incompatible.

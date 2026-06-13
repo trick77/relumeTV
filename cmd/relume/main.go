@@ -71,17 +71,18 @@ func main() {
 }
 
 type serveOptions struct {
-	configPath             string
-	httpPort               int
-	advertiseIP            string
-	debug                  bool
-	tvIP                   string
-	discoveryBurstDuration time.Duration
-	discoveryBurstInterval time.Duration
-	identityProfile        string
-	descriptionProfile     string
-	ssdpMediaServerAlias   bool
-	ssdpDescriptorVariants bool
+	configPath               string
+	httpPort                 int
+	advertiseIP              string
+	debug                    bool
+	tvIP                     string
+	discoveryBurstDuration   time.Duration
+	discoveryBurstInterval   time.Duration
+	identityProfile          string
+	descriptionProfile       string
+	ssdpMediaServerAlias     bool
+	ssdpMediaServerBasicBody bool
+	ssdpDescriptorVariants   bool
 }
 
 func parseServeOptions(args []string) (serveOptions, error) {
@@ -96,22 +97,24 @@ func parseServeOptions(args []string) (serveOptions, error) {
 	identityProfile := fs.String("identity-profile", "", "experimental identity profile: empty/default, ambilight, or hass")
 	descriptionProfile := fs.String("description-profile", "", "experimental description.xml profile: empty/default or ambilight-reference")
 	ssdpMediaServerAlias := fs.Bool("ssdp-media-server-alias", false, "also advertise/respond as UPnP MediaServer:1 for Philips TV discovery experiments")
+	ssdpMediaServerBasicBody := fs.Bool("ssdp-media-server-basic-body", false, "serve a Hue Basic descriptor body from the MediaServer alias URL")
 	ssdpDescriptorVariants := fs.Bool("ssdp-descriptor-variants", false, "also advertise query-scoped descriptor variants for Philips TV discovery experiments")
 	if err := fs.Parse(args); err != nil {
 		return serveOptions{}, err
 	}
 	return serveOptions{
-		configPath:             *cfgPath,
-		httpPort:               *httpPort,
-		advertiseIP:            *advIP,
-		debug:                  *debug,
-		tvIP:                   *tvIP,
-		discoveryBurstDuration: *burstDuration,
-		discoveryBurstInterval: *burstInterval,
-		identityProfile:        *identityProfile,
-		descriptionProfile:     *descriptionProfile,
-		ssdpMediaServerAlias:   *ssdpMediaServerAlias,
-		ssdpDescriptorVariants: *ssdpDescriptorVariants,
+		configPath:               *cfgPath,
+		httpPort:                 *httpPort,
+		advertiseIP:              *advIP,
+		debug:                    *debug,
+		tvIP:                     *tvIP,
+		discoveryBurstDuration:   *burstDuration,
+		discoveryBurstInterval:   *burstInterval,
+		identityProfile:          *identityProfile,
+		descriptionProfile:       *descriptionProfile,
+		ssdpMediaServerAlias:     *ssdpMediaServerAlias,
+		ssdpMediaServerBasicBody: *ssdpMediaServerBasicBody,
+		ssdpDescriptorVariants:   *ssdpDescriptorVariants,
 	}, nil
 }
 
@@ -141,6 +144,7 @@ func runServe(args []string, log *slog.Logger) error {
 	clip.IdentityProfile = opts.identityProfile
 	clip.DescriptionProfile = opts.descriptionProfile
 	clip.MediaServerAlias = opts.ssdpMediaServerAlias
+	clip.MediaServerBasicBody = opts.ssdpMediaServerBasicBody
 	if cfg.Pro != nil {
 		client := bridgepro.New(cfg.Pro)
 		clip.SetLightProvider(bridge.NewLightProvider(client))
