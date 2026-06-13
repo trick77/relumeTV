@@ -13,6 +13,24 @@ import (
 	"github.com/trick77/ambibridge/internal/config"
 )
 
+func mustGet(t *testing.T, url string) *http.Response {
+	t.Helper()
+	resp, err := http.Get(url)
+	if err != nil {
+		t.Fatalf("GET %s: %v", url, err)
+	}
+	return resp
+}
+
+func mustPost(t *testing.T, url, body string) *http.Response {
+	t.Helper()
+	resp, err := http.Post(url, "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST %s: %v", url, err)
+	}
+	return resp
+}
+
 func newTestServer(t *testing.T) (*Server, *httptest.Server) {
 	t.Helper()
 	cfg, err := config.Load(filepath.Join(t.TempDir(), "c.json"))
@@ -30,7 +48,7 @@ func TestPairing_withoutLinkButton_thenFails(t *testing.T) {
 	_, ts := newTestServer(t)
 
 	// When
-	resp, _ := http.Post(ts.URL+"/api", "application/json", strings.NewReader(`{"devicetype":"tv"}`))
+	resp := mustPost(t, ts.URL+"/api", `{"devicetype":"tv"}`)
 	defer resp.Body.Close()
 	var out []map[string]map[string]any
 	json.NewDecoder(resp.Body).Decode(&out)
@@ -50,8 +68,7 @@ func TestPairing_withLinkButton_thenReturnsUsernameAndClientKey(t *testing.T) {
 	s.PressLink()
 
 	// When
-	resp, _ := http.Post(ts.URL+"/api", "application/json",
-		strings.NewReader(`{"devicetype":"Philips_TV#Ambilight","generateclientkey":true}`))
+	resp := mustPost(t, ts.URL+"/api", `{"devicetype":"Philips_TV#Ambilight","generateclientkey":true}`)
 	defer resp.Body.Close()
 	var out []map[string]map[string]any
 	json.NewDecoder(resp.Body).Decode(&out)
@@ -70,7 +87,7 @@ func TestPairing_withLinkButton_thenReturnsUsernameAndClientKey(t *testing.T) {
 	}
 
 	// Then: gekoppelter user kann config abrufen
-	cfgResp, _ := http.Get(ts.URL + "/api/" + username + "/config")
+	cfgResp := mustGet(t, ts.URL+"/api/"+username+"/config")
 	defer cfgResp.Body.Close()
 	var cfg map[string]any
 	json.NewDecoder(cfgResp.Body).Decode(&cfg)
@@ -84,7 +101,7 @@ func TestDescriptionXML_containsBSB002(t *testing.T) {
 	_, ts := newTestServer(t)
 
 	// When
-	resp, _ := http.Get(ts.URL + "/description.xml")
+	resp := mustGet(t, ts.URL+"/description.xml")
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
 
@@ -102,7 +119,7 @@ func TestShortConfig_unauthenticated(t *testing.T) {
 	_, ts := newTestServer(t)
 
 	// When
-	resp, _ := http.Get(ts.URL + "/api/config")
+	resp := mustGet(t, ts.URL+"/api/config")
 	defer resp.Body.Close()
 	var cfg map[string]any
 

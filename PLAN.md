@@ -60,9 +60,11 @@ als HueStream-v2 an die Pro gestreamt. Stream-Stop → deaktivieren.
 ## Meilensteine
 
 - **M1 — Discovery & Pairing** ✅ **FERTIG & verifiziert.** TV findet & koppelt die Bridge.
-- **M2 — Bridge-Pro-Anbindung** ⏳ offen. `bridgepro`-CLIP-v2-Client, `setup`-Befehl
-  (Link-Button an der Pro → App-Key + clientkey holen, Cert pinnen), v2→v1-Lampenliste.
-  *Ziel:* TV zeigt die echten Pro-Lampen zur Auswahl.
+- **M2 — Bridge-Pro-Anbindung** ✅ **FERTIG & am echten Gerät (BSB003) verifiziert.**
+  `bridgepro`-CLIP-v2-Client (HTTPS + Cert-Pinning), `discover`- und `setup`-Befehl
+  (Link-Button an der Pro → App-Key + clientkey holen), `translate` v2→v1-Lampenliste.
+  Verifiziert: HTTPS-only-Annahme bestätigt (HTTP:80 → 301), Pinning, Pairing, 16 Lampen
+  über den Proxy als v1-Liste.
 - **M3 — REST-Fallback** ⏳ offen. `PUT lights/groups` → CLIP v2 weiterreichen.
   *Ziel:* Ambilight steuert die Lampen end-to-end (noch laggy).
 - **M4 — Entertainment** ⏳ offen. `huestream` (+Tests), DTLS-Server (TV) + DTLS-Client (Pro),

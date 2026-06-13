@@ -15,6 +15,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/trick77/ambibridge/internal/bridge"
+	"github.com/trick77/ambibridge/internal/bridgepro"
 	"github.com/trick77/ambibridge/internal/clipv1"
 	"github.com/trick77/ambibridge/internal/config"
 	"github.com/trick77/ambibridge/internal/ssdp"
@@ -39,8 +41,18 @@ func main() {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
+	case "setup":
+		if err := runSetup(os.Args[2:], log); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	case "discover":
+		if err := runDiscover(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	default:
-		fmt.Fprintf(os.Stderr, "unbekannter Befehl %q\nVerfügbar: serve, link\n", cmd)
+		fmt.Fprintf(os.Stderr, "unbekannter Befehl %q\nVerfügbar: serve, setup, discover, link\n", cmd)
 		os.Exit(2)
 	}
 }
@@ -67,6 +79,13 @@ func runServe(args []string, log *slog.Logger) error {
 	log.Info("identität", "serial", cfg.Identity.Serial, "bridgeid", cfg.Identity.BridgeID(), "advertise", ip)
 
 	clip := clipv1.New(cfg, ip, *httpPort, log)
+	if cfg.Pro != nil {
+		client := bridgepro.New(cfg.Pro)
+		clip.SetLightProvider(bridge.NewLightProvider(client))
+		log.Info("bridge pro gekoppelt", "host", cfg.Pro.Host)
+	} else {
+		log.Warn("keine bridge pro gekoppelt – erst 'ambibridge setup' ausführen")
+	}
 	responder := ssdp.New(cfg.Identity, ip, *httpPort, log)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -126,6 +145,105 @@ func runLink(args []string) error {
 	}
 	fmt.Println("Link-Button gedrückt – Pairing für 30s offen.")
 	return nil
+}
+
+// runDiscover listet via Philips-Cloud gefundene Bridges im lokalen Netz.
+func runDiscover() error {
+	bridges, err := bridgepro.Discover()
+	if err != nil {
+		return err
+	}
+	if len(bridges) == 0 {
+		fmt.Println("Keine Bridges gefunden (Cloud-Discovery). Nutze setup -bridge-ip <ip>.")
+		return nil
+	}
+	fmt.Println("Gefundene Bridges:")
+	for _, b := range bridges {
+		fmt.Printf("  id=%s  ip=%s\n", b.ID, b.InternalIPAddress)
+	}
+	return nil
+}
+
+// runSetup koppelt ambibridge mit der echten Hue Bridge Pro: Zertifikat pinnen,
+// Link-Button abwarten, App-Key + clientkey holen und persistieren.
+func runSetup(args []string, log *slog.Logger) error {
+	fs := flag.NewFlagSet("setup", flag.ExitOnError)
+	cfgPath := fs.String("config", "ambibridge.json", "Pfad zur Konfigurationsdatei")
+	bridgeIP := fs.String("bridge-ip", "", "IP der Hue Bridge Pro (leer = Cloud-Discovery)")
+	skipTLS := fs.Bool("skip-tls-verify", false, "TLS-Prüfung gegen die Pro deaktivieren (statt Cert-Pinning)")
+	timeout := fs.Duration("timeout", 60*time.Second, "wie lange auf den Link-Button gewartet wird")
+	_ = fs.Parse(args)
+
+	cfg, err := config.Load(*cfgPath)
+	if err != nil {
+		return err
+	}
+
+	host := *bridgeIP
+	if host == "" {
+		bridges, derr := bridgepro.Discover()
+		if derr != nil || len(bridges) == 0 {
+			return fmt.Errorf("keine Bridge gefunden; bitte -bridge-ip angeben (discover: %v)", derr)
+		}
+		host = bridges[0].InternalIPAddress
+		fmt.Printf("Bridge per Cloud-Discovery gefunden: %s\n", host)
+	}
+
+	pro := &config.BridgePro{Host: host, SkipTLSVerify: *skipTLS}
+	if !*skipTLS {
+		fp, ferr := bridgepro.FetchLeafFingerprint(host)
+		if ferr != nil {
+			return fmt.Errorf("zertifikat pinnen: %w", ferr)
+		}
+		pro.CertSHA256 = fp
+		log.Info("zertifikat gepinnt", "sha256", fp)
+	}
+
+	httpClient := bridgepro.HTTPClientFor(pro)
+	fmt.Printf("\n>>> Drücke jetzt den Link-Button an der Hue Bridge Pro (%s) <<<\n\n", host)
+
+	deadline := time.Now().Add(*timeout)
+	var res *bridgepro.PairResult
+	for time.Now().Before(deadline) {
+		res, err = bridgepro.Pair(httpClient, host, "ambibridge#"+hostname())
+		if err == nil {
+			break
+		}
+		time.Sleep(2 * time.Second)
+		fmt.Print(".")
+	}
+	fmt.Println()
+	if res == nil {
+		return fmt.Errorf("kopplung fehlgeschlagen (Link-Button rechtzeitig drücken): %w", err)
+	}
+
+	pro.AppKey = res.AppKey
+	pro.ClientKey = res.ClientKey
+	if err := cfg.SetPro(pro); err != nil {
+		return err
+	}
+	fmt.Println("Kopplung erfolgreich, App-Key gespeichert.")
+
+	// Lampen zur Bestätigung auflisten.
+	client := bridgepro.New(pro)
+	lights, lerr := client.Lights()
+	if lerr != nil {
+		fmt.Printf("Hinweis: Lampen konnten nicht gelesen werden: %v\n", lerr)
+		return nil
+	}
+	fmt.Printf("%d Lampen gefunden:\n", len(lights))
+	for _, l := range lights {
+		fmt.Printf("  - %s (%s)\n", l.Metadata.Name, l.ID)
+	}
+	return nil
+}
+
+func hostname() string {
+	h, err := os.Hostname()
+	if err != nil || h == "" {
+		return "host"
+	}
+	return h
 }
 
 // outboundIP ermittelt die lokale IPv4, über die ausgehender Verkehr läuft.

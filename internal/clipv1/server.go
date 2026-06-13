@@ -23,12 +23,20 @@ import (
 // Pairing akzeptiert wird — wie an einer echten Bridge.
 const linkWindow = 30 * time.Second
 
+// LightProvider liefert die (bereits nach v1 übersetzte) Lampenliste der Bridge Pro.
+// Wird vom Backend (M2+) gesetzt; ist es nil, liefert der Server leere Listen (M1).
+type LightProvider interface {
+	// LightsV1 liefert die v1-Lampenliste (key = numerische ID als String).
+	LightsV1() (map[string]any, error)
+}
+
 // Server bedient die CLIP-v1-Oberfläche.
 type Server struct {
 	cfg      *config.Config
 	advIP    string
 	httpPort int
 	log      *slog.Logger
+	lights   LightProvider
 
 	mu       sync.Mutex
 	lastLink time.Time
@@ -37,6 +45,11 @@ type Server struct {
 // New erstellt den CLIP-v1-Server.
 func New(cfg *config.Config, advIP string, httpPort int, log *slog.Logger) *Server {
 	return &Server{cfg: cfg, advIP: advIP, httpPort: httpPort, log: log}
+}
+
+// SetLightProvider hinterlegt die Quelle für die Lampenliste (Bridge-Pro-Backend).
+func (s *Server) SetLightProvider(p LightProvider) {
+	s.lights = p
 }
 
 // Handler liefert den HTTP-Handler (Routing) für den Server.
@@ -174,12 +187,23 @@ func (s *Server) handleDatastore(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleLights/handleGroups: Platzhalter für M1; in M2/M3 von der Bridge Pro befüllt.
+// handleLights liefert die Lampen der Bridge Pro (v1-übersetzt) oder eine leere
+// Liste, wenn noch kein Backend gekoppelt ist (M1).
 func (s *Server) handleLights(w http.ResponseWriter, r *http.Request) {
 	if !s.authorized(w, r) {
 		return
 	}
-	writeJSON(w, map[string]any{})
+	if s.lights == nil {
+		writeJSON(w, map[string]any{})
+		return
+	}
+	lights, err := s.lights.LightsV1()
+	if err != nil {
+		s.log.Warn("lampen von bridge pro lesen", "err", err)
+		writeJSON(w, map[string]any{})
+		return
+	}
+	writeJSON(w, lights)
 }
 
 func (s *Server) handleGroups(w http.ResponseWriter, r *http.Request) {
