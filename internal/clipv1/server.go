@@ -160,6 +160,8 @@ func (s *Server) linkActive() bool {
 
 func (s *Server) handleDescription(w http.ResponseWriter, r *http.Request) {
 	relumeVariant := r.URL.Query().Get("relume")
+	// relume=ms1 is the only variant that changes the descriptor body to MediaServer.
+	// Other relume query variants keep the Hue Basic body but use short cache headers.
 	mediaServerAlias := s.MediaServerAlias && relumeVariant == "ms1"
 	xml, err := upnp.RenderWithOptions(s.cfg.Identity, s.advIP, s.httpPort, upnp.Options{
 		Profile:          s.IdentityProfile,

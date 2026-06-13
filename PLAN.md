@@ -61,11 +61,13 @@ The Bridge Pro breaks the Ambilight+Hue path in three ways:
 
 ## Discovery finding (measured on the real Philips TV)
 
-- The current test run saw SSDP M-SEARCH **only** for `MediaServer` (DLNA), no Hue-specific
-  SSDP, no `/description.xml` fetch, and no active `_hue._tcp` query.
-- That measurement points to passive mDNS listening, but public diyHue reports show at least
-  some Philips TVs sending generic SSDP M-SEARCH and then fetching `/description.xml`.
-  relume therefore keeps SSDP responses and mDNS announcements active.
+- The TV sends no Hue-specific SSDP M-SEARCH and no cloud lookup for
+  `discovery.meethue.com`.
+- After TV reboot, the TV actively queries `_hue._tcp.local`, fetches plain
+  `/description.xml` with the Android/Dalvik stack, later sends `MediaServer:1`
+  SSDP M-SEARCH, and fetches `/description.xml?relume=ms1` with the Philips DLNA stack.
+- No measured run has reached `POST /api`, `/api/config`, or authenticated `/api/...`.
+  The current failure is after descriptor retrieval, not basic IP discovery.
 - Diagnostics now support startup bursts: `-discovery-burst-duration 90s
   -discovery-burst-interval 1s` sends repeated SSDP NOTIFY and mDNS re-announcements while
   the TV is in Ambilight+Hue scan mode.
@@ -78,11 +80,25 @@ The Bridge Pro breaks the Ambilight+Hue path in three ways:
   it actively broadcasts a `MediaServer:1` SSDP NOTIFY and answers `MediaServer:1` M-SEARCH
   with cache-busted `LOCATION: /description.xml?relume=ms1` and `max-age=1`. Only that query
   URL serves `deviceType=MediaServer:1`; plain `/description.xml` remains Hue Basic for the mDNS path.
+- `-ssdp-descriptor-variants` adds `LOCATION: /description.xml?relume=basic1` under the
+  same `MediaServer:1` ST/NT. That URL still serves `deviceType=Basic:1`. It tests whether
+  the TV follows the MediaServer SSDP trigger but rejects the MediaServer descriptor body.
 - The real Bridge Pro itself announces `_hue._tcp` as `Hue Bridge - XXXXXX` / `modelid=BSB003`;
   the TV likely filters BSB003 out. relume announces `Philips Hue - XXXXXX` / `modelid=BSB002`.
 - UDP 10102 broadcasts from the TV are DTS Play-Fi (audio) — a red herring, unrelated to Hue.
 - macOS is an unusable test environment: the system mDNSResponder owns port 5353, so relume's
   built-in announcer cannot bind it. Final TV test belongs on single-homed Linux (the NAS).
+
+### Discovery experiments already tried
+
+| Version | Variation | Result |
+| --- | --- | --- |
+| `0.1.8` | Ambilight identity profile, Ambilight OSS-style `SERVER`, short CLIP v1 config, compatibility endpoints. | TV still stopped after descriptor discovery. |
+| `0.1.9` | HTTP `Server`/`Cache-Control` on `description.xml`; MediaServer alias descriptor `max-age=1`. | No `/api` follow-up. |
+| `0.1.10` | mDNS SRV host changed to lower bridgeid (`<bridgeid>.local.`). | TV HTTP `Host` stayed as the IP, so hostname multiplexing is not useful. |
+| `0.1.11` | Ambilight serial, UDN, and SSDP UUID/USN changed to lower bridgeid with `FFFE`. | TV still stopped after descriptor fetch. |
+| `0.1.12` | Basic:1 SSDP USN changed to `uuid::<urn:...:basic:1>`. | After TV reboot, it fetched plain `/description.xml` and `/description.xml?relume=ms1`; still no `/api`. |
+| `0.1.13` | Added `-ssdp-descriptor-variants` and `/description.xml?relume=basic1`. | Pending real-TV result. |
 
 ## Open items (verify on the real device)
 
@@ -90,8 +106,8 @@ The Bridge Pro breaks the Ambilight+Hue path in three ways:
   `relume serve -debug -advertise-ip <nas-lan-ip> -tv-ip <tv-ip>
   -discovery-burst-duration 90s -discovery-burst-interval 1s` and
   `tcpdump -ni <iface> 'host <tv-ip> or udp port 5353 or udp port 1900 or tcp port 80'`.
-  If the default identity is ignored, repeat with `-identity-profile hass`; if the TV still
-  only emits `MediaServer:1` SSDP, add `-ssdp-media-server-alias`.
+  If the default identity is ignored, repeat with `-identity-profile ambilight`; if the TV
+  fetches the MediaServer alias but still stops, add `-ssdp-descriptor-variants`.
 - Exact `HueStream` v2 layout (52-byte header, channel chunks).
 - Exact CLIP v2 calls to create/activate the `entertainment_configuration` on the Pro.
 - Whether the TV requires a specific `swversion`/`apiversion` to attempt Entertainment.

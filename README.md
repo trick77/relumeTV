@@ -49,18 +49,23 @@ To build locally instead: `docker build -f Containerfile -t relume:dev .`
 Useful `serve` flags: `-http-port` (default 80), `-advertise-ip` (empty = auto),
 `-debug` (SSDP/HTTP diagnostics + mDNS observer), `-tv-ip` (log all mDNS
 questions from that TV), `-discovery-burst-duration`, `-discovery-burst-interval`,
-`-identity-profile hass` (experimental Home Assistant emulated-hue wire identity),
+`-identity-profile ambilight` or `hass` (experimental wire identity profiles),
 `-ssdp-media-server-alias` (experimental UPnP MediaServer:1 NOTIFY/response and
-query-scoped `description.xml` device type alias; uses a cache-busted SSDP location).
+query-scoped `description.xml` device type alias; uses a cache-busted SSDP location),
+`-ssdp-descriptor-variants` (extra query-scoped SSDP locations for one-scan
+descriptor-body experiments; use together with `-ssdp-media-server-alias`).
 
 ## Important caveats
 
 ### Discovery: diagnose both passive and active paths
-Measured against the current test TV: Hue search did not send Hue-specific SSDP
-M-SEARCH, did not fetch `/description.xml`, and did not actively query `_hue._tcp`.
-That points to passive mDNS listening for the bridge announcement. Public diyHue
-reports also show some Philips TVs sending generic SSDP M-SEARCH and then fetching
-`/description.xml`, so relume keeps both paths active.
+Measured against the current Philips Android TV: Hue search does not send Hue-specific
+SSDP M-SEARCH and does not query `discovery.meethue.com`. After TV reboot it actively
+queries `_hue._tcp.local`, fetches plain `/description.xml` through the Android/Dalvik
+path, then later sends `MediaServer:1` SSDP M-SEARCH and fetches
+`/description.xml?relume=ms1` through the Philips DLNA stack. No tested run has reached
+`POST /api` or any authenticated `/api/...` request yet. relume keeps mDNS, Hue Basic
+SSDP, and the opt-in MediaServer SSDP alias active because the TV exercises multiple
+discovery stacks in one scan.
 
 For a decisive capture on Linux/NAS, run a short announcement burst while the TV is
 inside Ambilight+Hue bridge search:
@@ -79,6 +84,11 @@ relume serve -debug -advertise-ip <nas-lan-ip> -tv-ip <tv-ip> \
   -discovery-burst-duration 90s -discovery-burst-interval 1s \
   -identity-profile hass -ssdp-media-server-alias
 
+# To test several descriptor bodies in one MediaServer scan, add descriptor variants:
+relume serve -debug -advertise-ip <nas-lan-ip> -tv-ip <tv-ip> \
+  -discovery-burst-duration 90s -discovery-burst-interval 1s \
+  -identity-profile ambilight -ssdp-media-server-alias -ssdp-descriptor-variants
+
 sudo tcpdump -ni <iface> 'host <tv-ip> or udp port 5353 or udp port 1900 or tcp port 80'
 ```
 
@@ -89,6 +99,24 @@ Expected signals:
   names.
 - SSDP path: relume logs the TV M-SEARCH and responds immediately; tcpdump should show
   a follow-up `GET /description.xml`.
+
+Discovery experiments already tried on the real TV:
+- `0.1.8`: Ambilight identity profile, matching OSS emulator headers, short CLIP v1
+  config and compatibility endpoints. TV still stopped after descriptor discovery.
+- `0.1.9`: HTTP `Server`/`Cache-Control` headers on `description.xml`; MediaServer
+  alias descriptor set to `max-age=1`. No `/api` follow-up.
+- `0.1.10`: Ambilight mDNS SRV host changed to lower bridgeid
+  (`<bridgeid>.local.`). TV HTTP `Host` remained the IP address, so hostname-based
+  multiplexing is not useful.
+- `0.1.11`: Ambilight serial, description UDN, and SSDP UUID/USN changed to lower
+  bridgeid with `FFFE`, matching the active Ambilight OSS bridge. No `/api` follow-up.
+- `0.1.12`: Basic:1 SSDP USN changed to `uuid::<urn:...:basic:1>`, matching the OSS
+  reference. After TV reboot, the TV fetched both plain `/description.xml` and
+  `/description.xml?relume=ms1`, but still stopped before `/api`.
+- `0.1.13`: adds `-ssdp-descriptor-variants`; the extra
+  `/description.xml?relume=basic1` MediaServer LOCATION serves a Hue Basic descriptor
+  to test whether the TV wants a MediaServer SSDP trigger but rejects a MediaServer
+  descriptor body.
 
 relume announces `Philips Hue - XXXXXX` / `modelid=BSB002`. The real Bridge Pro
 announces itself as `BSB003`, which the TV likely rejects as incompatible.

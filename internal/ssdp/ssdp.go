@@ -259,17 +259,19 @@ func (r *Responder) ssdpVariants() []ssdpVariant {
 	}
 	if r.MediaServerAlias {
 		variants = append(variants, ssdpVariant{
-			st:       mediaServerST,
-			nt:       mediaServerST,
-			usn:      "uuid:" + uuid + "::" + mediaServerST,
+			st:  mediaServerST,
+			nt:  mediaServerST,
+			usn: "uuid:" + uuid + "::" + mediaServerST,
+			// ms1 serves a MediaServer descriptor body for TVs that only scan DLNA STs.
 			location: "ms1",
 		})
 	}
 	if r.MediaServerAlias && r.DescriptorVariants {
 		variants = append(variants, ssdpVariant{
-			st:       mediaServerST,
-			nt:       mediaServerST,
-			usn:      "uuid:" + uuid + "::" + mediaServerST,
+			st:  mediaServerST,
+			nt:  mediaServerST,
+			usn: "uuid:" + uuid + "::" + mediaServerST,
+			// basic1 keeps the MediaServer SSDP trigger but serves a Hue Basic descriptor.
 			location: "basic1",
 		})
 	}
