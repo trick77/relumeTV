@@ -33,6 +33,19 @@ type Announcer struct {
 	advIP string
 	port  int
 	log   *slog.Logger
+	// BurstDuration enables a diagnostic re-announcement burst after startup.
+	// Defaults to disabled.
+	BurstDuration time.Duration
+	// BurstInterval is the interval used during the diagnostic burst.
+	BurstInterval time.Duration
+}
+
+type serviceSpec struct {
+	instance string
+	service  string
+	domain   string
+	host     string
+	txt      []string
 }
 
 // New creates an Announcer. port is the advertised SRV port (usually the
@@ -43,15 +56,7 @@ func New(id config.Identity, advIP string, port int, log *slog.Logger) *Announce
 
 // Run registers the service and keeps it announced until ctx is cancelled.
 func (a *Announcer) Run(ctx context.Context) error {
-	bridgeID := a.id.BridgeID()
-	instance := "Philips Hue - " + bridgeID[len(bridgeID)-6:]
-	// Unique, bridge-like hostname for the SRV target / A record so it never
-	// collides with the host's own mDNS name (e.g. nas.local).
-	host := a.id.Serial
-	txt := []string{
-		"bridgeid=" + bridgeID,
-		"modelid=BSB002",
-	}
+	spec := a.serviceSpec()
 
 	var ifaces []net.Interface
 	if iface, err := interfaceForIP(a.advIP); err != nil {
@@ -65,7 +70,7 @@ func (a *Announcer) Run(ctx context.Context) error {
 	// addresses (zeroconf.Register) would also publish IPv6 AAAA records, which a
 	// real bridge never has and which some TVs reject or mis-handle.
 	register := func() (*zeroconf.Server, error) {
-		return zeroconf.RegisterProxy(instance, service, domain, a.port, host, []string{a.advIP}, txt, ifaces)
+		return zeroconf.RegisterProxy(spec.instance, spec.service, spec.domain, a.port, spec.host, []string{a.advIP}, spec.txt, ifaces)
 	}
 
 	server, err := register()
@@ -73,21 +78,48 @@ func (a *Announcer) Run(ctx context.Context) error {
 		return fmt.Errorf("mdns register: %w", err)
 	}
 	a.log.Info("mdns: announced as hue bridge",
-		"instance", instance, "host", host+"."+domain, "ip", a.advIP, "port", a.port, "bridgeid", bridgeID)
+		"instance", spec.instance, "host", spec.host+"."+spec.domain, "ip", a.advIP, "port", a.port, "bridgeid", a.id.BridgeID())
 
 	// Re-announce periodically so a passively-listening TV hears us regardless of
 	// when its search starts. grandcat/zeroconf has no real conflict resolution,
 	// so re-registering never renames the instance.
 	t := time.NewTicker(reannounceEvery)
 	defer t.Stop()
+	var burstC <-chan time.Time
+	var burstT *time.Ticker
+	var burstUntil time.Time
+	if a.BurstDuration > 0 {
+		interval := a.BurstInterval
+		if interval <= 0 {
+			interval = time.Second
+		}
+		burstT = time.NewTicker(interval)
+		defer burstT.Stop()
+		burstC = burstT.C
+		burstUntil = time.Now().Add(a.BurstDuration)
+		a.log.Info("mdns: discovery burst started", "duration", a.BurstDuration, "interval", interval)
+	}
 	for {
 		select {
 		case <-ctx.Done():
 			server.Shutdown()
 			return ctx.Err()
+		case <-burstC:
+			if time.Now().After(burstUntil) {
+				burstT.Stop()
+				burstC = nil
+				a.log.Info("mdns: discovery burst finished")
+				continue
+			}
+			s, rerr := reRegister(server, register)
+			if rerr != nil {
+				a.log.Warn("mdns: burst re-announce failed", "err", rerr)
+				continue
+			}
+			server = s
+			a.log.Info("mdns: burst re-announced as hue bridge", "instance", spec.instance, "ip", a.advIP, "port", a.port)
 		case <-t.C:
-			server.Shutdown()
-			s, rerr := register()
+			s, rerr := reRegister(server, register)
 			if rerr != nil {
 				a.log.Warn("mdns: re-announce failed", "err", rerr)
 				continue
@@ -95,6 +127,27 @@ func (a *Announcer) Run(ctx context.Context) error {
 			server = s
 		}
 	}
+}
+
+func (a *Announcer) serviceSpec() serviceSpec {
+	bridgeID := a.id.BridgeID()
+	return serviceSpec{
+		instance: "Philips Hue - " + bridgeID[len(bridgeID)-6:],
+		service:  service,
+		domain:   domain,
+		// Unique, bridge-like hostname for the SRV target / A record so it never
+		// collides with the host's own mDNS name (e.g. nas.local).
+		host: a.id.Serial,
+		txt: []string{
+			"bridgeid=" + bridgeID,
+			"modelid=BSB002",
+		},
+	}
+}
+
+func reRegister(current *zeroconf.Server, register func() (*zeroconf.Server, error)) (*zeroconf.Server, error) {
+	current.Shutdown()
+	return register()
 }
 
 // interfaceForIP returns the multicast-capable interface that carries the given IP.

@@ -31,6 +31,11 @@ type Responder struct {
 	// Debug enables logging of all received SSDP datagrams including headers
 	// (to analyze whether/how a TV searches via SSDP).
 	Debug bool
+	// BurstDuration enables a diagnostic burst of SSDP NOTIFY messages after
+	// startup. Defaults to disabled.
+	BurstDuration time.Duration
+	// BurstInterval is the interval used during the diagnostic burst.
+	BurstInterval time.Duration
 }
 
 // New creates a Responder. advIP is the IP advertised in the LOCATION header
@@ -61,6 +66,9 @@ func (r *Responder) Run(ctx context.Context) error {
 	_ = conn.SetReadBuffer(1 << 20)
 
 	go r.notifyLoop(ctx, conn, group)
+	if r.BurstDuration > 0 {
+		go r.notifyBurst(ctx, conn, group)
+	}
 
 	r.log.Info("ssdp responder started", "advertise", r.advIP, "httpPort", r.httpPort)
 
@@ -210,13 +218,63 @@ func (r *Responder) notifyLoop(ctx context.Context, conn *net.UDPConn, group *ne
 	}
 }
 
+func (r *Responder) notifyBurst(ctx context.Context, conn *net.UDPConn, group *net.UDPAddr) {
+	interval := r.BurstInterval
+	if interval <= 0 {
+		interval = time.Second
+	}
+	r.log.Info("ssdp: discovery burst started", "duration", r.BurstDuration, "interval", interval)
+	runBurst(ctx, interval, r.BurstDuration, func() {
+		r.sendNotify(conn, group)
+		if r.Debug {
+			r.log.Info("ssdp: discovery burst notify sent")
+		}
+	})
+	r.log.Info("ssdp: discovery burst finished")
+}
+
+func runBurst(ctx context.Context, interval, duration time.Duration, send func()) {
+	if duration <= 0 {
+		return
+	}
+	if interval <= 0 {
+		interval = time.Second
+	}
+	deadline := time.NewTimer(duration)
+	defer deadline.Stop()
+	t := time.NewTicker(interval)
+	defer t.Stop()
+
+	send()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-deadline.C:
+			return
+		case <-t.C:
+			send()
+		}
+	}
+}
+
 func (r *Responder) sendNotify(conn *net.UDPConn, group *net.UDPAddr) {
+	for _, msg := range r.notifyMessages() {
+		if _, err := conn.WriteToUDP([]byte(msg), group); err != nil {
+			r.log.Warn("ssdp notify", "err", err)
+			return
+		}
+	}
+}
+
+func (r *Responder) notifyMessages() []string {
 	uuid := r.id.UUID()
 	variants := []struct{ nt, usn string }{
 		{"upnp:rootdevice", "uuid:" + uuid + "::upnp:rootdevice"},
 		{"uuid:" + uuid, "uuid:" + uuid},
 		{"urn:schemas-upnp-org:device:basic:1", "uuid:" + uuid},
 	}
+	msgs := make([]string, 0, len(variants))
 	for _, v := range variants {
 		msg := "NOTIFY * HTTP/1.1\r\n" +
 			"HOST: 239.255.255.250:1900\r\n" +
@@ -228,9 +286,7 @@ func (r *Responder) sendNotify(conn *net.UDPConn, group *net.UDPAddr) {
 			"NT: " + v.nt + "\r\n" +
 			"USN: " + v.usn + "\r\n" +
 			"\r\n"
-		if _, err := conn.WriteToUDP([]byte(msg), group); err != nil {
-			r.log.Warn("ssdp notify", "err", err)
-			return
-		}
+		msgs = append(msgs, msg)
 	}
+	return msgs
 }

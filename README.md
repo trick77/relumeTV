@@ -47,15 +47,38 @@ To build locally instead: `docker build -f Containerfile -t relume:dev .`
 | `version` | Print the version. |
 
 Useful `serve` flags: `-http-port` (default 80), `-advertise-ip` (empty = auto),
-`-debug` (SSDP/HTTP diagnostics + mDNS observer).
+`-debug` (SSDP/HTTP diagnostics + mDNS observer), `-tv-ip` (log all mDNS
+questions from that TV), `-discovery-burst-duration`, `-discovery-burst-interval`.
 
 ## Important caveats
 
-### Discovery: the TV uses mDNS, not SSDP
-Measured against a real Philips TV: the Hue search does **not** use SSDP, it uses
-mDNS (`_hue._tcp`). The TV does not actively query — it **passively listens** for the
-bridge's announcement. relume actively announces `Philips Hue - XXXXXX` / `modelid=BSB002`.
-The real Bridge Pro announces itself as `BSB003`, which the TV rejects as incompatible.
+### Discovery: diagnose both passive and active paths
+Measured against the current test TV: Hue search did not send Hue-specific SSDP
+M-SEARCH, did not fetch `/description.xml`, and did not actively query `_hue._tcp`.
+That points to passive mDNS listening for the bridge announcement. Public diyHue
+reports also show some Philips TVs sending generic SSDP M-SEARCH and then fetching
+`/description.xml`, so relume keeps both paths active.
+
+For a decisive capture on Linux/NAS, run a short announcement burst while the TV is
+inside Ambilight+Hue bridge search:
+
+```bash
+relume serve -debug -advertise-ip <nas-lan-ip> -tv-ip <tv-ip> \
+  -discovery-burst-duration 90s -discovery-burst-interval 1s
+
+sudo tcpdump -ni <iface> 'host <tv-ip> or udp port 5353 or udp port 1900 or tcp port 80'
+```
+
+Expected signals:
+- Passive mDNS path: relume logs `mdns: burst re-announced as hue bridge`; the TV may
+  then connect to `/description.xml` or `/api` without first sending a query.
+- Active mDNS path: relume logs `mdns: query` from `-tv-ip`, even for non-Hue question
+  names.
+- SSDP path: relume logs the TV M-SEARCH and responds immediately; tcpdump should show
+  a follow-up `GET /description.xml`.
+
+relume announces `Philips Hue - XXXXXX` / `modelid=BSB002`. The real Bridge Pro
+announces itself as `BSB003`, which the TV likely rejects as incompatible.
 
 **mDNS conflict with avahi:** if the host runs an `avahi-daemon` (it owns UDP 5353),
 relume's built-in mDNS announcer cannot bind the port. In that case let avahi announce:
@@ -67,9 +90,10 @@ Alternatively disable `avahi-daemon`, then relume's own announcer works.
 
 ### Cloud suppression
 If a real Hue bridge is registered at `discovery.meethue.com`, the TV may resolve it via
-the cloud and **skip local discovery** (diyHue #988). Check with
-`curl https://discovery.meethue.com/` from the TV's network — if it returns the real bridge,
-redirect `discovery.meethue.com` to relume via local DNS.
+the cloud and **skip local discovery** (diyHue #988). Disconnect or block the original
+bridge for at least 30 seconds before scanning. Check with
+`curl https://discovery.meethue.com/` from the TV's network; the clean local-discovery
+state is `[]`.
 
 ### Rootless Docker and port 80
 A real bridge speaks on port 80. Under **rootless** Docker, ports <1024 require a host sysctl:

@@ -18,8 +18,9 @@ const mdnsGroup = "224.0.0.251:5353"
 // (_hue._tcp). It does NOT respond — it only serves to analyze whether a TV
 // searches for the bridge via mDNS.
 type MDNSObserver struct {
-	advIP string
-	log   *slog.Logger
+	advIP     string
+	log       *slog.Logger
+	DebugTVIP string
 }
 
 // NewMDNSObserver creates an Observer; advIP selects the interface (multi-NIC).
@@ -95,11 +96,24 @@ func interfaceForIP(ip string) (*net.Interface, error) {
 // inspect parses the questions of an mDNS message and logs Hue references.
 func (o *MDNSObserver) inspect(src *net.UDPAddr, msg []byte) {
 	names := dnsQuestionNames(msg)
+	if !o.shouldLogMDNS(src.IP, names) {
+		return
+	}
+	for _, name := range names {
+		o.log.Info("mdns: query", "from", src.IP.String(), "name", name)
+	}
+}
+
+func (o *MDNSObserver) shouldLogMDNS(src net.IP, names []string) bool {
+	if o.DebugTVIP != "" && src.Equal(net.ParseIP(o.DebugTVIP)) {
+		return len(names) > 0
+	}
 	for _, name := range names {
 		if strings.Contains(strings.ToLower(name), "hue") {
-			o.log.Info("mdns: hue-related query", "from", src.IP.String(), "name", name)
+			return true
 		}
 	}
+	return false
 }
 
 // dnsQuestionNames extracts the QNAMEs from a DNS/mDNS message (best effort).

@@ -70,20 +70,51 @@ func main() {
 	}
 }
 
-func runServe(args []string, log *slog.Logger) error {
+type serveOptions struct {
+	configPath             string
+	httpPort               int
+	advertiseIP            string
+	debug                  bool
+	tvIP                   string
+	discoveryBurstDuration time.Duration
+	discoveryBurstInterval time.Duration
+}
+
+func parseServeOptions(args []string) (serveOptions, error) {
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
 	cfgPath := fs.String("config", "relume.json", "path to the configuration file")
 	httpPort := fs.Int("http-port", 80, "HTTP port of the emulated bridge")
 	advIP := fs.String("advertise-ip", "", "advertised IP (empty = auto-detect)")
 	debug := fs.Bool("debug", false, "verbose diagnostics: SSDP/HTTP datagrams + mDNS observer")
-	_ = fs.Parse(args)
+	tvIP := fs.String("tv-ip", "", "TV IP to log all mDNS questions from in debug mode")
+	burstDuration := fs.Duration("discovery-burst-duration", 0, "send SSDP and mDNS discovery announcements at startup for this long")
+	burstInterval := fs.Duration("discovery-burst-interval", time.Second, "interval for discovery-burst announcements")
+	if err := fs.Parse(args); err != nil {
+		return serveOptions{}, err
+	}
+	return serveOptions{
+		configPath:             *cfgPath,
+		httpPort:               *httpPort,
+		advertiseIP:            *advIP,
+		debug:                  *debug,
+		tvIP:                   *tvIP,
+		discoveryBurstDuration: *burstDuration,
+		discoveryBurstInterval: *burstInterval,
+	}, nil
+}
 
-	cfg, err := config.Load(*cfgPath)
+func runServe(args []string, log *slog.Logger) error {
+	opts, err := parseServeOptions(args)
 	if err != nil {
 		return err
 	}
 
-	ip := *advIP
+	cfg, err := config.Load(opts.configPath)
+	if err != nil {
+		return err
+	}
+
+	ip := opts.advertiseIP
 	if ip == "" {
 		ip, err = outboundIP()
 		if err != nil {
@@ -93,8 +124,8 @@ func runServe(args []string, log *slog.Logger) error {
 	log.Info("relume", "version", version)
 	log.Info("identity", "serial", cfg.Identity.Serial, "bridgeid", cfg.Identity.BridgeID(), "advertise", ip)
 
-	clip := clipv1.New(cfg, ip, *httpPort, log)
-	clip.Debug = *debug
+	clip := clipv1.New(cfg, ip, opts.httpPort, log)
+	clip.Debug = opts.debug
 	if cfg.Pro != nil {
 		client := bridgepro.New(cfg.Pro)
 		clip.SetLightProvider(bridge.NewLightProvider(client))
@@ -102,9 +133,13 @@ func runServe(args []string, log *slog.Logger) error {
 	} else {
 		log.Warn("no bridge pro paired – run 'relume setup' first")
 	}
-	responder := ssdp.New(cfg.Identity, ip, *httpPort, log)
-	responder.Debug = *debug
-	announcer := mdns.New(cfg.Identity, ip, *httpPort, log)
+	responder := ssdp.New(cfg.Identity, ip, opts.httpPort, log)
+	responder.Debug = opts.debug
+	responder.BurstDuration = opts.discoveryBurstDuration
+	responder.BurstInterval = opts.discoveryBurstInterval
+	announcer := mdns.New(cfg.Identity, ip, opts.httpPort, log)
+	announcer.BurstDuration = opts.discoveryBurstDuration
+	announcer.BurstInterval = opts.discoveryBurstInterval
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -115,18 +150,19 @@ func runServe(args []string, log *slog.Logger) error {
 		}
 	}()
 
-	if *debug {
+	if opts.debug {
 		obs := diag.NewMDNSObserver(ip, log)
+		obs.DebugTVIP = opts.tvIP
 		go func() {
 			if err := obs.Run(ctx); err != nil && ctx.Err() == nil {
 				log.Warn("mdns observer", "err", err)
 			}
 		}()
-		log.Info("debug mode active: SSDP/HTTP diagnostics + mDNS observer")
+		log.Info("debug mode active: SSDP/HTTP diagnostics + mDNS observer", "tvIP", opts.tvIP)
 	}
 
 	httpSrv := &http.Server{
-		Addr:    fmt.Sprintf(":%d", *httpPort),
+		Addr:    fmt.Sprintf(":%d", opts.httpPort),
 		Handler: clip.Handler(),
 	}
 

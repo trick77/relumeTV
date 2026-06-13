@@ -61,11 +61,16 @@ The Bridge Pro breaks the Ambilight+Hue path in three ways:
 
 ## Discovery finding (measured on the real Philips TV)
 
-- The TV (a 2021/22 Philips Android TV) sends SSDP M-SEARCH **only** for `MediaServer` (DLNA) —
-  never anything Hue-related, never fetches `/description.xml`. **→ no SSDP for Hue.**
-- **No cloud:** no DNS lookup for `discovery.meethue.com` (checked). Cloud discovery ruled out.
-- **No active `_hue._tcp` query.** Conclusion (consistent with diyHue): the TV **listens passively**
-  for the bridge's `_hue._tcp` mDNS announcement. relume announces exactly that.
+- The current test run saw SSDP M-SEARCH **only** for `MediaServer` (DLNA), no Hue-specific
+  SSDP, no `/description.xml` fetch, and no active `_hue._tcp` query.
+- That measurement points to passive mDNS listening, but public diyHue reports show at least
+  some Philips TVs sending generic SSDP M-SEARCH and then fetching `/description.xml`.
+  relume therefore keeps SSDP responses and mDNS announcements active.
+- Diagnostics now support startup bursts: `-discovery-burst-duration 90s
+  -discovery-burst-interval 1s` sends repeated SSDP NOTIFY and mDNS re-announcements while
+  the TV is in Ambilight+Hue scan mode.
+- `-debug -tv-ip <tv-ip>` logs every mDNS question from the TV, not only Hue-looking names.
+  This separates active mDNS discovery from passive listening.
 - The real Bridge Pro itself announces `_hue._tcp` as `Hue Bridge - XXXXXX` / `modelid=BSB003`;
   the TV likely filters BSB003 out. relume announces `Philips Hue - XXXXXX` / `modelid=BSB002`.
 - UDP 10102 broadcasts from the TV are DTS Play-Fi (audio) — a red herring, unrelated to Hue.
@@ -74,7 +79,10 @@ The Bridge Pro breaks the Ambilight+Hue path in three ways:
 
 ## Open items (verify on the real device)
 
-- **TV detection of relume via mDNS on the Linux target** (the decisive open test).
+- **TV detection of relume on the Linux target** with debug burst plus tcpdump:
+  `relume serve -debug -advertise-ip <nas-lan-ip> -tv-ip <tv-ip>
+  -discovery-burst-duration 90s -discovery-burst-interval 1s` and
+  `tcpdump -ni <iface> 'host <tv-ip> or udp port 5353 or udp port 1900 or tcp port 80'`.
 - Exact `HueStream` v2 layout (52-byte header, channel chunks).
 - Exact CLIP v2 calls to create/activate the `entertainment_configuration` on the Pro.
 - Whether the TV requires a specific `swversion`/`apiversion` to attempt Entertainment.
