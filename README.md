@@ -116,7 +116,9 @@ Discovery experiments already tried on the real TV:
 - `0.1.13`: adds `-ssdp-descriptor-variants`; the extra
   `/description.xml?relume=basic1` MediaServer LOCATION serves a Hue Basic descriptor
   to test whether the TV wants a MediaServer SSDP trigger but rejects a MediaServer
-  descriptor body.
+  descriptor body. Result: Windows Chromium/DIAL (`192.168.178.165`) fetched `basic1`,
+  but the Philips TV (`192.168.178.112`) fetched only plain `/description.xml` and
+  `?relume=ms1`; still no `/api`.
 
 relume announces `Philips Hue - XXXXXX` / `modelid=BSB002`. The real Bridge Pro
 announces itself as `BSB003`, which the TV likely rejects as incompatible.

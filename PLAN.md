@@ -98,7 +98,7 @@ The Bridge Pro breaks the Ambilight+Hue path in three ways:
 | `0.1.10` | mDNS SRV host changed to lower bridgeid (`<bridgeid>.local.`). | TV HTTP `Host` stayed as the IP, so hostname multiplexing is not useful. |
 | `0.1.11` | Ambilight serial, UDN, and SSDP UUID/USN changed to lower bridgeid with `FFFE`. | TV still stopped after descriptor fetch. |
 | `0.1.12` | Basic:1 SSDP USN changed to `uuid::<urn:...:basic:1>`. | After TV reboot, it fetched plain `/description.xml` and `/description.xml?relume=ms1`; still no `/api`. |
-| `0.1.13` | Added `-ssdp-descriptor-variants` and `/description.xml?relume=basic1`. | Pending real-TV result. |
+| `0.1.13` | Added `-ssdp-descriptor-variants` and `/description.xml?relume=basic1`. | Windows Chromium/DIAL fetched `basic1`; the TV fetched plain `/description.xml` and `?relume=ms1` only. Still no `/api`. |
 
 ## Open items (verify on the real device)
 
