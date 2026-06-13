@@ -19,6 +19,7 @@ import (
 	"github.com/trick77/ambibridge/internal/bridgepro"
 	"github.com/trick77/ambibridge/internal/clipv1"
 	"github.com/trick77/ambibridge/internal/config"
+	"github.com/trick77/ambibridge/internal/diag"
 	"github.com/trick77/ambibridge/internal/ssdp"
 )
 
@@ -62,6 +63,7 @@ func runServe(args []string, log *slog.Logger) error {
 	cfgPath := fs.String("config", "ambibridge.json", "Pfad zur Konfigurationsdatei")
 	httpPort := fs.Int("http-port", 80, "HTTP-Port der emulierten Bridge")
 	advIP := fs.String("advertise-ip", "", "beworbene IP (leer = auto-detektieren)")
+	debug := fs.Bool("debug", false, "ausführliche Diagnose: SSDP-/HTTP-Datagramme + mDNS-Observer")
 	_ = fs.Parse(args)
 
 	cfg, err := config.Load(*cfgPath)
@@ -79,6 +81,7 @@ func runServe(args []string, log *slog.Logger) error {
 	log.Info("identität", "serial", cfg.Identity.Serial, "bridgeid", cfg.Identity.BridgeID(), "advertise", ip)
 
 	clip := clipv1.New(cfg, ip, *httpPort, log)
+	clip.Debug = *debug
 	if cfg.Pro != nil {
 		client := bridgepro.New(cfg.Pro)
 		clip.SetLightProvider(bridge.NewLightProvider(client))
@@ -87,9 +90,20 @@ func runServe(args []string, log *slog.Logger) error {
 		log.Warn("keine bridge pro gekoppelt – erst 'ambibridge setup' ausführen")
 	}
 	responder := ssdp.New(cfg.Identity, ip, *httpPort, log)
+	responder.Debug = *debug
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	if *debug {
+		obs := diag.NewMDNSObserver(ip, log)
+		go func() {
+			if err := obs.Run(ctx); err != nil && ctx.Err() == nil {
+				log.Warn("mdns-observer", "err", err)
+			}
+		}()
+		log.Info("debug-modus aktiv: SSDP-/HTTP-Diagnose + mDNS-Observer")
+	}
 
 	httpSrv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", *httpPort),

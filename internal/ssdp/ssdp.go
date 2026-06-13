@@ -28,6 +28,9 @@ type Responder struct {
 	advIP    string // beworbene IP im LOCATION-Header
 	httpPort int
 	log      *slog.Logger
+	// Debug aktiviert das Mitloggen aller empfangenen SSDP-Datagramme inkl. Header
+	// (zum Analysieren, ob/wie ein TV per SSDP sucht).
+	Debug bool
 }
 
 // New erstellt einen Responder. advIP ist die IP, die im LOCATION-Header beworben
@@ -39,7 +42,18 @@ func New(id config.Identity, advIP string, httpPort int, log *slog.Logger) *Resp
 // Run startet Listener und periodische NOTIFYs und blockiert bis ctx beendet wird.
 func (r *Responder) Run(ctx context.Context) error {
 	group := &net.UDPAddr{IP: net.ParseIP("239.255.255.250"), Port: 1900}
-	conn, err := net.ListenMulticastUDP("udp4", nil, group)
+
+	// Auf Multi-NIC-Hosts gezielt an dem Interface lauschen, das die beworbene IP
+	// trägt — sonst hört Go nur am System-Default-Interface, das nicht zwingend im
+	// Netz des TVs liegt.
+	iface, err := interfaceForIP(r.advIP)
+	if err != nil {
+		r.log.Warn("ssdp: interface zur advertise-ip nicht gefunden, nutze default", "advIP", r.advIP, "err", err)
+	} else {
+		r.log.Info("ssdp: multicast-interface gewählt", "iface", iface.Name, "advIP", r.advIP)
+	}
+
+	conn, err := net.ListenMulticastUDP("udp4", iface, group)
 	if err != nil {
 		return fmt.Errorf("ssdp multicast listen: %w", err)
 	}
@@ -70,11 +84,81 @@ func (r *Responder) Run(ctx context.Context) error {
 	}
 }
 
+// logDatagram protokolliert ein empfangenes SSDP-Datagramm mit den für die
+// Geräteerkennung interessanten Headern. So lässt sich nachvollziehen, ob ein TV
+// per SSDP sucht (M-SEARCH) oder sich nur ankündigt (NOTIFY), und um welches Gerät
+// es sich handelt (SERVER/USER-AGENT).
+func (r *Responder) logDatagram(src *net.UDPAddr, msg string) {
+	firstLine := msg
+	if i := strings.IndexByte(firstLine, '\r'); i >= 0 {
+		firstLine = firstLine[:i]
+	}
+	h := parseHeaders(msg)
+	r.log.Info("ssdp rx",
+		"from", src.String(),
+		"line", firstLine,
+		"st", h["ST"],
+		"man", h["MAN"],
+		"nt", h["NT"],
+		"nts", h["NTS"],
+		"server", h["SERVER"],
+		"user-agent", h["USER-AGENT"],
+		"location", h["LOCATION"],
+	)
+}
+
+// parseHeaders zerlegt einen SSDP/HTTP-Nachrichtenkopf in Header (Keys uppercase).
+func parseHeaders(msg string) map[string]string {
+	out := map[string]string{}
+	for _, line := range strings.Split(msg, "\r\n") {
+		i := strings.IndexByte(line, ':')
+		if i <= 0 {
+			continue
+		}
+		key := strings.ToUpper(strings.TrimSpace(line[:i]))
+		out[key] = strings.TrimSpace(line[i+1:])
+	}
+	return out
+}
+
+// interfaceForIP liefert das Netzwerk-Interface, das die gegebene IP trägt.
+func interfaceForIP(ip string) (*net.Interface, error) {
+	target := net.ParseIP(ip)
+	if target == nil {
+		return nil, fmt.Errorf("ungültige IP %q", ip)
+	}
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return nil, err
+	}
+	for i := range ifaces {
+		if ifaces[i].Flags&net.FlagMulticast == 0 || ifaces[i].Flags&net.FlagUp == 0 {
+			continue
+		}
+		addrs, aerr := ifaces[i].Addrs()
+		if aerr != nil {
+			continue
+		}
+		for _, a := range addrs {
+			if ipn, ok := a.(*net.IPNet); ok && ipn.IP.Equal(target) {
+				return &ifaces[i], nil
+			}
+		}
+	}
+	return nil, fmt.Errorf("kein multicast-faehiges interface mit IP %s", ip)
+}
+
 // handle beantwortet M-SEARCH-Queries; alles andere wird ignoriert.
 func (r *Responder) handle(conn *net.UDPConn, src *net.UDPAddr, data []byte) {
 	msg := string(data)
+	if r.Debug {
+		r.logDatagram(src, msg)
+	}
 	if !strings.HasPrefix(msg, "M-SEARCH") {
 		return
+	}
+	if r.Debug {
+		r.log.Info("ssdp: M-SEARCH beantwortet", "to", src.String())
 	}
 	// Wir antworten breit (ohne strenges ST-Matching), wie es echte Bridges tun —
 	// der TV filtert per LOCATION/description.xml. Sofortige Antwort ist wichtig,

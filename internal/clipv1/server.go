@@ -4,6 +4,7 @@
 package clipv1
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -40,6 +41,9 @@ type Server struct {
 	httpPort int
 	log      *slog.Logger
 	lights   LightProvider
+	// Debug aktiviert ausführliches Request-Logging (User-Agent + Body) — hilfreich,
+	// um das reale Verhalten unbekannter TVs zu analysieren.
+	Debug bool
 
 	mu       sync.Mutex
 	lastLink time.Time
@@ -73,13 +77,30 @@ func (s *Server) Handler() http.Handler {
 	// Virtueller Link-Button (Web-UI / CLI öffnen das Pairing-Fenster).
 	mux.HandleFunc("GET /", s.handleIndex)
 	mux.HandleFunc("POST /link", s.handleLink)
-	return logRequests(s.log, mux)
+	return s.logRequests(mux)
 }
 
-// logRequests protokolliert jede Anfrage (wichtig, um das reale TV-Verhalten zu beobachten).
-func logRequests(log *slog.Logger, next http.Handler) http.Handler {
+// logRequests protokolliert jede Anfrage. Im Debug-Modus zusätzlich User-Agent und
+// Body — entscheidend, um das reale Verhalten unbekannter TVs zu analysieren
+// (z.B. den devicetype-String beim Pairing).
+func (s *Server) logRequests(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Info("http", "method", r.Method, "path", r.URL.Path, "from", r.RemoteAddr)
+		if s.Debug {
+			var body []byte
+			if r.Body != nil {
+				body, _ = io.ReadAll(io.LimitReader(r.Body, 4096))
+				r.Body = io.NopCloser(bytes.NewReader(body))
+			}
+			s.log.Info("http rx",
+				"method", r.Method,
+				"path", r.URL.Path,
+				"from", r.RemoteAddr,
+				"user-agent", r.UserAgent(),
+				"body", string(body),
+			)
+		} else {
+			s.log.Info("http", "method", r.Method, "path", r.URL.Path, "from", r.RemoteAddr)
+		}
 		next.ServeHTTP(w, r)
 	})
 }
