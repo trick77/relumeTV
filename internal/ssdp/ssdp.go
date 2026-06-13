@@ -192,6 +192,17 @@ func (r *Responder) handle(conn *net.UDPConn, src *net.UDPAddr, data []byte) {
 			r.log.Warn("ssdp respond", "err", err, "to", src.String())
 			return
 		}
+		if r.Debug {
+			h := parseHeaders(resp)
+			r.log.Info("ssdp tx",
+				"to", src.String(),
+				"kind", "search-response",
+				"st", h["ST"],
+				"usn", h["USN"],
+				"location", h["LOCATION"],
+				"cache-control", h["CACHE-CONTROL"],
+			)
+		}
 	}
 }
 
@@ -203,8 +214,8 @@ func (r *Responder) searchResponses() []string {
 		out = append(out, "HTTP/1.1 200 OK\r\n"+
 			"HOST: 239.255.255.250:1900\r\n"+
 			"EXT:\r\n"+
-			"CACHE-CONTROL: max-age=100\r\n"+
-			fmt.Sprintf("LOCATION: http://%s:%d/description.xml\r\n", r.advIP, r.httpPort)+
+			fmt.Sprintf("CACHE-CONTROL: max-age=%d\r\n", v.maxAge())+
+			fmt.Sprintf("LOCATION: %s\r\n", r.location(v))+
 			"SERVER: "+r.serverHeader()+"\r\n"+
 			"hue-bridgeid: "+r.id.BridgeID()+"\r\n"+
 			"ST: "+v.st+"\r\n"+
@@ -218,6 +229,21 @@ type ssdpVariant struct {
 	st  string
 	nt  string
 	usn string
+}
+
+func (v ssdpVariant) maxAge() int {
+	if v.st == mediaServerST || v.nt == mediaServerST {
+		return 1
+	}
+	return 100
+}
+
+func (r *Responder) location(v ssdpVariant) string {
+	location := fmt.Sprintf("http://%s:%d/description.xml", r.advIP, r.httpPort)
+	if v.st == mediaServerST || v.nt == mediaServerST {
+		return location + "?relume=ms1"
+	}
+	return location
 }
 
 func (r *Responder) ssdpVariants() []ssdpVariant {
@@ -298,6 +324,17 @@ func (r *Responder) sendNotify(conn *net.UDPConn, group *net.UDPAddr) {
 			r.log.Warn("ssdp notify", "err", err)
 			return
 		}
+		if r.Debug {
+			h := parseHeaders(msg)
+			r.log.Info("ssdp tx",
+				"to", group.String(),
+				"kind", "notify",
+				"nt", h["NT"],
+				"usn", h["USN"],
+				"location", h["LOCATION"],
+				"cache-control", h["CACHE-CONTROL"],
+			)
+		}
 	}
 }
 
@@ -307,8 +344,8 @@ func (r *Responder) notifyMessages() []string {
 	for _, v := range variants {
 		msg := "NOTIFY * HTTP/1.1\r\n" +
 			"HOST: 239.255.255.250:1900\r\n" +
-			"CACHE-CONTROL: max-age=100\r\n" +
-			fmt.Sprintf("LOCATION: http://%s:%d/description.xml\r\n", r.advIP, r.httpPort) +
+			fmt.Sprintf("CACHE-CONTROL: max-age=%d\r\n", v.maxAge()) +
+			fmt.Sprintf("LOCATION: %s\r\n", r.location(v)) +
 			"SERVER: " + r.serverHeader() + "\r\n" +
 			"NTS: ssdp:alive\r\n" +
 			"hue-bridgeid: " + r.id.BridgeID() + "\r\n" +

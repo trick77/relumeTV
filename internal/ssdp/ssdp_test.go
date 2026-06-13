@@ -91,7 +91,8 @@ func TestSearchResponses_withMediaServerAliasIncludesMediaServerST(t *testing.T)
 		if strings.Contains(msg, "ST: urn:schemas-upnp-org:device:MediaServer:1\r\n") {
 			found = true
 			for _, want := range []string{
-				"LOCATION: http://192.0.2.10:80/description.xml\r\n",
+				"CACHE-CONTROL: max-age=1\r\n",
+				"LOCATION: http://192.0.2.10:80/description.xml?relume=ms1\r\n",
 				"hue-bridgeid: 2C4D54FFFEEA2832\r\n",
 				"USN: uuid:2f402f80-da50-11e1-9b23-2c4d54ea2832::urn:schemas-upnp-org:device:MediaServer:1\r\n",
 			} {
@@ -125,7 +126,8 @@ func TestNotifyMessages_withMediaServerAliasIncludesMediaServerAnnouncement(t *t
 			for _, want := range []string{
 				"NOTIFY * HTTP/1.1\r\n",
 				"NTS: ssdp:alive\r\n",
-				"LOCATION: http://192.0.2.10:80/description.xml\r\n",
+				"CACHE-CONTROL: max-age=1\r\n",
+				"LOCATION: http://192.0.2.10:80/description.xml?relume=ms1\r\n",
 				"hue-bridgeid: 2C4D54FFFEEA2832\r\n",
 				"USN: uuid:2f402f80-da50-11e1-9b23-2c4d54ea2832::urn:schemas-upnp-org:device:MediaServer:1\r\n",
 			} {

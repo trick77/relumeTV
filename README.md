@@ -51,7 +51,7 @@ Useful `serve` flags: `-http-port` (default 80), `-advertise-ip` (empty = auto),
 questions from that TV), `-discovery-burst-duration`, `-discovery-burst-interval`,
 `-identity-profile hass` (experimental Home Assistant emulated-hue wire identity),
 `-ssdp-media-server-alias` (experimental UPnP MediaServer:1 NOTIFY/response and
-`description.xml` device type alias).
+`description.xml` device type alias; uses a cache-busted SSDP location).
 
 ## Important caveats
 

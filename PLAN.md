@@ -76,7 +76,7 @@ The Bridge Pro breaks the Ambilight+Hue path in three ways:
   Philips TVs accepting hass-emulated-hue even where diyHue discovery is unreliable.
 - `-ssdp-media-server-alias` is an opt-in experiment for the measured Android TV behavior:
   it actively broadcasts a `MediaServer:1` SSDP NOTIFY and answers `MediaServer:1` M-SEARCH
-  with the relume `description.xml` location. It also changes the served
+  with cache-busted `LOCATION: /description.xml?relume=ms1` and `max-age=1`. It also changes the served
   `description.xml` device type to `MediaServer:1` while keeping the Hue BSB002 identity fields,
   testing whether the TV rejected the descriptor after fetching it via the DLNA discovery lane.
 - The real Bridge Pro itself announces `_hue._tcp` as `Hue Bridge - XXXXXX` / `modelid=BSB003`;
