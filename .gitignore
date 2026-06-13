@@ -1,0 +1,12 @@
+# Binaries
+/relume
+/cmd/relume/relume
+
+# Laufzeit-Zustand
+*.json.tmp
+relume.json
+/data/
+
+# Logs
+*.log
+/dist/

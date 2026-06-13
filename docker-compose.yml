@@ -1,0 +1,17 @@
+# relume — Software-Bridge Philips Ambilight-TV <-> Hue Bridge Pro
+#
+# WICHTIG: host networking ist zwingend. SSDP- und mDNS-Discovery laufen über
+# Multicast und müssen direkt im LAN des TVs liegen — Bridge-/NAT-Netze blockieren das.
+services:
+  relume:
+    build: .
+    image: relume:latest
+    container_name: relume
+    network_mode: host
+    restart: unless-stopped
+    volumes:
+      - ./data:/data
+    # Standardport 80 (wie eine echte Gen-2-Bridge). Bei rootless Docker <1024 nur
+    # mit Host-sysctl `net.ipv4.ip_unprivileged_port_start=80` bindbar — sonst auf
+    # einen hohen Port wechseln (z.B. -http-port 8080), siehe README.
+    command: ["serve", "-config", "/data/relume.json"]
