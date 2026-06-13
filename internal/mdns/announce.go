@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"time"
 
 	"github.com/grandcat/zeroconf"
 	"github.com/trick77/relume/internal/config"
@@ -19,6 +20,11 @@ import (
 const (
 	service = "_hue._tcp"
 	domain  = "local."
+	// reannounceEvery re-publishes the mDNS record periodically. grandcat/zeroconf
+	// only announces once at registration and otherwise just answers active
+	// queries; the Ambilight TV listens passively and never queries _hue._tcp, so
+	// without this it only ever hears us in the brief window right after startup.
+	reannounceEvery = 30 * time.Second
 )
 
 // Announcer keeps the mDNS registration alive.
@@ -35,10 +41,13 @@ func New(id config.Identity, advIP string, port int, log *slog.Logger) *Announce
 	return &Announcer{id: id, advIP: advIP, port: port, log: log}
 }
 
-// Run registers the service and keeps it alive until ctx is cancelled.
+// Run registers the service and keeps it announced until ctx is cancelled.
 func (a *Announcer) Run(ctx context.Context) error {
 	bridgeID := a.id.BridgeID()
 	instance := "Philips Hue - " + bridgeID[len(bridgeID)-6:]
+	// Unique, bridge-like hostname for the SRV target / A record so it never
+	// collides with the host's own mDNS name (e.g. nas.local).
+	host := a.id.Serial
 	txt := []string{
 		"bridgeid=" + bridgeID,
 		"modelid=BSB002",
@@ -51,17 +60,41 @@ func (a *Announcer) Run(ctx context.Context) error {
 		ifaces = []net.Interface{*iface}
 	}
 
-	server, err := zeroconf.Register(instance, service, domain, a.port, txt, ifaces)
+	// A real Gen-2 Hue bridge is IPv4-only. RegisterProxy with an explicit IPv4
+	// list announces only an A record (no AAAA) — relying on the host's interface
+	// addresses (zeroconf.Register) would also publish IPv6 AAAA records, which a
+	// real bridge never has and which some TVs reject or mis-handle.
+	register := func() (*zeroconf.Server, error) {
+		return zeroconf.RegisterProxy(instance, service, domain, a.port, host, []string{a.advIP}, txt, ifaces)
+	}
+
+	server, err := register()
 	if err != nil {
 		return fmt.Errorf("mdns register: %w", err)
 	}
-	defer server.Shutdown()
-
 	a.log.Info("mdns: announced as hue bridge",
-		"instance", instance, "service", service, "port", a.port, "bridgeid", bridgeID)
+		"instance", instance, "host", host+"."+domain, "ip", a.advIP, "port", a.port, "bridgeid", bridgeID)
 
-	<-ctx.Done()
-	return ctx.Err()
+	// Re-announce periodically so a passively-listening TV hears us regardless of
+	// when its search starts. grandcat/zeroconf has no real conflict resolution,
+	// so re-registering never renames the instance.
+	t := time.NewTicker(reannounceEvery)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			server.Shutdown()
+			return ctx.Err()
+		case <-t.C:
+			server.Shutdown()
+			s, rerr := register()
+			if rerr != nil {
+				a.log.Warn("mdns: re-announce failed", "err", rerr)
+				continue
+			}
+			server = s
+		}
+	}
 }
 
 // interfaceForIP returns the multicast-capable interface that carries the given IP.
