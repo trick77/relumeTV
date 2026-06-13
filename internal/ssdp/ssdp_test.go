@@ -30,6 +30,7 @@ func TestNotifyMessages_matchHueBridgeShape(t *testing.T) {
 		"NT: upnp:rootdevice\r\n",
 		"NT: uuid:2f402f80-da50-11e1-9b23-2c4d54ea2832\r\n",
 		"NT: urn:schemas-upnp-org:device:basic:1\r\n",
+		"USN: uuid:2f402f80-da50-11e1-9b23-2c4d54ea2832::urn:schemas-upnp-org:device:basic:1\r\n",
 	} {
 		found := false
 		for _, msg := range msgs {
@@ -93,6 +94,7 @@ func TestSearchResponses_withAmbilightProfileUsesAmbilightServerHeader(t *testin
 		"ST: uuid:2f402f80-da50-11e1-9b23-2c4d54fffeea2832\r\n",
 		"USN: uuid:2f402f80-da50-11e1-9b23-2c4d54fffeea2832::upnp:rootdevice\r\n",
 		"USN: uuid:2f402f80-da50-11e1-9b23-2c4d54fffeea2832\r\n",
+		"USN: uuid:2f402f80-da50-11e1-9b23-2c4d54fffeea2832::urn:schemas-upnp-org:device:basic:1\r\n",
 	} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("ambilight search responses missing %q:\n%s", want, joined)

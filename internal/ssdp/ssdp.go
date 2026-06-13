@@ -247,7 +247,11 @@ func (r *Responder) ssdpVariants() []ssdpVariant {
 	variants := []ssdpVariant{
 		{st: "upnp:rootdevice", nt: "upnp:rootdevice", usn: "uuid:" + uuid + "::upnp:rootdevice"},
 		{st: "uuid:" + uuid, nt: "uuid:" + uuid, usn: "uuid:" + uuid},
-		{st: "urn:schemas-upnp-org:device:basic:1", nt: "urn:schemas-upnp-org:device:basic:1", usn: "uuid:" + uuid},
+		{
+			st:  "urn:schemas-upnp-org:device:basic:1",
+			nt:  "urn:schemas-upnp-org:device:basic:1",
+			usn: "uuid:" + uuid + "::urn:schemas-upnp-org:device:basic:1",
+		},
 	}
 	if r.MediaServerAlias {
 		variants = append(variants, ssdpVariant{
