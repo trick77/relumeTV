@@ -116,8 +116,8 @@ func RenderWithOptions(id config.Identity, ip string, port int, opts Options) (s
 		IP:              ip,
 		Port:            port,
 		DeviceType:      deviceType,
-		Serial:          id.Serial,
-		UUID:            id.UUID(),
+		Serial:          id.SerialForProfile(opts.Profile),
+		UUID:            id.UUIDForProfile(opts.Profile),
 		Manufacturer:    fields.Manufacturer,
 		ManufacturerURL: fields.ManufacturerURL,
 	})

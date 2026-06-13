@@ -243,7 +243,7 @@ func (r *Responder) location(v ssdpVariant) string {
 }
 
 func (r *Responder) ssdpVariants() []ssdpVariant {
-	uuid := r.id.UUID()
+	uuid := r.id.UUIDForProfile(r.IdentityProfile)
 	variants := []ssdpVariant{
 		{st: "upnp:rootdevice", nt: "upnp:rootdevice", usn: "uuid:" + uuid + "::upnp:rootdevice"},
 		{st: "uuid:" + uuid, nt: "uuid:" + uuid, usn: "uuid:" + uuid},

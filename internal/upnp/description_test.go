@@ -61,6 +61,8 @@ func TestRenderWithProfile_ambilightUsesSignifyManufacturerFields(t *testing.T) 
 		"<manufacturerURL>http://www.meethue.com</manufacturerURL>",
 		"<modelName>Philips hue bridge 2015</modelName>",
 		"<modelNumber>BSB002</modelNumber>",
+		"<serialNumber>2c4d54fffeea2832</serialNumber>",
+		"<UDN>uuid:2f402f80-da50-11e1-9b23-2c4d54fffeea2832</UDN>",
 	} {
 		if !strings.Contains(xml, want) {
 			t.Errorf("description.xml missing %q:\n%s", want, xml)

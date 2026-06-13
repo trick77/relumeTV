@@ -88,6 +88,16 @@ func TestSearchResponses_withAmbilightProfileUsesAmbilightServerHeader(t *testin
 			t.Errorf("search response missing ambilight server header:\n%s", msg)
 		}
 	}
+	joined := strings.Join(msgs, "\n---\n")
+	for _, want := range []string{
+		"ST: uuid:2f402f80-da50-11e1-9b23-2c4d54fffeea2832\r\n",
+		"USN: uuid:2f402f80-da50-11e1-9b23-2c4d54fffeea2832::upnp:rootdevice\r\n",
+		"USN: uuid:2f402f80-da50-11e1-9b23-2c4d54fffeea2832\r\n",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("ambilight search responses missing %q:\n%s", want, joined)
+		}
+	}
 }
 
 func TestSearchResponses_withMediaServerAliasIncludesMediaServerST(t *testing.T) {

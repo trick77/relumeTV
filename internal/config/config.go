@@ -45,6 +45,19 @@ func (i Identity) UUID() string {
 	return "2f402f80-da50-11e1-9b23-" + i.Serial
 }
 
+// SerialForProfile returns the serialNumber value advertised in description.xml.
+func (i Identity) SerialForProfile(profile string) string {
+	if profile == "ambilight" {
+		return strings.ToLower(i.BridgeID())
+	}
+	return i.Serial
+}
+
+// UUIDForProfile returns the UPnP UUID used in SSDP USN and description.xml UDN.
+func (i Identity) UUIDForProfile(profile string) string {
+	return "2f402f80-da50-11e1-9b23-" + i.SerialForProfile(profile)
+}
+
 // ApiUser is a client paired by the TV.
 type ApiUser struct {
 	Username   string `json:"username"`
