@@ -252,6 +252,31 @@ func TestDescriptionXML_withMediaServerAliasContainsMediaServerDeviceTypeForAlia
 	}
 }
 
+func TestDescriptionXML_withMediaServerBasicBodyKeepsBasicDeviceTypeForAliasQuery(t *testing.T) {
+	// Given
+	s, ts := newTestServer(t)
+	s.IdentityProfile = "ambilight"
+	s.MediaServerAlias = true
+	s.MediaServerBasicBody = true
+
+	// When
+	resp := mustGet(t, ts.URL+"/description.xml?relume=ms1")
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+
+	// Then
+	if got := resp.Header.Get("Cache-Control"); got != "max-age=1" {
+		t.Errorf("Cache-Control = %q, expected max-age=1", got)
+	}
+	xml := string(body)
+	if !strings.Contains(xml, "<deviceType>urn:schemas-upnp-org:device:Basic:1</deviceType>") {
+		t.Errorf("alias description.xml does not contain Basic deviceType:\n%s", xml)
+	}
+	if strings.Contains(xml, "<deviceType>urn:schemas-upnp-org:device:MediaServer:1</deviceType>") {
+		t.Errorf("alias description.xml contains MediaServer deviceType:\n%s", xml)
+	}
+}
+
 func TestDescriptionXML_withBasicDescriptorVariantKeepsBasicDeviceType(t *testing.T) {
 	// Given
 	s, ts := newTestServer(t)
