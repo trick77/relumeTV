@@ -67,7 +67,7 @@ const tmplText = `<?xml version="1.0" encoding="UTF-8" ?>
 <URLBase>http://{{.IP}}:{{.Port}}/</URLBase>
 <device>
 <deviceType>{{.DeviceType}}</deviceType>
-<friendlyName>Philips hue ({{.IP}})</friendlyName>
+<friendlyName>Relume ({{.IP}})</friendlyName>
 <manufacturer>{{.Manufacturer}}</manufacturer>
 <manufacturerURL>{{.ManufacturerURL}}</manufacturerURL>
 <modelDescription>Philips hue Personal Wireless Lighting</modelDescription>

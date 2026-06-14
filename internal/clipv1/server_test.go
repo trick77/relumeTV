@@ -411,6 +411,9 @@ func TestShortConfig_unauthenticated(t *testing.T) {
 	if cfg["factorynew"] != false {
 		t.Errorf("factorynew = %v", cfg["factorynew"])
 	}
+	if cfg["name"] != "Relume" {
+		t.Errorf("name = %v, expected Relume", cfg["name"])
+	}
 }
 
 func TestConfigWithAmbilightProfileReturnsShortConfigForUnknownUser(t *testing.T) {

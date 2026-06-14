@@ -264,7 +264,7 @@ func (s *Server) shortConfig() map[string]any {
 		datastoreVersion = "126"
 	}
 	return map[string]any{
-		"name":             "Philips hue",
+		"name":             "Relume",
 		"datastoreversion": datastoreVersion,
 		"swversion":        "1967054020",
 		"apiversion":       "1.67.0",
