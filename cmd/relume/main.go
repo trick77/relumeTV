@@ -83,6 +83,7 @@ type serveOptions struct {
 	ssdpMediaServerAlias     bool
 	ssdpMediaServerBasicBody bool
 	ssdpDescriptorVariants   bool
+	disableSSDP              bool
 }
 
 func parseServeOptions(args []string) (serveOptions, error) {
@@ -99,6 +100,7 @@ func parseServeOptions(args []string) (serveOptions, error) {
 	ssdpMediaServerAlias := fs.Bool("ssdp-media-server-alias", false, "also advertise/respond as UPnP MediaServer:1 for Philips TV discovery experiments")
 	ssdpMediaServerBasicBody := fs.Bool("ssdp-media-server-basic-body", false, "serve a Hue Basic descriptor body from the MediaServer alias URL")
 	ssdpDescriptorVariants := fs.Bool("ssdp-descriptor-variants", false, "also advertise query-scoped descriptor variants for Philips TV discovery experiments")
+	disableSSDP := fs.Bool("disable-ssdp", false, "do not run the SSDP responder (mDNS-only, like ha-hue-entertainment) — diagnostic")
 	if err := fs.Parse(args); err != nil {
 		return serveOptions{}, err
 	}
@@ -115,6 +117,7 @@ func parseServeOptions(args []string) (serveOptions, error) {
 		ssdpMediaServerAlias:     *ssdpMediaServerAlias,
 		ssdpMediaServerBasicBody: *ssdpMediaServerBasicBody,
 		ssdpDescriptorVariants:   *ssdpDescriptorVariants,
+		disableSSDP:              *disableSSDP,
 	}, nil
 }
 
@@ -152,13 +155,18 @@ func runServe(args []string, log *slog.Logger) error {
 	} else {
 		log.Warn("no bridge pro paired – run 'relume setup' first")
 	}
-	responder := ssdp.New(cfg.Identity, ip, opts.httpPort, log)
-	responder.Debug = opts.debug
-	responder.BurstDuration = opts.discoveryBurstDuration
-	responder.BurstInterval = opts.discoveryBurstInterval
-	responder.IdentityProfile = opts.identityProfile
-	responder.MediaServerAlias = opts.ssdpMediaServerAlias
-	responder.DescriptorVariants = opts.ssdpDescriptorVariants
+	var responder *ssdp.Responder
+	if opts.disableSSDP {
+		log.Info("ssdp: disabled (mDNS-only mode)")
+	} else {
+		responder = ssdp.New(cfg.Identity, ip, opts.httpPort, log)
+		responder.Debug = opts.debug
+		responder.BurstDuration = opts.discoveryBurstDuration
+		responder.BurstInterval = opts.discoveryBurstInterval
+		responder.IdentityProfile = opts.identityProfile
+		responder.MediaServerAlias = opts.ssdpMediaServerAlias
+		responder.DescriptorVariants = opts.ssdpDescriptorVariants
+	}
 	announcer := mdns.New(cfg.Identity, ip, opts.httpPort, log)
 	announcer.IdentityProfile = opts.identityProfile
 	announcer.BurstDuration = opts.discoveryBurstDuration
@@ -196,11 +204,13 @@ func runServe(args []string, log *slog.Logger) error {
 			errc <- fmt.Errorf("http: %w", err)
 		}
 	}()
-	go func() {
-		if err := responder.Run(ctx); err != nil && ctx.Err() == nil {
-			errc <- fmt.Errorf("ssdp: %w", err)
-		}
-	}()
+	if responder != nil {
+		go func() {
+			if err := responder.Run(ctx); err != nil && ctx.Err() == nil {
+				errc <- fmt.Errorf("ssdp: %w", err)
+			}
+		}()
+	}
 
 	select {
 	case <-ctx.Done():

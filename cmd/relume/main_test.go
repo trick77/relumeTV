@@ -62,4 +62,20 @@ func TestParseServeOptions_discoveryDiagnostics(t *testing.T) {
 	if !opts.ssdpDescriptorVariants {
 		t.Fatal("ssdpDescriptorVariants = false")
 	}
+	if opts.disableSSDP {
+		t.Fatal("disableSSDP = true (not requested)")
+	}
+}
+
+func TestParseServeOptions_disableSSDP(t *testing.T) {
+	// When
+	opts, err := parseServeOptions([]string{"-disable-ssdp"})
+
+	// Then
+	if err != nil {
+		t.Fatalf("parseServeOptions: %v", err)
+	}
+	if !opts.disableSSDP {
+		t.Fatal("disableSSDP = false")
+	}
 }

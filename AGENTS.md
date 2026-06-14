@@ -9,7 +9,8 @@ All repo content (docs, code comments, logs) is English.
 ## build/test
 - `go build -o relume ./cmd/relume`
 - `go test ./...`
-- diagnostics: `relume serve -debug` (SSDP header log + mDNS observer + HTTP body log)
+- diagnostics: `relume serve -debug` (SSDP header log + mDNS observer + HTTP body log);
+  `-disable-ssdp` runs mDNS-only (like ha-hue-entertainment) to isolate SSDP from discovery
 - commands: `serve` (default), `setup` (pair Pro), `discover` (cloud), `link` (open 30s TV pairing window), `avahi-service`, `version`
 - container build file is `Containerfile` (not Dockerfile); compose file is `compose.yaml`
 
