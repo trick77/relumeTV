@@ -63,11 +63,25 @@ type Server struct {
 	activityMu    sync.Mutex
 	lightWrites   uint64
 	lightsTouched map[string]struct{}
+
+	// pairMu guards firstPairSeen, the timestamp of the TV's first auto-pairing
+	// attempt. New pairings are held off for pairAcceptDelay after that (returning
+	// the standard 101), mirroring a real bridge waiting for the link-button tap.
+	pairMu        sync.Mutex
+	firstPairSeen time.Time
+	// pairAcceptDelay defers auto-accepting the TV's first pairing (measured from
+	// the first attempt); defaults to defaultPairAcceptDelay, overridable in tests.
+	pairAcceptDelay time.Duration
 }
+
+// defaultPairAcceptDelay is how long relume defers auto-accepting the TV's first
+// pairing. The TV polls POST /api and waits up to ~30s, so this stays well inside
+// its window.
+const defaultPairAcceptDelay = 5 * time.Second
 
 // New creates the CLIP-v1 server.
 func New(cfg *config.Config, advIP string, httpPort int, log *slog.Logger) *Server {
-	return &Server{cfg: cfg, advIP: advIP, httpPort: httpPort, log: log, lightsTouched: map[string]struct{}{}}
+	return &Server{cfg: cfg, advIP: advIP, httpPort: httpPort, log: log, lightsTouched: map[string]struct{}{}, pairAcceptDelay: defaultPairAcceptDelay}
 }
 
 // SetLightProvider registers the source for the light list (Bridge Pro backend).
@@ -316,6 +330,21 @@ func (s *Server) handlePairing(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Hold off the first auto-pairing for pairAcceptDelay, mirroring a real bridge
+	// that waits for the link-button tap. The TV polls POST /api and keeps trying
+	// (it waits up to ~30s), so returning the standard 101 until the window elapses
+	// just delays acceptance without aborting the TV.
+	s.pairMu.Lock()
+	if s.firstPairSeen.IsZero() {
+		s.firstPairSeen = time.Now()
+	}
+	waited := time.Since(s.firstPairSeen)
+	s.pairMu.Unlock()
+	if waited < s.pairAcceptDelay {
+		writeError(w, 101, "", "link button not pressed")
+		return
+	}
+
 	username, err := randomHex(16) // 32 characters
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -448,6 +477,8 @@ func (s *Server) handleSetLightState(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 3, "/lights/"+id, "no bridge pro paired")
 		return
 	}
+	// Optimistic: the provider queues the write and forwards it to the Bridge Pro
+	// asynchronously, so this returns immediately without blocking on the round-trip.
 	if err := lp.SetLightV1(id, state); err != nil {
 		s.log.Warn("setting light", "id", id, "err", err)
 		writeError(w, 901, "/lights/"+id+"/state", "bridge pro error")
