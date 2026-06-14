@@ -12,6 +12,8 @@ All repo content (docs, code comments, logs) is English.
 - diagnostics: `relume serve -debug` (SSDP header log + mDNS observer + HTTP body log);
   `-disable-ssdp` runs mDNS-only (like ha-hue-entertainment) to isolate SSDP from discovery
 - commands: `serve` (default), `setup` (pair Pro), `discover` (cloud), `link` (open 30s TV pairing window), `avahi-service`, `version`
+- `serve -auto-pair` accepts TV pairing without a link-button press, but ONLY for requests from the
+  TV (source IP == `-tv-ip`, or the Android/Dalvik Philips-TV User-Agent) — never arbitrary LAN devices
 - container build file is `Containerfile` (not Dockerfile); compose file is `compose.yaml`
 
 ## identity invariants (TV rejects otherwise)
@@ -24,6 +26,12 @@ All repo content (docs, code comments, logs) is English.
 - UUID identical across SSDP USN, description.xml UDN. bridgeid identical across SSDP hue-bridgeid header, mDNS TXT, /config.
 
 ## discovery (the hard part)
+- CONFIRMED root cause of "TV never lists relume": a powered-on real **Bridge Pro** on the same LAN.
+  It also announces `_hue._tcp` (BSB003); with it present the TV fetches relume's description.xml but
+  never lists/pairs it. Power the Pro OFF → the TV instantly finds relume and sends `POST /api`
+  (`devicetype=<model>/12`, generateclientkey). Open product problem: relume must win over a
+  powered-on Pro (de-dupe/preference) — not yet solved. (Note: relume proxies light control TO the
+  Pro, so the Pro being off only validates discovery/pairing, not control.)
 - mDNS announce MUST register exactly once and NEVER re-register/re-announce via
   `Server.Shutdown()`: grandcat/zeroconf's Shutdown multicasts an mDNS goodbye (TTL 0) that evicts
   relume from the TV's cache → bridge flickers out of the Ambilight list. This (not the descriptor)

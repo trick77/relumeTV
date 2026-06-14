@@ -65,6 +65,9 @@ func TestParseServeOptions_discoveryDiagnostics(t *testing.T) {
 	if opts.disableSSDP {
 		t.Fatal("disableSSDP = true (not requested)")
 	}
+	if opts.autoPair {
+		t.Fatal("autoPair = true (not requested)")
+	}
 }
 
 func TestParseServeOptions_disableSSDP(t *testing.T) {
@@ -77,5 +80,18 @@ func TestParseServeOptions_disableSSDP(t *testing.T) {
 	}
 	if !opts.disableSSDP {
 		t.Fatal("disableSSDP = false")
+	}
+}
+
+func TestParseServeOptions_autoPair(t *testing.T) {
+	// When
+	opts, err := parseServeOptions([]string{"-auto-pair"})
+
+	// Then
+	if err != nil {
+		t.Fatalf("parseServeOptions: %v", err)
+	}
+	if !opts.autoPair {
+		t.Fatal("autoPair = false")
 	}
 }

@@ -32,6 +32,25 @@ func mustPost(t *testing.T, url, body string) *http.Response {
 	return resp
 }
 
+func mustPostUA(t *testing.T, url, body, userAgent string) *http.Response {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, url, strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("new request %s: %v", url, err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", userAgent)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST %s: %v", url, err)
+	}
+	return resp
+}
+
+// tvUserAgent is the Android/Dalvik User-Agent a Philips Ambilight TV uses for
+// CLIP v1 pairing.
+const tvUserAgent = "Dalvik/2.1.0 (Linux; U; Android 11; 2021/22 Philips UHD Android TV Build/RTT2.211108.001)"
+
 func newTestServer(t *testing.T) (*Server, *httptest.Server) {
 	t.Helper()
 	cfg, err := config.Load(filepath.Join(t.TempDir(), "c.json"))
@@ -60,6 +79,64 @@ func TestPairing_withoutLinkButton_thenFails(t *testing.T) {
 	}
 	if out[0]["error"]["type"].(float64) != 101 {
 		t.Errorf("expected type 101, got %v", out[0]["error"]["type"])
+	}
+}
+
+func TestPairing_autoPair_fromTVUserAgent_succeedsWithoutLinkButton(t *testing.T) {
+	// Given: AutoPair on, no TV IP configured, no link button pressed
+	s, ts := newTestServer(t)
+	s.AutoPair = true
+
+	// When: a request with the TV's Android/Dalvik User-Agent
+	resp := mustPostUA(t, ts.URL+"/api", `{"devicetype":"65OLED806/12","generateclientkey":true}`, tvUserAgent)
+	defer resp.Body.Close()
+	var out []map[string]map[string]any
+	json.NewDecoder(resp.Body).Decode(&out)
+
+	// Then: paired without a button press
+	if len(out) != 1 || out[0]["success"] == nil {
+		t.Fatalf("expected success for TV auto-pair, got %v", out)
+	}
+	if username, _ := out[0]["success"]["username"].(string); len(username) != 32 {
+		t.Errorf("username length = %d", len(username))
+	}
+}
+
+func TestPairing_autoPair_fromNonTVRequest_stillFails(t *testing.T) {
+	// Given: AutoPair on, no TV IP configured, no link button pressed
+	s, ts := newTestServer(t)
+	s.AutoPair = true
+
+	// When: a request from a non-TV client (default Go User-Agent)
+	resp := mustPost(t, ts.URL+"/api", `{"devicetype":"some-app"}`)
+	defer resp.Body.Close()
+	var out []map[string]map[string]any
+	json.NewDecoder(resp.Body).Decode(&out)
+
+	// Then: rejected with error 101 — auto-pair must not let arbitrary LAN devices pair
+	if len(out) != 1 || out[0]["error"] == nil {
+		t.Fatalf("expected error for non-TV auto-pair, got %v", out)
+	}
+	if out[0]["error"]["type"].(float64) != 101 {
+		t.Errorf("expected type 101, got %v", out[0]["error"]["type"])
+	}
+}
+
+func TestPairing_autoPair_fromConfiguredTVIP_succeeds(t *testing.T) {
+	// Given: AutoPair on and the TV IP set to the loopback the test client uses
+	s, ts := newTestServer(t)
+	s.AutoPair = true
+	s.TVIP = "127.0.0.1"
+
+	// When: a non-TV User-Agent, but the source IP matches the configured TV
+	resp := mustPost(t, ts.URL+"/api", `{"devicetype":"65OLED806/12","generateclientkey":true}`)
+	defer resp.Body.Close()
+	var out []map[string]map[string]any
+	json.NewDecoder(resp.Body).Decode(&out)
+
+	// Then: authorized by IP
+	if len(out) != 1 || out[0]["success"] == nil {
+		t.Fatalf("expected success for configured TV IP, got %v", out)
 	}
 }
 

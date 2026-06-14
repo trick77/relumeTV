@@ -10,3 +10,6 @@ relume.json
 # Logs
 *.log
 /dist/
+
+# Coverage
+coverage.out

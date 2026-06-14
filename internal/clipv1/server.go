@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -55,6 +56,12 @@ type Server struct {
 	MediaServerAlias bool
 	// MediaServerBasicBody keeps the ms1 alias URL but serves a Hue Basic descriptor body.
 	MediaServerBasicBody bool
+	// AutoPair auto-accepts pairing WITHOUT a link-button press, but only for
+	// requests identified as coming from the TV (see isTVRequest) — never from an
+	// arbitrary LAN device. Convenient for a headless bridge.
+	AutoPair bool
+	// TVIP is the TV's IP (from -tv-ip); used to authorize AutoPair requests.
+	TVIP string
 
 	mu       sync.Mutex
 	lastLink time.Time
@@ -163,6 +170,29 @@ func (s *Server) linkActive() bool {
 	return time.Since(s.lastLink) <= linkWindow
 }
 
+// pairingAllowed reports whether a pairing request may be accepted: either the
+// (virtual) link button was pressed recently, or AutoPair is on AND the request
+// comes from the TV (never an arbitrary LAN device).
+func (s *Server) pairingAllowed(r *http.Request) bool {
+	if s.linkActive() {
+		return true
+	}
+	return s.AutoPair && s.isTVRequest(r)
+}
+
+// isTVRequest identifies the Ambilight TV: by source IP (when -tv-ip is set) or
+// by the Android/Dalvik TV User-Agent it uses for CLIP v1 pairing
+// (e.g. "Dalvik/2.1.0 (Linux; U; Android 11; 2021/22 Philips UHD Android TV ...)").
+func (s *Server) isTVRequest(r *http.Request) bool {
+	if s.TVIP != "" {
+		if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil && host == s.TVIP {
+			return true
+		}
+	}
+	ua := strings.ToLower(r.UserAgent())
+	return strings.Contains(ua, "android") && (strings.Contains(ua, "philips") || strings.Contains(ua, "tv"))
+}
+
 func (s *Server) handleDescription(w http.ResponseWriter, r *http.Request) {
 	relumeVariant := r.URL.Query().Get("relume")
 	// relume=ms1 normally changes the descriptor body to MediaServer. The
@@ -204,7 +234,7 @@ func (s *Server) handlePairing(w http.ResponseWriter, r *http.Request) {
 	}
 	s.log.Info("pairing request", "devicetype", req.DeviceType, "clientkey", req.GenerateClientKey)
 
-	if !s.linkActive() {
+	if !s.pairingAllowed(r) {
 		// CLIP-v1 standard error 101: link button not pressed.
 		writeError(w, 101, "", "link button not pressed")
 		return

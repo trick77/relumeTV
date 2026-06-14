@@ -84,6 +84,7 @@ type serveOptions struct {
 	ssdpMediaServerBasicBody bool
 	ssdpDescriptorVariants   bool
 	disableSSDP              bool
+	autoPair                 bool
 }
 
 func parseServeOptions(args []string) (serveOptions, error) {
@@ -101,6 +102,7 @@ func parseServeOptions(args []string) (serveOptions, error) {
 	ssdpMediaServerBasicBody := fs.Bool("ssdp-media-server-basic-body", false, "serve a Hue Basic descriptor body from the MediaServer alias URL")
 	ssdpDescriptorVariants := fs.Bool("ssdp-descriptor-variants", false, "also advertise query-scoped descriptor variants for Philips TV discovery experiments")
 	disableSSDP := fs.Bool("disable-ssdp", false, "do not run the SSDP responder (mDNS-only, like ha-hue-entertainment) — diagnostic")
+	autoPair := fs.Bool("auto-pair", false, "auto-accept TV pairing without pressing the virtual link button (TV requests only)")
 	if err := fs.Parse(args); err != nil {
 		return serveOptions{}, err
 	}
@@ -118,6 +120,7 @@ func parseServeOptions(args []string) (serveOptions, error) {
 		ssdpMediaServerBasicBody: *ssdpMediaServerBasicBody,
 		ssdpDescriptorVariants:   *ssdpDescriptorVariants,
 		disableSSDP:              *disableSSDP,
+		autoPair:                 *autoPair,
 	}, nil
 }
 
@@ -144,9 +147,14 @@ func runServe(args []string, log *slog.Logger) error {
 
 	clip := clipv1.New(cfg, ip, opts.httpPort, log)
 	clip.Debug = opts.debug
+	clip.AutoPair = opts.autoPair
+	clip.TVIP = opts.tvIP
 	clip.IdentityProfile = opts.identityProfile
 	clip.DescriptionProfile = opts.descriptionProfile
 	clip.MediaServerAlias = opts.ssdpMediaServerAlias
+	if opts.autoPair {
+		log.Info("auto-pair enabled: pairing accepted from the TV without a link-button press", "tvIP", opts.tvIP)
+	}
 	clip.MediaServerBasicBody = opts.ssdpMediaServerBasicBody
 	if cfg.Pro != nil {
 		client := bridgepro.New(cfg.Pro)
