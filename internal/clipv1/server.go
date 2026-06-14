@@ -13,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/trick77/relume/internal/config"
 	"github.com/trick77/relume/internal/upnp"
@@ -34,6 +35,7 @@ type Server struct {
 	advIP    string
 	httpPort int
 	log      *slog.Logger
+	lightsMu sync.RWMutex
 	lights   LightProvider
 	// Debug enables verbose request logging (User-Agent + body) — helpful for
 	// analyzing the real behavior of unknown TVs.
@@ -60,8 +62,19 @@ func New(cfg *config.Config, advIP string, httpPort int, log *slog.Logger) *Serv
 }
 
 // SetLightProvider registers the source for the light list (Bridge Pro backend).
+// Safe to call at runtime: the backend may be paired asynchronously after the
+// HTTP server is already serving the TV.
 func (s *Server) SetLightProvider(p LightProvider) {
+	s.lightsMu.Lock()
 	s.lights = p
+	s.lightsMu.Unlock()
+}
+
+// lightProvider returns the current backend (may be nil until the Pro is paired).
+func (s *Server) lightProvider() LightProvider {
+	s.lightsMu.RLock()
+	defer s.lightsMu.RUnlock()
+	return s.lights
 }
 
 // Handler returns the HTTP handler (routing) for the server.
@@ -301,11 +314,12 @@ func (s *Server) handleLights(w http.ResponseWriter, r *http.Request) {
 	if !s.authorized(w, r) {
 		return
 	}
-	if s.lights == nil {
+	lp := s.lightProvider()
+	if lp == nil {
 		writeJSON(w, map[string]any{})
 		return
 	}
-	lights, err := s.lights.LightsV1()
+	lights, err := lp.LightsV1()
 	if err != nil {
 		s.log.Warn("reading lights from bridge pro", "err", err)
 		writeJSON(w, map[string]any{})
@@ -319,11 +333,12 @@ func (s *Server) handleLight(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("id")
-	if s.lights == nil {
+	lp := s.lightProvider()
+	if lp == nil {
 		writeError(w, 3, "/lights/"+id, "resource, /lights/"+id+", not available")
 		return
 	}
-	lights, err := s.lights.LightsV1()
+	lights, err := lp.LightsV1()
 	if err != nil {
 		s.log.Warn("reading lights from bridge pro", "err", err)
 		writeError(w, 901, "/lights/"+id, "bridge pro error")
@@ -349,11 +364,12 @@ func (s *Server) handleSetLightState(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 2, "/lights/"+id+"/state", "invalid json")
 		return
 	}
-	if s.lights == nil {
+	lp := s.lightProvider()
+	if lp == nil {
 		writeError(w, 3, "/lights/"+id, "no bridge pro paired")
 		return
 	}
-	if err := s.lights.SetLightV1(id, state); err != nil {
+	if err := lp.SetLightV1(id, state); err != nil {
 		s.log.Warn("setting light", "id", id, "err", err)
 		writeError(w, 901, "/lights/"+id+"/state", "bridge pro error")
 		return

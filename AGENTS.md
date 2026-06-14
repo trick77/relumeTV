@@ -11,10 +11,15 @@ All repo content (docs, code comments, logs) is English.
 - `go test ./...`
 - diagnostics: `relume serve -debug` (SSDP header log + mDNS observer + HTTP body log);
   `-disable-ssdp` runs mDNS-only (like ha-hue-entertainment) to isolate SSDP from discovery
-- commands: `serve` (default), `setup` (pair Pro), `discover` (cloud), `avahi-service`, `version`
+- commands: `serve` (default), `setup` (manual Pro pair — optional), `discover` (cloud), `avahi-service`, `version`
 - pairing is auto-accepted (no link button, no UI) — but ONLY for the TV (source IP == `-tv-ip`, or
   the Android/Dalvik Philips-TV User-Agent); other LAN devices get error 101. POST /api is
   idempotent per devicetype (TV polls it fast). No web UI / no `link` command — everything via logs.
+- backend Pro pairing is AUTOMATIC in `serve`: if no Pro is paired, a background goroutine
+  (`autoPairPro`) discovers it (cloud, or `-bridge-ip`), pins the cert, and polls until the user
+  taps the Pro's physical button (the only non-automatable step), then hot-loads lights. Runs
+  independently of the TV side. `clipv1.Server` light provider is swapped at runtime (RWMutex).
+- state lives in a Docker named volume `relume-data` (compose) at `/data/relume.json`.
 - container build file is `Containerfile` (not Dockerfile); compose file is `compose.yaml`
 
 ## identity invariants (TV rejects otherwise)

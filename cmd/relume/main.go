@@ -79,6 +79,8 @@ type serveOptions struct {
 	ssdpMediaServerBasicBody bool
 	ssdpDescriptorVariants   bool
 	disableSSDP              bool
+	bridgeIP                 string
+	skipTLS                  bool
 }
 
 func parseServeOptions(args []string) (serveOptions, error) {
@@ -96,6 +98,8 @@ func parseServeOptions(args []string) (serveOptions, error) {
 	ssdpMediaServerBasicBody := fs.Bool("ssdp-media-server-basic-body", false, "serve a Hue Basic descriptor body from the MediaServer alias URL")
 	ssdpDescriptorVariants := fs.Bool("ssdp-descriptor-variants", false, "also advertise query-scoped descriptor variants for Philips TV discovery experiments")
 	disableSSDP := fs.Bool("disable-ssdp", false, "do not run the SSDP responder (mDNS-only, like ha-hue-entertainment) — diagnostic")
+	bridgeIP := fs.String("bridge-ip", "", "Bridge Pro IP for auto-pairing (empty = cloud discovery)")
+	skipTLS := fs.Bool("skip-tls-verify", false, "skip TLS verification to the Bridge Pro (instead of cert pinning)")
 	if err := fs.Parse(args); err != nil {
 		return serveOptions{}, err
 	}
@@ -113,6 +117,8 @@ func parseServeOptions(args []string) (serveOptions, error) {
 		ssdpMediaServerBasicBody: *ssdpMediaServerBasicBody,
 		ssdpDescriptorVariants:   *ssdpDescriptorVariants,
 		disableSSDP:              *disableSSDP,
+		bridgeIP:                 *bridgeIP,
+		skipTLS:                  *skipTLS,
 	}, nil
 }
 
@@ -148,8 +154,6 @@ func runServe(args []string, log *slog.Logger) error {
 		client := bridgepro.New(cfg.Pro)
 		clip.SetLightProvider(bridge.NewLightProvider(client))
 		log.Info("bridge pro paired", "host", cfg.Pro.Host)
-	} else {
-		log.Warn("no bridge pro paired – run 'relume setup' first")
 	}
 	var responder *ssdp.Responder
 	if opts.disableSSDP {
@@ -170,6 +174,14 @@ func runServe(args []string, log *slog.Logger) error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	// Pair the Bridge Pro backend in the background, independently of the TV: the
+	// TV can discover/pair relume before the Pro is paired; relume just returns an
+	// empty light list until the Pro pairing completes, then hot-loads the lights.
+	if cfg.Pro == nil {
+		log.Warn("no bridge pro paired yet – auto-pairing in background; TAP the Bridge Pro link button")
+		go autoPairPro(ctx, cfg, clip, opts.bridgeIP, opts.skipTLS, log)
+	}
 
 	go func() {
 		if err := announcer.Run(ctx); err != nil && ctx.Err() == nil {
@@ -224,6 +236,78 @@ func shutdownHTTP(srv *http.Server) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = srv.Shutdown(ctx)
+}
+
+// autoPairPro pairs relume with the Bridge Pro in the background, independently of
+// the TV side. It discovers the Pro (cloud, unless bridgeIP is given), pins the
+// leaf certificate, then polls until the user taps the Pro's physical link button
+// (the one step that cannot be automated). On success it persists the credentials
+// and hot-loads the light backend so the already-paired TV starts seeing lights.
+func autoPairPro(ctx context.Context, cfg *config.Config, clip *clipv1.Server, bridgeIP string, skipTLS bool, log *slog.Logger) {
+	host := bridgeIP
+	for host == "" {
+		bridges, derr := bridgepro.Discover()
+		if derr == nil && len(bridges) > 0 {
+			host = bridges[0].InternalIPAddress
+			log.Info("bridge pro discovered", "host", host)
+			break
+		}
+		log.Warn("bridge pro not found via cloud discovery; retrying (or pass -bridge-ip)", "err", derr)
+		if !sleepCtx(ctx, 15*time.Second) {
+			return
+		}
+	}
+
+	pro := &config.BridgePro{Host: host, SkipTLSVerify: skipTLS}
+	for !skipTLS && pro.CertSHA256 == "" {
+		fp, ferr := bridgepro.FetchLeafFingerprint(host)
+		if ferr == nil {
+			pro.CertSHA256 = fp
+			log.Info("bridge pro certificate pinned", "sha256", fp)
+			break
+		}
+		log.Warn("bridge pro cert fetch failed; retrying", "err", ferr)
+		if !sleepCtx(ctx, 15*time.Second) {
+			return
+		}
+	}
+
+	httpClient := bridgepro.HTTPClientFor(pro)
+	log.Info("waiting for the Bridge Pro link button — TAP it now", "host", host)
+	for attempts := 0; ; attempts++ {
+		res, perr := bridgepro.Pair(httpClient, host, "relume#"+hostname())
+		if perr == nil {
+			pro.AppKey = res.AppKey
+			pro.ClientKey = res.ClientKey
+			if serr := cfg.SetPro(pro); serr != nil {
+				log.Error("persisting bridge pro pairing", "err", serr)
+				return
+			}
+			client := bridgepro.New(pro)
+			clip.SetLightProvider(bridge.NewLightProvider(client))
+			log.Info("bridge pro paired (auto)", "host", host)
+			if lights, lerr := client.Lights(); lerr == nil {
+				log.Info("bridge pro lights available", "count", len(lights))
+			}
+			return
+		}
+		if attempts%6 == 0 {
+			log.Info("still waiting for the Bridge Pro link button — TAP it", "host", host)
+		}
+		if !sleepCtx(ctx, 3*time.Second) {
+			return
+		}
+	}
+}
+
+// sleepCtx sleeps for d or until ctx is cancelled; returns false if cancelled.
+func sleepCtx(ctx context.Context, d time.Duration) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	case <-time.After(d):
+		return true
+	}
 }
 
 // runDiscover lists bridges found on the local network via the Philips cloud.

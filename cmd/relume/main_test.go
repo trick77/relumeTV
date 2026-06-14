@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"testing"
 	"time"
 )
@@ -77,5 +78,35 @@ func TestParseServeOptions_disableSSDP(t *testing.T) {
 	}
 	if !opts.disableSSDP {
 		t.Fatal("disableSSDP = false")
+	}
+}
+
+func TestParseServeOptions_bridgeProAutoPairFlags(t *testing.T) {
+	// When
+	opts, err := parseServeOptions([]string{"-bridge-ip", "192.0.2.50", "-skip-tls-verify"})
+
+	// Then
+	if err != nil {
+		t.Fatalf("parseServeOptions: %v", err)
+	}
+	if opts.bridgeIP != "192.0.2.50" {
+		t.Errorf("bridgeIP = %q", opts.bridgeIP)
+	}
+	if !opts.skipTLS {
+		t.Fatal("skipTLS = false")
+	}
+}
+
+func TestSleepCtx_returnsFalseWhenCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if sleepCtx(ctx, time.Hour) {
+		t.Fatal("sleepCtx returned true for a cancelled context")
+	}
+}
+
+func TestSleepCtx_returnsTrueAfterDelay(t *testing.T) {
+	if !sleepCtx(context.Background(), time.Millisecond) {
+		t.Fatal("sleepCtx returned false after a normal delay")
 	}
 }
