@@ -181,6 +181,9 @@ func runServe(args []string, log *slog.Logger) error {
 	if cfg.Pro == nil {
 		log.Warn("no bridge pro paired yet – auto-pairing in background; TAP the Bridge Pro link button")
 		go autoPairPro(ctx, cfg, clip, opts.bridgeIP, opts.skipTLS, log)
+	} else {
+		// Keep the already-paired Pro reachable across reboots / IP changes.
+		go watchPro(ctx, cfg, clip, opts.bridgeIP, opts.skipTLS, log)
 	}
 
 	// Summarize the high-frequency Ambilight light-state writes periodically
@@ -301,6 +304,72 @@ func autoPairPro(ctx context.Context, cfg *config.Config, clip *clipv1.Server, b
 		if !sleepCtx(ctx, 3*time.Second) {
 			return
 		}
+	}
+}
+
+// watchPro keeps the already-paired Bridge Pro reachable. It health-checks
+// periodically and, on failure, re-discovers the Pro's current IP (cloud or
+// -bridge-ip), re-pins its certificate and hot-swaps the light provider — all
+// without a new button press, since the stored appKey/clientKey stay valid
+// across reboots and DHCP IP changes.
+func watchPro(ctx context.Context, cfg *config.Config, clip *clipv1.Server, bridgeIP string, skipTLS bool, log *slog.Logger) {
+	const checkInterval = 60 * time.Second
+	pro := cfg.Pro
+	if pro == nil {
+		return
+	}
+	for sleepCtx(ctx, checkInterval) {
+		if _, err := bridgepro.New(pro).Lights(); err == nil {
+			continue // still reachable
+		}
+		log.Warn("bridge pro unreachable; attempting to reconnect", "host", pro.Host)
+
+		host := bridgeIP
+		if host == "" {
+			if bridges, derr := bridgepro.Discover(); derr == nil && len(bridges) > 0 {
+				host = bridges[0].InternalIPAddress
+			}
+		}
+		if host == "" {
+			log.Warn("bridge pro reconnect: not found via discovery; will retry")
+			continue
+		}
+
+		certSHA := pro.CertSHA256
+		if !skipTLS && !pro.SkipTLSVerify {
+			fp, ferr := bridgepro.FetchLeafFingerprint(host)
+			if ferr != nil {
+				log.Warn("bridge pro reconnect: cert fetch failed; will retry", "host", host, "err", ferr)
+				continue
+			}
+			certSHA = fp
+		}
+
+		updated := reconnectProConfig(pro, host, certSHA, skipTLS)
+		if _, err := bridgepro.New(updated).Lights(); err != nil {
+			log.Warn("bridge pro reconnect: still unreachable", "host", host, "err", err)
+			continue
+		}
+		if serr := cfg.SetPro(updated); serr != nil {
+			log.Error("persisting reconnected bridge pro", "err", serr)
+			continue
+		}
+		clip.SetLightProvider(bridge.NewLightProvider(bridgepro.New(updated)))
+		pro = updated
+		log.Info("bridge pro reconnected", "host", host)
+	}
+}
+
+// reconnectProConfig builds the Bridge Pro config for a reconnect: it keeps the
+// existing credentials (appKey/clientKey — valid across reboots and IP changes,
+// so no re-pairing) and refreshes only the host and pinned certificate.
+func reconnectProConfig(old *config.BridgePro, host, certSHA256 string, skipTLS bool) *config.BridgePro {
+	return &config.BridgePro{
+		Host:          host,
+		AppKey:        old.AppKey,
+		ClientKey:     old.ClientKey,
+		CertSHA256:    certSHA256,
+		SkipTLSVerify: skipTLS || old.SkipTLSVerify,
 	}
 }
 

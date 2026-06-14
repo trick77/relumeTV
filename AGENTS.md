@@ -19,6 +19,8 @@ All repo content (docs, code comments, logs) is English.
   (`autoPairPro`) discovers it (cloud, or `-bridge-ip`), pins the cert, and polls until the user
   taps the Pro's physical button (the only non-automatable step), then hot-loads lights. Runs
   independently of the TV side. `clipv1.Server` light provider is swapped at runtime (RWMutex).
+  Once paired, `watchPro` health-checks the Pro every 60s and, on failure, re-discovers its
+  IP / re-pins the cert / hot-swaps the provider — no re-pairing (appKey/clientKey persist).
 - state lives in a Docker named volume `relume-data` (compose) at `/data/relume.json`.
 - container build file is `Containerfile` (not Dockerfile); compose file is `compose.yaml`
 

@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/trick77/relume/internal/config"
 )
 
 func TestParseServeOptions_discoveryDiagnostics(t *testing.T) {
@@ -94,6 +96,38 @@ func TestParseServeOptions_bridgeProAutoPairFlags(t *testing.T) {
 	}
 	if !opts.skipTLS {
 		t.Fatal("skipTLS = false")
+	}
+}
+
+func TestReconnectProConfig_preservesCredentialsAndRefreshesHostCert(t *testing.T) {
+	// Given a paired Pro and a new IP + cert discovered on reconnect
+	old := &config.BridgePro{Host: "192.0.2.1", AppKey: "app", ClientKey: "CK", CertSHA256: "oldfp", SkipTLSVerify: false}
+
+	// When
+	got := reconnectProConfig(old, "192.0.2.2", "newfp", false)
+
+	// Then: credentials survive (no re-pairing), host + cert are refreshed
+	if got.AppKey != "app" || got.ClientKey != "CK" {
+		t.Fatalf("credentials not preserved: %+v", got)
+	}
+	if got.Host != "192.0.2.2" || got.CertSHA256 != "newfp" {
+		t.Errorf("host/cert not refreshed: %+v", got)
+	}
+	if got.SkipTLSVerify {
+		t.Errorf("SkipTLSVerify = true, expected false")
+	}
+}
+
+func TestReconnectProConfig_skipTLSIsSticky(t *testing.T) {
+	// Given a Pro that was paired with TLS verification skipped
+	old := &config.BridgePro{Host: "h", AppKey: "a", ClientKey: "c", SkipTLSVerify: true}
+
+	// When reconnecting without the global skip flag
+	got := reconnectProConfig(old, "h2", "", false)
+
+	// Then the prior skip setting is retained
+	if !got.SkipTLSVerify {
+		t.Fatal("SkipTLSVerify should remain true from the old config")
 	}
 }
 
