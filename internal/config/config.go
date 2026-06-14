@@ -136,6 +136,19 @@ func (c *Config) HasApiUser(username string) bool {
 	return ok
 }
 
+// ApiUserByDeviceType returns the first paired user with the given devicetype, if
+// any. Used to make pairing idempotent (the TV polls POST /api repeatedly).
+func (c *Config) ApiUserByDeviceType(deviceType string) (*ApiUser, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, u := range c.ApiUsers {
+		if u.DeviceType == deviceType {
+			return u, true
+		}
+	}
+	return nil, false
+}
+
 // SetPro stores the Bridge Pro pairing data and persists it.
 func (c *Config) SetPro(p *BridgePro) error {
 	c.mu.Lock()

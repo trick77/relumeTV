@@ -8,21 +8,15 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"strings"
-	"sync"
-	"time"
 
 	"github.com/trick77/relume/internal/config"
 	"github.com/trick77/relume/internal/upnp"
 )
-
-// linkWindow is the duration during which a pairing is accepted after pressing
-// the (virtual) link button — just like on a real bridge.
-const linkWindow = 30 * time.Second
 
 // LightProvider supplies the (already v1-translated) light list of the Bridge Pro
 // and sets light states (REST fallback). It is set by the backend (M2+); if it is
@@ -55,9 +49,9 @@ type Server struct {
 	MediaServerAlias bool
 	// MediaServerBasicBody keeps the ms1 alias URL but serves a Hue Basic descriptor body.
 	MediaServerBasicBody bool
-
-	mu       sync.Mutex
-	lastLink time.Time
+	// TVIP is the TV's IP (from -tv-ip). Pairing is auto-accepted only for the TV,
+	// identified by this IP or by the Android/Dalvik Philips-TV User-Agent.
+	TVIP string
 }
 
 // New creates the CLIP-v1 server.
@@ -95,9 +89,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/{user}/sensors", s.handleEmptyCollection)
 	mux.HandleFunc("GET /api/{user}/rules", s.handleEmptyCollection)
 	mux.HandleFunc("GET /api/{user}/resourcelinks", s.handleEmptyCollection)
-	// Virtual link button (web UI / CLI open the pairing window).
-	mux.HandleFunc("GET /", s.handleIndex)
-	mux.HandleFunc("POST /link", s.handleLink)
 	return s.logRequests(mux)
 }
 
@@ -149,18 +140,18 @@ func (r *statusRecorder) Write(p []byte) (int, error) {
 	return n, err
 }
 
-// PressLink opens the pairing window (used by the CLI `link` command or the web UI).
-func (s *Server) PressLink() {
-	s.mu.Lock()
-	s.lastLink = time.Now()
-	s.mu.Unlock()
-	s.log.Info("link button pressed", "fenster", linkWindow)
-}
-
-func (s *Server) linkActive() bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return time.Since(s.lastLink) <= linkWindow
+// isTVRequest identifies the Ambilight TV so pairing can be auto-accepted only
+// for it (never an arbitrary LAN device): by source IP (when -tv-ip is set) or by
+// the Android/Dalvik TV User-Agent it uses for CLIP v1 pairing
+// (e.g. "Dalvik/2.1.0 (Linux; U; Android 11; 2021/22 Philips UHD Android TV ...)").
+func (s *Server) isTVRequest(r *http.Request) bool {
+	if s.TVIP != "" {
+		if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil && host == s.TVIP {
+			return true
+		}
+	}
+	ua := strings.ToLower(r.UserAgent())
+	return strings.Contains(ua, "android") && (strings.Contains(ua, "philips") || strings.Contains(ua, "tv"))
 }
 
 func (s *Server) handleDescription(w http.ResponseWriter, r *http.Request) {
@@ -202,11 +193,23 @@ func (s *Server) handlePairing(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 2, "/", "body contains invalid json")
 		return
 	}
-	s.log.Info("pairing request", "devicetype", req.DeviceType, "clientkey", req.GenerateClientKey)
+	s.log.Info("pairing request", "devicetype", req.DeviceType, "clientkey", req.GenerateClientKey, "from", r.RemoteAddr)
 
-	if !s.linkActive() {
-		// CLIP-v1 standard error 101: link button not pressed.
+	// Pairing is auto-accepted, but only for the TV — never an arbitrary LAN
+	// device. Non-TV requests get the standard CLIP v1 error 101.
+	if !s.isTVRequest(r) {
 		writeError(w, 101, "", "link button not pressed")
+		return
+	}
+
+	// Idempotent: the TV polls POST /api rapidly; return the existing credentials
+	// for a devicetype instead of minting (and persisting) a new user each time.
+	if existing, ok := s.cfg.ApiUserByDeviceType(req.DeviceType); ok {
+		success := map[string]string{"username": existing.Username}
+		if existing.ClientKey != "" {
+			success["clientkey"] = existing.ClientKey
+		}
+		writeJSON(w, []map[string]any{{"success": success}})
 		return
 	}
 
@@ -477,28 +480,6 @@ func (s *Server) authorized(w http.ResponseWriter, r *http.Request) bool {
 	}
 	return true
 }
-
-func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/" {
-		http.NotFound(w, r)
-		return
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	io.WriteString(w, indexHTML)
-}
-
-func (s *Server) handleLink(w http.ResponseWriter, _ *http.Request) {
-	s.PressLink()
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	io.WriteString(w, fmt.Sprintf("<p>Link button pressed. Pairing open for %s.</p><p><a href=\"/\">back</a></p>", linkWindow))
-}
-
-const indexHTML = `<!doctype html><html><head><meta charset="utf-8"><title>relume</title></head>
-<body style="font-family:sans-serif;max-width:40em;margin:2em auto">
-<h1>relume</h1>
-<p>Software bridge for Philips Ambilight TV &harr; Hue Bridge Pro.</p>
-<form method="post" action="/link"><button type="submit">Press link button (open pairing)</button></form>
-</body></html>`
 
 func randomHex(n int) (string, error) {
 	b := make([]byte, n)

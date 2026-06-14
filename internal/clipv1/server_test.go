@@ -32,6 +32,25 @@ func mustPost(t *testing.T, url, body string) *http.Response {
 	return resp
 }
 
+func mustPostUA(t *testing.T, url, body, userAgent string) *http.Response {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, url, strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("new request %s: %v", url, err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", userAgent)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST %s: %v", url, err)
+	}
+	return resp
+}
+
+// tvUserAgent is the Android/Dalvik User-Agent a Philips Ambilight TV uses for
+// CLIP v1 pairing.
+const tvUserAgent = "Dalvik/2.1.0 (Linux; U; Android 11; 2021/22 Philips UHD Android TV Build/RTT2.211108.001)"
+
 func newTestServer(t *testing.T) (*Server, *httptest.Server) {
 	t.Helper()
 	cfg, err := config.Load(filepath.Join(t.TempDir(), "c.json"))
@@ -44,17 +63,17 @@ func newTestServer(t *testing.T) (*Server, *httptest.Server) {
 	return s, ts
 }
 
-func TestPairing_withoutLinkButton_thenFails(t *testing.T) {
-	// Given
+func TestPairing_fromNonTVRequest_thenFails(t *testing.T) {
+	// Given: auto-pair is the default, but only for the TV
 	_, ts := newTestServer(t)
 
-	// When
+	// When: a non-TV client (default Go User-Agent) tries to pair
 	resp := mustPost(t, ts.URL+"/api", `{"devicetype":"tv"}`)
 	defer resp.Body.Close()
 	var out []map[string]map[string]any
 	json.NewDecoder(resp.Body).Decode(&out)
 
-	// Then
+	// Then: rejected with error 101 — arbitrary LAN devices must not auto-pair
 	if len(out) != 1 || out[0]["error"] == nil {
 		t.Fatalf("expected error response, got %v", out)
 	}
@@ -63,13 +82,12 @@ func TestPairing_withoutLinkButton_thenFails(t *testing.T) {
 	}
 }
 
-func TestPairing_withLinkButton_thenReturnsUsernameAndClientKey(t *testing.T) {
-	// Given
-	s, ts := newTestServer(t)
-	s.PressLink()
+func TestPairing_fromTVUserAgent_thenReturnsUsernameAndClientKey(t *testing.T) {
+	// Given: auto-pair default, request carries the TV's Android/Dalvik User-Agent
+	_, ts := newTestServer(t)
 
 	// When
-	resp := mustPost(t, ts.URL+"/api", `{"devicetype":"Philips_TV#Ambilight","generateclientkey":true}`)
+	resp := mustPostUA(t, ts.URL+"/api", `{"devicetype":"65OLED806/12","generateclientkey":true}`, tvUserAgent)
 	defer resp.Body.Close()
 	var out []map[string]map[string]any
 	json.NewDecoder(resp.Body).Decode(&out)
@@ -94,6 +112,46 @@ func TestPairing_withLinkButton_thenReturnsUsernameAndClientKey(t *testing.T) {
 	json.NewDecoder(cfgResp.Body).Decode(&cfg)
 	if cfg["modelid"] != "BSB002" {
 		t.Errorf("modelid = %v, expected BSB002", cfg["modelid"])
+	}
+}
+
+func TestPairing_isIdempotentForSameDeviceType(t *testing.T) {
+	// Given: the TV polls POST /api rapidly with the same devicetype
+	_, ts := newTestServer(t)
+	body := `{"devicetype":"65OLED806/12","generateclientkey":true}`
+
+	// When: two pairing requests for the same devicetype
+	r1 := mustPostUA(t, ts.URL+"/api", body, tvUserAgent)
+	var o1 []map[string]map[string]string
+	json.NewDecoder(r1.Body).Decode(&o1)
+	r1.Body.Close()
+	r2 := mustPostUA(t, ts.URL+"/api", body, tvUserAgent)
+	var o2 []map[string]map[string]string
+	json.NewDecoder(r2.Body).Decode(&o2)
+	r2.Body.Close()
+
+	// Then: same credentials, no duplicate user minted
+	u1 := o1[0]["success"]["username"]
+	u2 := o2[0]["success"]["username"]
+	if u1 == "" || u1 != u2 {
+		t.Fatalf("expected identical username for same devicetype, got %q and %q", u1, u2)
+	}
+}
+
+func TestPairing_fromConfiguredTVIP_succeeds(t *testing.T) {
+	// Given: TV IP set to the loopback the test client connects from
+	s, ts := newTestServer(t)
+	s.TVIP = "127.0.0.1"
+
+	// When: a non-TV User-Agent, but the source IP matches the configured TV
+	resp := mustPost(t, ts.URL+"/api", `{"devicetype":"65OLED806/12"}`)
+	defer resp.Body.Close()
+	var out []map[string]map[string]any
+	json.NewDecoder(resp.Body).Decode(&out)
+
+	// Then: authorized by IP
+	if len(out) != 1 || out[0]["success"] == nil {
+		t.Fatalf("expected success for configured TV IP, got %v", out)
 	}
 }
 
@@ -399,9 +457,8 @@ func TestConfigDefaultProfileRejectsUnknownUser(t *testing.T) {
 
 func TestCapabilitiesAndEmptyCollections(t *testing.T) {
 	// Given
-	s, ts := newTestServer(t)
-	s.PressLink()
-	resp := mustPost(t, ts.URL+"/api", `{"devicetype":"Philips_TV#Ambilight","generateclientkey":true}`)
+	_, ts := newTestServer(t)
+	resp := mustPostUA(t, ts.URL+"/api", `{"devicetype":"Philips_TV#Ambilight","generateclientkey":true}`, tvUserAgent)
 	defer resp.Body.Close()
 	var paired []map[string]map[string]string
 	json.NewDecoder(resp.Body).Decode(&paired)
@@ -435,9 +492,8 @@ func TestCapabilitiesAndEmptyCollections(t *testing.T) {
 
 func TestGroupsExposeMinimalEntertainmentGroup(t *testing.T) {
 	// Given
-	s, ts := newTestServer(t)
-	s.PressLink()
-	resp := mustPost(t, ts.URL+"/api", `{"devicetype":"Philips_TV#Ambilight","generateclientkey":true}`)
+	_, ts := newTestServer(t)
+	resp := mustPostUA(t, ts.URL+"/api", `{"devicetype":"Philips_TV#Ambilight","generateclientkey":true}`, tvUserAgent)
 	defer resp.Body.Close()
 	var paired []map[string]map[string]string
 	json.NewDecoder(resp.Body).Decode(&paired)

@@ -44,11 +44,6 @@ func main() {
 			log.Error("serve terminated", "err", err)
 			os.Exit(1)
 		}
-	case "link":
-		if err := runLink(os.Args[2:]); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
 	case "setup":
 		if err := runSetup(os.Args[2:], log); err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -65,7 +60,7 @@ func main() {
 			os.Exit(1)
 		}
 	default:
-		fmt.Fprintf(os.Stderr, "unknown command %q\nAvailable: serve, setup, discover, link, avahi-service\n", cmd)
+		fmt.Fprintf(os.Stderr, "unknown command %q\nAvailable: serve, setup, discover, avahi-service\n", cmd)
 		os.Exit(2)
 	}
 }
@@ -144,6 +139,7 @@ func runServe(args []string, log *slog.Logger) error {
 
 	clip := clipv1.New(cfg, ip, opts.httpPort, log)
 	clip.Debug = opts.debug
+	clip.TVIP = opts.tvIP
 	clip.IdentityProfile = opts.identityProfile
 	clip.DescriptionProfile = opts.descriptionProfile
 	clip.MediaServerAlias = opts.ssdpMediaServerAlias
@@ -228,26 +224,6 @@ func shutdownHTTP(srv *http.Server) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = srv.Shutdown(ctx)
-}
-
-// runLink opens the pairing window by nudging the running serve process.
-func runLink(args []string) error {
-	fs := flag.NewFlagSet("link", flag.ExitOnError)
-	host := fs.String("host", "127.0.0.1", "host of the running relume")
-	port := fs.Int("http-port", 80, "HTTP port")
-	_ = fs.Parse(args)
-
-	url := fmt.Sprintf("http://%s:%d/link", *host, *port)
-	resp, err := http.Post(url, "application/x-www-form-urlencoded", nil)
-	if err != nil {
-		return fmt.Errorf("link request to %s: %w", url, err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("link request failed: %s", resp.Status)
-	}
-	fmt.Println("Link button pressed – pairing open for 30s.")
-	return nil
 }
 
 // runDiscover lists bridges found on the local network via the Philips cloud.

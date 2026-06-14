@@ -17,4 +17,15 @@ jobs:
           cache: true
       - run: go build ./...
       - run: go vet ./...
-      - run: go test ./...
+      - run: go test ./... -coverprofile=coverage.out -covermode=atomic
+      - name: Coverage summary
+        run: |
+          go tool cover -func=coverage.out | tail -1
+          echo "### Test coverage" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          go tool cover -func=coverage.out >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.out

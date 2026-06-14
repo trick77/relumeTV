@@ -11,7 +11,10 @@ All repo content (docs, code comments, logs) is English.
 - `go test ./...`
 - diagnostics: `relume serve -debug` (SSDP header log + mDNS observer + HTTP body log);
   `-disable-ssdp` runs mDNS-only (like ha-hue-entertainment) to isolate SSDP from discovery
-- commands: `serve` (default), `setup` (pair Pro), `discover` (cloud), `link` (open 30s TV pairing window), `avahi-service`, `version`
+- commands: `serve` (default), `setup` (pair Pro), `discover` (cloud), `avahi-service`, `version`
+- pairing is auto-accepted (no link button, no UI) — but ONLY for the TV (source IP == `-tv-ip`, or
+  the Android/Dalvik Philips-TV User-Agent); other LAN devices get error 101. POST /api is
+  idempotent per devicetype (TV polls it fast). No web UI / no `link` command — everything via logs.
 - container build file is `Containerfile` (not Dockerfile); compose file is `compose.yaml`
 
 ## identity invariants (TV rejects otherwise)
@@ -24,6 +27,11 @@ All repo content (docs, code comments, logs) is English.
 - UUID identical across SSDP USN, description.xml UDN. bridgeid identical across SSDP hue-bridgeid header, mDNS TXT, /config.
 
 ## discovery (the hard part)
+- CONFIRMED root cause of "TV fetches description.xml but never lists/pairs relume": a powered-on
+  real **Bridge Pro** on the same LAN (it also announces `_hue._tcp` as BSB003). Power the Pro OFF →
+  the 65OLED806 instantly lists relume and sends `POST /api` (`devicetype=65OLED806/12`). Open
+  product problem: relume must win over a powered-on Pro (the TV de-dupes/prefers BSB003) — NOT yet
+  solved. (relume proxies control TO the Pro, so Pro-off only validates discovery/pairing.)
 - mDNS announce MUST register exactly once and NEVER re-register/re-announce via
   `Server.Shutdown()`: grandcat/zeroconf's Shutdown multicasts an mDNS goodbye (TTL 0) that evicts
   relume from the TV's cache → bridge flickers out of the Ambilight list. This (not the descriptor)
@@ -56,8 +64,8 @@ All repo content (docs, code comments, logs) is English.
 - `relume.json` holds Pro appKey/clientkey + TV tokens. Gitignored. Never commit.
 
 ## status
-M2 Pro client, M3 REST light control: done+verified on real Pro. M1 discovery: TV (65OLED806)
-fetched description.xml but never listed relume. Root cause found: mDNS re-announce sent goodbye
-(TTL 0) packets every cycle, evicting the bridge from the TV cache — fixed to register-once
-(text/xml change earlier did NOT fix it). Awaiting real-TV retest of the register-once build.
-M4 entertainment (DTLS+HueStream) not started. See PLAN.md.
+M2 Pro client, M3 REST light control: done+verified on real Pro. M1 discovery+pairing: VERIFIED on
+65OLED806 — TV lists relume and completes `POST /api` — but ONLY with the real Bridge Pro powered
+OFF (coexistence is the open problem). Pairing is auto-accepted (TV-only) + idempotent; mDNS is
+register-once (no goodbye); description.xml is text/xml. M4 entertainment (DTLS+HueStream) not
+started. See PLAN.md.
