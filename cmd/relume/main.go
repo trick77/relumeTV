@@ -182,6 +182,9 @@ func runServe(args []string, log *slog.Logger) error {
 		log.Warn("no bridge pro paired yet – auto-pairing in background; TAP the Bridge Pro link button")
 		go autoPairPro(ctx, cfg, clip, opts.bridgeIP, opts.skipTLS, log)
 	} else {
+		// A restart drops the TV's REST session, leaving the lights frozen on their
+		// last Ambilight color — blink them red to signal the restart, then off.
+		go bridge.FlashRestart(bridgepro.New(cfg.Pro), log)
 		// Keep the already-paired Pro reachable across reboots / IP changes.
 		go watchPro(ctx, cfg, clip, opts.bridgeIP, opts.skipTLS, log)
 	}
@@ -236,6 +239,10 @@ func runServe(args []string, log *slog.Logger) error {
 		return err
 	}
 	shutdownHTTP(httpSrv)
+	// Stop accepting TV writes first (above), then signal the restart on the lights.
+	if cfg.Pro != nil {
+		bridge.FlashRestart(bridgepro.New(cfg.Pro), log)
+	}
 	return nil
 }
 
