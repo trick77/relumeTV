@@ -764,6 +764,36 @@ func TestStreamActiveFromBody(t *testing.T) {
 	}
 }
 
+// statsProvider is a light provider that also reports drain stats.
+type statsProvider struct {
+	fakeLightProvider
+	coalesced, forwardErrors uint64
+}
+
+func (p statsProvider) DrainStatsDelta() (uint64, uint64) { return p.coalesced, p.forwardErrors }
+
+func TestActivitySummary_includesActiveLightsAndForwardingStats(t *testing.T) {
+	// Given: a server with a controlled-light set and a stats-reporting provider
+	s, _ := newTestServer(t)
+	s.ControlledLights = func() []string { return []string{"uuid-a", "uuid-b"} }
+	s.SetLightProvider(statsProvider{coalesced: 7, forwardErrors: 2})
+	s.recordLightWrite("1")
+	s.recordWriteTime()
+
+	// When: the summary fires
+	var buf strings.Builder
+	s.log = slog.New(slog.NewTextHandler(&buf, nil))
+	s.flushActivity(30 * time.Second)
+
+	// Then: it carries the active-light count + ids and the forwarding stats
+	out := buf.String()
+	for _, want := range []string{"active_lights=2", "active_light_ids=", "uuid-a", "coalesced_frames=7", "forward_errors=2", "since_last_write="} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("summary missing %q: %s", want, out)
+		}
+	}
+}
+
 func TestActivitySummary_includesGroupActionWritesAndHz(t *testing.T) {
 	// Given: a mix of per-light and group-action writes over a 10s window
 	s, _ := newTestServer(t)

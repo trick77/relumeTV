@@ -174,6 +174,7 @@ func runServe(args []string, log *slog.Logger) error {
 		log.Info("controlled-light-window raised to exceed idle-off-timeout", "window", window.String())
 	}
 	controlled := bridge.NewControlledSet(window)
+	clip.ControlledLights = controlled.Current
 
 	if cfg.Pro != nil {
 		client := bridgepro.New(cfg.Pro)

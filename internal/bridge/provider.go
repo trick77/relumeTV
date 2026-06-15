@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/trick77/relume/internal/bridgepro"
@@ -54,6 +55,19 @@ type LightProvider struct {
 	errMu      sync.Mutex
 	errCount   int
 	lastErrLog time.Time
+
+	// Window stats for the activity rollup, reset by DrainStatsDelta. coalesced
+	// counts frames dropped because a newer state for the same light arrived before
+	// the Bridge Pro accepted the previous one (the Pro can't keep up); forwardErr
+	// counts failed writes to the Pro.
+	coalesced  atomic.Uint64
+	forwardErr atomic.Uint64
+}
+
+// DrainStatsDelta returns the coalesced (dropped) frame count and the forward
+// error count since the last call, and resets both. Used by the activity rollup.
+func (p *LightProvider) DrainStatsDelta() (coalesced, forwardErrors uint64) {
+	return p.coalesced.Swap(0), p.forwardErr.Swap(0)
 }
 
 // errLogInterval bounds how often forward failures are logged (a summary with the
@@ -99,6 +113,11 @@ func (p *LightProvider) UUIDForV1(v1id string) (string, bool) {
 // surfaced to the TV (latency over error reporting). Always returns nil.
 func (p *LightProvider) SetLightV1(v1id string, v1state map[string]any) error {
 	p.ctrlMu.Lock()
+	if _, exists := p.pending[v1id]; exists {
+		// A previous frame for this light is still queued → it is dropped (coalesced)
+		// because the Bridge Pro has not drained it yet.
+		p.coalesced.Add(1)
+	}
 	p.pending[v1id] = v1state
 	if !p.draining {
 		p.draining = true
@@ -136,6 +155,7 @@ func (p *LightProvider) drain() {
 // further ones and emits a summary at most every errLogInterval with the count of
 // suppressed failures — so a down Bridge Pro cannot flood the log.
 func (p *LightProvider) recordForwardErr(err error) {
+	p.forwardErr.Add(1)
 	if p.log == nil {
 		return
 	}

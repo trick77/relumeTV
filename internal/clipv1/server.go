@@ -66,6 +66,11 @@ type Server struct {
 	// whether it tries DTLS at all. Off keeps the legacy log-and-ack behavior.
 	EntProbe bool
 
+	// ControlledLights, if set, returns the Bridge Pro light UUIDs the TV is
+	// currently driving (the flash-target set). Surfaced in the activity rollup so
+	// the live Ambilight light set is visible. Wired to ControlledSet by main.
+	ControlledLights func() []string
+
 	// activity accumulates the high-frequency light-state writes Ambilight sends
 	// (REST control path) so they can be summarized periodically instead of
 	// logging every single request. See LogActivitySummary.
@@ -307,6 +312,7 @@ func (s *Server) LogActivitySummary(ctx context.Context, interval time.Duration)
 func (s *Server) flushActivity(window time.Duration) {
 	s.activityMu.Lock()
 	writes, groupWrites, lights := s.lightWrites, s.groupActionWrites, len(s.lightsTouched)
+	lastWrite := s.lastWriteAt
 	s.lightWrites = 0
 	s.groupActionWrites = 0
 	s.lightsTouched = map[string]struct{}{}
@@ -327,14 +333,37 @@ func (s *Server) flushActivity(window time.Duration) {
 	if secs > 0 {
 		totalHz = float64(total) / secs
 	}
-	s.log.Info("ambilight activity",
+
+	attrs := []any{
 		"light_state_writes", writes,
 		"group_action_writes", groupWrites,
 		"lights", lights,
 		"window", window.String(),
 		"total_hz", round1(totalHz),
 		"per_light_hz", round1(perLightHz),
-	)
+	}
+	// Active (flash-target) lights the TV is currently driving — count and IDs.
+	if s.ControlledLights != nil {
+		ids := s.ControlledLights()
+		attrs = append(attrs, "active_lights", len(ids), "active_light_ids", ids)
+	}
+	// Seconds since the last write — surfaces pauses approaching the idle-off.
+	if !lastWrite.IsZero() {
+		attrs = append(attrs, "since_last_write", time.Since(lastWrite).Round(time.Second).String())
+	}
+	// Forwarding health from the Bridge Pro provider (dropped/coalesced frames and
+	// failed writes), if the backend exposes it.
+	if ds, ok := s.lightProvider().(drainStatsProvider); ok {
+		coalesced, forwardErrors := ds.DrainStatsDelta()
+		attrs = append(attrs, "coalesced_frames", coalesced, "forward_errors", forwardErrors)
+	}
+	s.log.Info("ambilight activity", attrs...)
+}
+
+// drainStatsProvider is the optional backend capability to report per-window
+// forwarding stats (coalesced frames and forward errors) for the activity rollup.
+type drainStatsProvider interface {
+	DrainStatsDelta() (coalesced, forwardErrors uint64)
 }
 
 // round1 rounds to one decimal for readable Hz figures in the activity log.
