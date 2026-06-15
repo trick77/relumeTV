@@ -56,33 +56,6 @@ func TestLoad_GeneratesAndPersistsIdentity(t *testing.T) {
 	}
 }
 
-func TestAddControlledLights_dedupsAndPersists(t *testing.T) {
-	// Given
-	path := filepath.Join(t.TempDir(), "relume.json")
-	c, _ := Load(path)
-
-	// When: lights are added with duplicates and empties
-	if err := c.AddControlledLights("uuid-a", "uuid-b", "uuid-a", ""); err != nil {
-		t.Fatalf("AddControlledLights: %v", err)
-	}
-	if err := c.AddControlledLights("uuid-b", "uuid-c"); err != nil {
-		t.Fatalf("AddControlledLights 2: %v", err)
-	}
-
-	// Then: the union is persisted without duplicates
-	reloaded, _ := Load(path)
-	got := reloaded.GetControlledLights()
-	want := map[string]bool{"uuid-a": true, "uuid-b": true, "uuid-c": true}
-	if len(got) != len(want) {
-		t.Fatalf("controlled lights = %v, want 3 unique", got)
-	}
-	for _, u := range got {
-		if !want[u] {
-			t.Fatalf("unexpected controlled light %q in %v", u, got)
-		}
-	}
-}
-
 func TestAddApiUser_Persists(t *testing.T) {
 	// Given
 	path := filepath.Join(t.TempDir(), "relume.json")

@@ -42,13 +42,13 @@ func (f *fakeClient) seen() []int {
 }
 
 func newTestProvider(c proClient) *LightProvider {
-	p := &LightProvider{client: c, pending: map[string]map[string]any{}, reported: map[string]struct{}{}}
+	p := &LightProvider{client: c, pending: map[string]map[string]any{}}
 	p.v1ToUUID = map[string]string{"1": "uuid-1", "2": "uuid-2"} // skip the Lights() resolution
 	return p
 }
 
-func TestOnControlled_firesOncePerLightUUID(t *testing.T) {
-	// Given: a provider that records which UUIDs the TV drives
+func TestOnControlled_firesOnEveryForward(t *testing.T) {
+	// Given: a provider that reports which UUIDs the TV drives
 	fc := &fakeClient{}
 	p := newTestProvider(fc)
 	var mu sync.Mutex
@@ -59,17 +59,16 @@ func TestOnControlled_firesOncePerLightUUID(t *testing.T) {
 		mu.Unlock()
 	}
 
-	// When: light 1 is driven repeatedly and light 2 once
-	for i := 0; i < 5; i++ {
-		_ = p.forward("1", map[string]any{"ct": 200})
-	}
+	// When: light 1 is driven twice and light 2 once
+	_ = p.forward("1", map[string]any{"ct": 200})
+	_ = p.forward("1", map[string]any{"ct": 200})
 	_ = p.forward("2", map[string]any{"ct": 200})
 
-	// Then: each controlled UUID is reported exactly once (not per frame)
+	// Then: it fires on every forward (so the sliding window keeps being refreshed)
 	mu.Lock()
 	defer mu.Unlock()
-	if len(got) != 2 || got[0] != "uuid-1" || got[1] != "uuid-2" {
-		t.Fatalf("OnControlled calls = %v, want [uuid-1 uuid-2]", got)
+	if len(got) != 3 || got[0] != "uuid-1" || got[1] != "uuid-1" || got[2] != "uuid-2" {
+		t.Fatalf("OnControlled calls = %v, want [uuid-1 uuid-1 uuid-2]", got)
 	}
 }
 

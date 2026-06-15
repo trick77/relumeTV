@@ -82,6 +82,7 @@ type serveOptions struct {
 	bridgeIP                 string
 	skipTLS                  bool
 	idleOffTimeout           time.Duration
+	controlledLightWindow    time.Duration
 }
 
 func parseServeOptions(args []string) (serveOptions, error) {
@@ -102,6 +103,7 @@ func parseServeOptions(args []string) (serveOptions, error) {
 	bridgeIP := fs.String("bridge-ip", "", "Bridge Pro IP for auto-pairing (empty = cloud discovery)")
 	skipTLS := fs.Bool("skip-tls-verify", false, "skip TLS verification to the Bridge Pro (instead of cert pinning)")
 	idleOffTimeout := fs.Duration("idle-off-timeout", 30*time.Second, "when the TV stops sending light writes for this long, flash the lights green twice and turn them off (0 = disabled)")
+	controlledLightWindow := fs.Duration("controlled-light-window", time.Minute, "sliding window: a light counts as a current Ambilight light only if the TV drove it within this window; the restart/idle flash and idle-off touch only those (so config changes are forgotten after the window)")
 	if err := fs.Parse(args); err != nil {
 		return serveOptions{}, err
 	}
@@ -122,6 +124,7 @@ func parseServeOptions(args []string) (serveOptions, error) {
 		bridgeIP:                 *bridgeIP,
 		skipTLS:                  *skipTLS,
 		idleOffTimeout:           *idleOffTimeout,
+		controlledLightWindow:    *controlledLightWindow,
 	}, nil
 }
 
@@ -159,9 +162,22 @@ func runServe(args []string, log *slog.Logger) error {
 	clip.DescriptionProfile = opts.descriptionProfile
 	clip.MediaServerAlias = opts.ssdpMediaServerAlias
 	clip.MediaServerBasicBody = opts.ssdpMediaServerBasicBody
+
+	// controlled tracks the lights the TV is currently driving for Ambilight (a
+	// sliding window). The restart/idle flash and idle-off target only these — and
+	// nothing when the set is empty, so we never flash uncaptured lights. The
+	// window must exceed the idle-off timeout, or the set would already be empty by
+	// the time idle-off fires.
+	window := opts.controlledLightWindow
+	if minWindow := opts.idleOffTimeout + 15*time.Second; opts.idleOffTimeout > 0 && window < minWindow {
+		window = minWindow
+		log.Info("controlled-light-window raised to exceed idle-off-timeout", "window", window.String())
+	}
+	controlled := bridge.NewControlledSet(window)
+
 	if cfg.Pro != nil {
 		client := bridgepro.New(cfg.Pro)
-		clip.SetLightProvider(newProvider(client, cfg, log))
+		clip.SetLightProvider(newProvider(client, controlled, log))
 		log.Info("bridge pro paired", "host", cfg.Pro.Host)
 	}
 	var responder *ssdp.Responder
@@ -189,13 +205,14 @@ func runServe(args []string, log *slog.Logger) error {
 	// empty light list until the Pro pairing completes, then hot-loads the lights.
 	if cfg.Pro == nil {
 		log.Warn("no bridge pro paired yet – auto-pairing in background; TAP the Bridge Pro link button")
-		go autoPairPro(ctx, cfg, clip, opts.bridgeIP, opts.skipTLS, log)
+		go autoPairPro(ctx, cfg, clip, controlled, opts.bridgeIP, opts.skipTLS, log)
 	} else {
-		// A restart drops the TV's REST session, leaving the lights frozen on their
-		// last Ambilight color — blink ONLY the Ambilight bulbs red, then off.
-		go bridge.FlashRestart(bridgepro.New(cfg.Pro), log, cfg.GetControlledLights())
+		// No restart flash at startup: the controlled set is empty here (no TV write
+		// captured yet), so we have nothing to flash. The restart indicator is the
+		// shutdown flash below — on `docker compose up -d` the old container gets
+		// SIGTERM and blinks the currently-driven Ambilight bulbs red+off first.
 		// Keep the already-paired Pro reachable across reboots / IP changes.
-		go watchPro(ctx, cfg, clip, opts.bridgeIP, opts.skipTLS, log)
+		go watchPro(ctx, cfg, clip, controlled, opts.bridgeIP, opts.skipTLS, log)
 	}
 
 	// Summarize the high-frequency Ambilight light-state writes periodically
@@ -224,7 +241,7 @@ func runServe(args []string, log *slog.Logger) error {
 	// writing. Disabled when the timeout is 0.
 	if opts.idleOffTimeout > 0 {
 		log.Info("idle-off monitor active", "timeout", opts.idleOffTimeout.String())
-		go monitorIdle(ctx, clip, cfg, opts.idleOffTimeout, log)
+		go monitorIdle(ctx, clip, cfg, controlled, opts.idleOffTimeout, log)
 	}
 
 	go func() {
@@ -275,21 +292,18 @@ func runServe(args []string, log *slog.Logger) error {
 	shutdownHTTP(httpSrv)
 	// Stop accepting TV writes first (above), then signal the restart on the lights.
 	if cfg.Pro != nil {
-		bridge.FlashRestart(bridgepro.New(cfg.Pro), log, cfg.GetControlledLights())
+		bridge.FlashRestart(bridgepro.New(cfg.Pro), log, controlled.Current())
 	}
 	return nil
 }
 
-// newProvider builds the Bridge Pro light provider and wires it to record the
-// lights the TV drives (config.ControlledLights), so the restart/idle flash and
-// idle-off touch only the Ambilight bulbs, never the rest of the home.
-func newProvider(client *bridgepro.Client, cfg *config.Config, log *slog.Logger) *bridge.LightProvider {
+// newProvider builds the Bridge Pro light provider and wires it to feed the
+// sliding-window ControlledSet with each light the TV drives, so the restart/idle
+// flash and idle-off touch only the bulbs the TV is currently driving — never the
+// rest of the home.
+func newProvider(client *bridgepro.Client, controlled *bridge.ControlledSet, log *slog.Logger) *bridge.LightProvider {
 	p := bridge.NewLightProvider(client, log)
-	p.OnControlled = func(uuid string) {
-		if err := cfg.AddControlledLights(uuid); err != nil {
-			log.Warn("persisting controlled ambilight light", "uuid", uuid, "err", err)
-		}
-	}
+	p.OnControlled = controlled.Seen
 	return p
 }
 
@@ -305,7 +319,7 @@ func shutdownHTTP(srv *http.Server) {
 // off signal — it just stops writing — so this inactivity timeout stands in for
 // it. It fires once per active→idle transition and re-arms when the TV resumes
 // writing. The flash is a no-op while no Pro is paired or the Pro is unreachable.
-func monitorIdle(ctx context.Context, clip *clipv1.Server, cfg *config.Config, idleTimeout time.Duration, log *slog.Logger) {
+func monitorIdle(ctx context.Context, clip *clipv1.Server, cfg *config.Config, controlled *bridge.ControlledSet, idleTimeout time.Duration, log *slog.Logger) {
 	interval := 2 * time.Second
 	if idleTimeout < interval {
 		interval = idleTimeout
@@ -334,7 +348,7 @@ func monitorIdle(ctx context.Context, clip *clipv1.Server, cfg *config.Config, i
 			// re-pair concurrently. nil while no Pro is paired: nothing to flash.
 			if pro := cfg.GetPro(); pro != nil {
 				log.Info("ambilight idle: flashing the ambilight lights off", "idle_for", now.Sub(lastSeen).Round(time.Second).String())
-				bridge.FlashIdle(bridgepro.New(pro), log, cfg.GetControlledLights())
+				bridge.FlashIdle(bridgepro.New(pro), log, controlled.Current())
 			}
 		}
 	}
@@ -352,7 +366,7 @@ func idleShouldFire(now, lastSeen time.Time, fired bool, idleTimeout time.Durati
 // leaf certificate, then polls until the user taps the Pro's physical link button
 // (the one step that cannot be automated). On success it persists the credentials
 // and hot-loads the light backend so the already-paired TV starts seeing lights.
-func autoPairPro(ctx context.Context, cfg *config.Config, clip *clipv1.Server, bridgeIP string, skipTLS bool, log *slog.Logger) {
+func autoPairPro(ctx context.Context, cfg *config.Config, clip *clipv1.Server, controlled *bridge.ControlledSet, bridgeIP string, skipTLS bool, log *slog.Logger) {
 	host := bridgeIP
 	for host == "" {
 		bridges, derr := bridgepro.Discover()
@@ -393,7 +407,7 @@ func autoPairPro(ctx context.Context, cfg *config.Config, clip *clipv1.Server, b
 				return
 			}
 			client := bridgepro.New(pro)
-			clip.SetLightProvider(newProvider(client, cfg, log))
+			clip.SetLightProvider(newProvider(client, controlled, log))
 			log.Info("bridge pro paired (auto)", "host", host)
 			if lights, lerr := client.Lights(); lerr == nil {
 				log.Info("bridge pro lights available", "count", len(lights))
@@ -414,7 +428,7 @@ func autoPairPro(ctx context.Context, cfg *config.Config, clip *clipv1.Server, b
 // -bridge-ip), re-pins its certificate and hot-swaps the light provider — all
 // without a new button press, since the stored appKey/clientKey stay valid
 // across reboots and DHCP IP changes.
-func watchPro(ctx context.Context, cfg *config.Config, clip *clipv1.Server, bridgeIP string, skipTLS bool, log *slog.Logger) {
+func watchPro(ctx context.Context, cfg *config.Config, clip *clipv1.Server, controlled *bridge.ControlledSet, bridgeIP string, skipTLS bool, log *slog.Logger) {
 	const checkInterval = 60 * time.Second
 	pro := cfg.Pro
 	if pro == nil {
@@ -456,7 +470,7 @@ func watchPro(ctx context.Context, cfg *config.Config, clip *clipv1.Server, brid
 			log.Error("persisting reconnected bridge pro", "err", serr)
 			continue
 		}
-		clip.SetLightProvider(newProvider(bridgepro.New(updated), cfg, log))
+		clip.SetLightProvider(newProvider(bridgepro.New(updated), controlled, log))
 		pro = updated
 		log.Info("bridge pro reconnected", "host", host)
 	}

@@ -84,11 +84,6 @@ type Config struct {
 	Identity Identity            `json:"identity"`
 	ApiUsers map[string]*ApiUser `json:"apiUsers"`
 	Pro      *BridgePro          `json:"bridgePro,omitempty"`
-	// ControlledLights are the Bridge Pro light UUIDs the TV actually drives for
-	// Ambilight (learned from its per-light writes). It scopes the restart/idle
-	// flash and the idle-off to ONLY those bulbs — never the rest of the home. It
-	// is persisted so a restart flash can target them before the TV reconnects.
-	ControlledLights []string `json:"controlledLights,omitempty"`
 
 	mu   sync.Mutex `json:"-"`
 	path string     `json:"-"`
@@ -170,42 +165,6 @@ func (c *Config) SetPro(p *BridgePro) error {
 	defer c.mu.Unlock()
 	c.Pro = p
 	return c.save()
-}
-
-// AddControlledLights merges the given Bridge Pro light UUIDs into the set of
-// lights the TV drives for Ambilight, persisting only when the set actually grows
-// (so the high-frequency control path does not write the file on every frame).
-func (c *Config) AddControlledLights(uuids ...string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	have := make(map[string]struct{}, len(c.ControlledLights))
-	for _, u := range c.ControlledLights {
-		have[u] = struct{}{}
-	}
-	changed := false
-	for _, u := range uuids {
-		if u == "" {
-			continue
-		}
-		if _, ok := have[u]; !ok {
-			c.ControlledLights = append(c.ControlledLights, u)
-			have[u] = struct{}{}
-			changed = true
-		}
-	}
-	if !changed {
-		return nil
-	}
-	return c.save()
-}
-
-// GetControlledLights returns a copy of the TV-controlled light UUIDs.
-func (c *Config) GetControlledLights() []string {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	out := make([]string, len(c.ControlledLights))
-	copy(out, c.ControlledLights)
-	return out
 }
 
 // save writes the config atomically to c.path. The caller may hold the lock.

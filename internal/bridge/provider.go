@@ -28,15 +28,11 @@ type LightProvider struct {
 	client proClient
 	log    *slog.Logger
 
-	// OnControlled, if set, is called once with the Bridge Pro UUID of each light
-	// the TV drives (resolved on the forward path). It lets the caller record the
-	// Ambilight light set so the restart/idle flash and idle-off touch only those
-	// bulbs, not the whole home. Wired to config.AddControlledLights by main.
+	// OnControlled, if set, is called with the Bridge Pro UUID of each light the TV
+	// drives, on every per-light forward. It feeds the sliding-window ControlledSet
+	// so the restart/idle flash and idle-off touch only the bulbs the TV is
+	// currently driving, not the whole home. Wired by main.
 	OnControlled func(uuid string)
-	// reported dedups OnControlled so it fires once per UUID per provider lifetime
-	// (the control path runs many times per second).
-	reportedMu sync.Mutex
-	reported   map[string]struct{}
 
 	mu        sync.Mutex
 	cached    map[string]any
@@ -67,7 +63,7 @@ const errLogInterval = 30 * time.Second
 // NewLightProvider creates a provider for the given Bridge Pro. log receives the
 // asynchronous control-path errors that are no longer surfaced to the TV.
 func NewLightProvider(client *bridgepro.Client, log *slog.Logger) *LightProvider {
-	return &LightProvider{client: client, log: log, pending: map[string]map[string]any{}, reported: map[string]struct{}{}}
+	return &LightProvider{client: client, log: log, pending: map[string]map[string]any{}}
 }
 
 // LightsV1 returns the v1 light list (with a short cache).
@@ -170,24 +166,8 @@ func (p *LightProvider) forward(v1id string, v1state map[string]any) error {
 			return fmt.Errorf("unknown light id %q", v1id)
 		}
 	}
-	p.reportControlled(uuid)
-	return p.client.SetLight(uuid, translate.StateV1ToV2(v1state))
-}
-
-// reportControlled notifies OnControlled the first time the TV drives a given
-// light UUID, so the Ambilight light set can be recorded (and the flash/idle-off
-// scoped to it). Subsequent writes to the same light are ignored.
-func (p *LightProvider) reportControlled(uuid string) {
-	if p.OnControlled == nil {
-		return
-	}
-	p.reportedMu.Lock()
-	_, seen := p.reported[uuid]
-	if !seen {
-		p.reported[uuid] = struct{}{}
-	}
-	p.reportedMu.Unlock()
-	if !seen {
+	if p.OnControlled != nil {
 		p.OnControlled(uuid)
 	}
+	return p.client.SetLight(uuid, translate.StateV1ToV2(v1state))
 }
