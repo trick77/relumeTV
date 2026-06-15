@@ -448,9 +448,9 @@ func watchPro(ctx context.Context, cfg *config.Config, clip *clipv1.Server, cont
 		now := time.Now()
 		if !down {
 			down, downSince, lastDownLog = true, now, now
-			log.Warn("bridge pro not reachable — it looks powered off or off the network. "+
-				"relume cannot control the lights until it is back; retrying every 60s. "+
-				"If you powered it off on purpose, turn it back on; otherwise check its power/network.",
+			log.Warn("bridge pro not reachable — is it turned off? "+
+				"relume can't control the lights until it's back on. Turn the Bridge Pro back on "+
+				"(or check its power/network cable); retrying every 60s.",
 				"host", pro.Host, "err", reason)
 			return
 		}
