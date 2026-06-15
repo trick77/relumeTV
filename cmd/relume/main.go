@@ -148,6 +148,15 @@ func runServe(args []string, log *slog.Logger) error {
 	}
 	log.Info("relume", "version", version)
 	log.Info("identity", "serial", cfg.Identity.Serial, "bridgeid", cfg.Identity.BridgeID(), "advertise", ip)
+	// Dump the saved state on startup (no secrets): which Bridge Pro is paired and
+	// which TVs are already paired. An already-paired TV explains an "instant"
+	// re-pairing — POST /api then returns the stored user without the 5s delay.
+	log.Info("saved config",
+		"path", opts.configPath,
+		"pro", cfg.Pro, // LogValue → name/id/host, or <none> when unpaired
+		"tv_paired", len(cfg.PairedDeviceTypes()),
+		"tv_devicetypes", cfg.PairedDeviceTypes(),
+	)
 
 	// entProbe enables the entertainment diagnostic (RELUME_ENT_PROBE=1): confirm
 	// the TV's stream activation and observe whether it then opens a DTLS stream on

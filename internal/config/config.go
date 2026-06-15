@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -151,6 +152,19 @@ func (c *Config) AddApiUser(u *ApiUser) error {
 	defer c.mu.Unlock()
 	c.ApiUsers[u.Username] = u
 	return c.save()
+}
+
+// PairedDeviceTypes returns the devicetypes of all paired clients (no secrets),
+// sorted — for a startup config summary.
+func (c *Config) PairedDeviceTypes() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make([]string, 0, len(c.ApiUsers))
+	for _, u := range c.ApiUsers {
+		out = append(out, u.DeviceType)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // HasApiUser checks whether a username is known (paired).
