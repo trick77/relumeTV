@@ -66,6 +66,12 @@ type Server struct {
 	// whether it tries DTLS at all. Off keeps the legacy log-and-ack behavior.
 	EntProbe bool
 
+	// EntertainmentMode makes relume confirm the TV's stream activation for real
+	// (so the TV opens the DTLS entertainment stream, which the receiver services)
+	// instead of the REST-mode generic ack that keeps the TV on REST-follow. Opt-in
+	// via -mode entertainment; REST stays the default.
+	EntertainmentMode bool
+
 	// ControlledLights, if set, returns the Bridge Pro light UUIDs the TV is
 	// currently driving (the flash-target set). Surfaced in the activity rollup so
 	// the live Ambilight light set is visible. Wired to ControlledSet by main.
@@ -115,6 +121,10 @@ const defaultPairAcceptDelay = 10 * time.Second
 func New(cfg *config.Config, advIP string, httpPort int, log *slog.Logger) *Server {
 	return &Server{cfg: cfg, advIP: advIP, httpPort: httpPort, log: log, lightsTouched: map[string]struct{}{}, pairAcceptDelay: defaultPairAcceptDelay}
 }
+
+// confirmsEntertainment reports whether relume should confirm the TV's stream
+// activation for real: in entertainment mode, or under the diagnostic probe.
+func (s *Server) confirmsEntertainment() bool { return s.EntertainmentMode || s.EntProbe }
 
 // SetLightProvider registers the source for the light list (Bridge Pro backend).
 // Safe to call at runtime: the backend may be paired asynchronously after the
@@ -651,7 +661,7 @@ func (s *Server) bridgeGroup(id string) map[string]any {
 	// open the DTLS connection (which the :2100 probe then observes).
 	var streamActive bool
 	var streamOwner any
-	if s.EntProbe && id == "1" {
+	if s.confirmsEntertainment() && id == "1" {
 		s.streamMu.Lock()
 		streamActive = s.streamActive
 		if s.streamOwner != "" {
@@ -691,7 +701,7 @@ func (s *Server) handleCreateGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	body, _ := io.ReadAll(r.Body)
-	if s.EntProbe {
+	if s.confirmsEntertainment() {
 		var g struct {
 			Type string `json:"type"`
 			Name string `json:"name"`
@@ -735,7 +745,7 @@ func (s *Server) handleGroupUpdate(w http.ResponseWriter, r *http.Request) {
 	body, _ := io.ReadAll(r.Body)
 	s.log.Info("group update", "group", id, "body", string(body))
 
-	if s.EntProbe {
+	if s.confirmsEntertainment() {
 		if active, ok := streamActiveFromBody(body); ok {
 			owner := r.PathValue("user")
 			s.streamMu.Lock()

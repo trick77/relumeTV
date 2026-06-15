@@ -11,11 +11,16 @@ All repo content (docs, code comments, logs) is English.
 - `go test ./...`
 - diagnostics: `relume serve -debug` (SSDP header log + mDNS observer + HTTP body log);
   `-disable-ssdp` runs mDNS-only (like ha-hue-entertainment) to isolate SSDP from discovery
+- modes: `-mode rest` (DEFAULT, proven REST-follow — relume gives the generic stream-activation
+  ack so the TV stays on per-light PUTs) or `-mode entertainment` (M4: confirms stream activation
+  for real + runs the DTLS-PSK receiver on :2100, PSK = the clientkey relume minted for the TV at
+  pairing). Entertainment is OPT-IN; REST is untouched. Confirmed 2026-06-15: the TV DOES use
+  entertainment/DTLS once activation is confirmed (the old "REST-only" reading was circular).
 - env diagnostics (no -debug flood): `RELUME_GAP_TRACE=1` logs inter-write gaps (idle-off
-  calibration). `RELUME_ENT_PROBE=1` is the entertainment lag probe: confirms the TV's stream
-  activation with the real v1 success shape (so the TV proceeds to DTLS instead of aborting),
-  passively watches udp :2100 for the TV's ClientHello, and adds Hz to the `ambilight activity`
-  rollup. grep `ENTERTAINMENT` and `ambilight activity`. Probe-only — never sends DTLS.
+  calibration). `RELUME_ENT_PROBE=1` is the passive entertainment probe (REST mode only):
+  confirms stream activation + watches udp :2100 for the TV's ClientHello + adds Hz to the
+  `ambilight activity` rollup. Superseded by `-mode entertainment` (which services the stream).
+  grep `ENTERTAINMENT` and `ambilight activity`. Probe never sends DTLS.
 - commands: `serve` (default), `setup` (manual Pro pair — optional), `discover` (cloud), `avahi-service`, `version`
 - pairing is auto-accepted (no link button, no UI) — but ONLY for the TV (source IP == `-tv-ip`, or
   the Android/Dalvik Philips-TV User-Agent); other LAN devices get error 101. POST /api is

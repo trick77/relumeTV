@@ -20,6 +20,7 @@ import (
 	"github.com/trick77/relume/internal/clipv1"
 	"github.com/trick77/relume/internal/config"
 	"github.com/trick77/relume/internal/diag"
+	"github.com/trick77/relume/internal/entertainment"
 	"github.com/trick77/relume/internal/mdns"
 	"github.com/trick77/relume/internal/ssdp"
 )
@@ -83,6 +84,7 @@ type serveOptions struct {
 	skipTLS                  bool
 	idleOffTimeout           time.Duration
 	controlledLightWindow    time.Duration
+	mode                     string
 }
 
 func parseServeOptions(args []string) (serveOptions, error) {
@@ -104,6 +106,7 @@ func parseServeOptions(args []string) (serveOptions, error) {
 	skipTLS := fs.Bool("skip-tls-verify", false, "skip TLS verification to the Bridge Pro (instead of cert pinning)")
 	idleOffTimeout := fs.Duration("idle-off-timeout", 30*time.Second, "when the TV stops sending light writes for this long, flash the lights green twice and turn them off (0 = disabled)")
 	controlledLightWindow := fs.Duration("controlled-light-window", time.Minute, "sliding window: a light counts as a current Ambilight light only if the TV drove it within this window; the restart/idle flash and idle-off touch only those (so config changes are forgotten after the window)")
+	mode := fs.String("mode", "rest", "control mode: 'rest' (default, proven REST-follow) or 'entertainment' (confirm the TV's stream activation and run the DTLS receiver on :2100)")
 	if err := fs.Parse(args); err != nil {
 		return serveOptions{}, err
 	}
@@ -125,6 +128,7 @@ func parseServeOptions(args []string) (serveOptions, error) {
 		skipTLS:                  *skipTLS,
 		idleOffTimeout:           *idleOffTimeout,
 		controlledLightWindow:    *controlledLightWindow,
+		mode:                     *mode,
 	}, nil
 }
 
@@ -158,15 +162,28 @@ func runServe(args []string, log *slog.Logger) error {
 		"tv_devicetypes", cfg.PairedDeviceTypes(),
 	)
 
-	// entProbe enables the entertainment diagnostic (RELUME_ENT_PROBE=1): confirm
-	// the TV's stream activation and observe whether it then opens a DTLS stream on
-	// udp :2100 — without the -debug per-request flood. See AGENTS.md / diag.
-	entProbe := os.Getenv("RELUME_ENT_PROBE") != ""
+	// mode selects the control path. REST (default) keeps the proven REST-follow
+	// behavior; entertainment confirms the TV's stream activation and runs the DTLS
+	// receiver on :2100. Additive — REST stays untouched.
+	switch opts.mode {
+	case "rest", "entertainment":
+	default:
+		return fmt.Errorf("invalid -mode %q (want 'rest' or 'entertainment')", opts.mode)
+	}
+	entertainmentMode := opts.mode == "entertainment"
+
+	// entProbe enables the passive entertainment diagnostic (RELUME_ENT_PROBE=1) in
+	// REST mode: confirm the TV's stream activation and observe whether it opens a
+	// DTLS stream on :2100 — without the -debug flood. Superseded by entertainment
+	// mode (which actually services the stream), so it is ignored there.
+	entProbe := os.Getenv("RELUME_ENT_PROBE") != "" && !entertainmentMode
 
 	clip := clipv1.New(cfg, ip, opts.httpPort, log)
 	clip.Debug = opts.debug
 	clip.TVIP = opts.tvIP
 	clip.EntProbe = entProbe
+	clip.EntertainmentMode = entertainmentMode
+	log.Info("control mode", "mode", opts.mode)
 	clip.IdentityProfile = opts.identityProfile
 	clip.DescriptionProfile = opts.descriptionProfile
 	clip.MediaServerAlias = opts.ssdpMediaServerAlias
@@ -229,14 +246,26 @@ func runServe(args []string, log *slog.Logger) error {
 	// instead of logging every single request. The probe shortens the window to
 	// surface the update-rate (Hz) reading sooner during a diagnostic run.
 	activityWindow := 30 * time.Second
-	if entProbe {
+	if entProbe || entertainmentMode {
 		activityWindow = 10 * time.Second
 	}
 	go clip.LogActivitySummary(ctx, activityWindow)
 
-	// Passively observe the entertainment DTLS port (udp :2100): does the TV try
-	// to stream after activating the entertainment group? Probe-only; never sends.
-	if entProbe {
+	switch {
+	case entertainmentMode:
+		// Entertainment mode: run the real DTLS receiver on :2100. It decrypts the
+		// TV's stream (PSK = the clientkey relume minted at pairing) and decodes the
+		// HueStream frames. This phase only logs them; forwarding to the Pro follows.
+		recv := entertainment.NewReceiver(ip, cfg.PSKForUser, log)
+		log.Info("entertainment mode: starting DTLS receiver on udp :2100 (decode + log)")
+		go func() {
+			if err := recv.Run(ctx); err != nil && ctx.Err() == nil {
+				log.Warn("entertainment receiver", "err", err)
+			}
+		}()
+	case entProbe:
+		// Passive diagnostic (REST mode): observe whether the TV opens a DTLS stream
+		// on :2100 after activation. Probe-only; never sends.
 		probe := diag.NewEntertainmentProbe(ip, log)
 		log.Info("entertainment probe active (RELUME_ENT_PROBE): confirming stream activation + watching udp :2100")
 		go func() {

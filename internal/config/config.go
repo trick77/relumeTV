@@ -167,6 +167,22 @@ func (c *Config) PairedDeviceTypes() []string {
 	return out
 }
 
+// PSKForUser returns the DTLS pre-shared key (the hex-decoded clientkey) for a
+// paired client identity (username), for the entertainment DTLS handshake.
+func (c *Config) PSKForUser(username string) ([]byte, bool) {
+	c.mu.Lock()
+	u, ok := c.ApiUsers[username]
+	c.mu.Unlock()
+	if !ok || u.ClientKey == "" {
+		return nil, false
+	}
+	key, err := hex.DecodeString(u.ClientKey)
+	if err != nil {
+		return nil, false
+	}
+	return key, true
+}
+
 // HasApiUser checks whether a username is known (paired).
 func (c *Config) HasApiUser(username string) bool {
 	c.mu.Lock()

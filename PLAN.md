@@ -56,8 +56,13 @@ The Bridge Pro breaks the Ambilight+Hue path in three ways:
   → v1→v2 → Pro (207/errors handled). Group path is still a logged stub (completed with M4).
 - **mDNS discovery** ✅ implemented (active `_hue._tcp` announce) + `avahi-service` command.
   Final TV-detection test pending on Linux (see below).
-- **M4 — Entertainment** ⏳ open. `huestream` (+tests), DTLS server (TV) + DTLS client (Pro),
-  entertainment-config activation, stream forwarding. Goal: smooth Ambilight.
+- **M4 — Entertainment** 🚧 in progress (opt-in `-mode entertainment`; REST stays default).
+  - Phase A ✅ `internal/huestream` parser (+tests) + `internal/entertainment` DTLS-PSK receiver
+    on :2100 (PSK = the TV's minted clientkey), decodes + logs frames. Verified: TV uses DTLS.
+  - Phase B ⏳ forward decoded frames to the Pro via the REST provider (interim end-to-end).
+  - Phase C ⏳ DTLS client to the Pro (entertainment-config create/activate + HueStream encode)
+    for true 25fps. Phase D ⏳ group persistence + activation lifecycle.
+  Confirmed the TV opens a real DTLS entertainment stream once relume confirms activation.
 - **M5 — Packaging** ✅ done. Containerfile (static, multi-stage), `compose.yaml` (host networking),
   README, CI (test + release to ghcr.io). Image builds.
 
