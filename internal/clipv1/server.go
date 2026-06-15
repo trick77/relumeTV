@@ -217,7 +217,7 @@ func (s *Server) logRequests(next http.Handler) http.Handler {
 			// accumulate it too so it does not flood and shows up in the Hz rollup.
 			s.recordGroupActionWrite()
 		} else {
-			s.log.Info("http", "method", r.Method, "path", r.URL.Path, "from", r.RemoteAddr)
+			s.log.Info("http", "method", r.Method, "path", r.URL.Path, "from", r.RemoteAddr, "user-agent", r.UserAgent())
 		}
 		next.ServeHTTP(rec, r)
 		if s.Debug {
