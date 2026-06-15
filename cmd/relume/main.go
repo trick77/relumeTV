@@ -81,6 +81,7 @@ type serveOptions struct {
 	disableSSDP              bool
 	bridgeIP                 string
 	skipTLS                  bool
+	idleOffTimeout           time.Duration
 }
 
 func parseServeOptions(args []string) (serveOptions, error) {
@@ -100,6 +101,7 @@ func parseServeOptions(args []string) (serveOptions, error) {
 	disableSSDP := fs.Bool("disable-ssdp", false, "do not run the SSDP responder (mDNS-only, like ha-hue-entertainment) — diagnostic")
 	bridgeIP := fs.String("bridge-ip", "", "Bridge Pro IP for auto-pairing (empty = cloud discovery)")
 	skipTLS := fs.Bool("skip-tls-verify", false, "skip TLS verification to the Bridge Pro (instead of cert pinning)")
+	idleOffTimeout := fs.Duration("idle-off-timeout", 30*time.Second, "when the TV stops sending light writes for this long, flash the lights green twice and turn them off (0 = disabled)")
 	if err := fs.Parse(args); err != nil {
 		return serveOptions{}, err
 	}
@@ -119,6 +121,7 @@ func parseServeOptions(args []string) (serveOptions, error) {
 		disableSSDP:              *disableSSDP,
 		bridgeIP:                 *bridgeIP,
 		skipTLS:                  *skipTLS,
+		idleOffTimeout:           *idleOffTimeout,
 	}, nil
 }
 
@@ -193,6 +196,14 @@ func runServe(args []string, log *slog.Logger) error {
 	// instead of logging every single request.
 	go clip.LogActivitySummary(ctx, 30*time.Second)
 
+	// Detect the TV going silent (switched off / control session broke) and flash
+	// the lights green twice, then off — the TV sends no off signal, it just stops
+	// writing. Disabled when the timeout is 0.
+	if opts.idleOffTimeout > 0 {
+		log.Info("idle-off monitor active", "timeout", opts.idleOffTimeout.String())
+		go monitorIdle(ctx, clip, cfg, opts.idleOffTimeout, log)
+	}
+
 	go func() {
 		if err := announcer.Run(ctx); err != nil && ctx.Err() == nil {
 			log.Warn("mdns announcer", "err", err)
@@ -250,6 +261,54 @@ func shutdownHTTP(srv *http.Server) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = srv.Shutdown(ctx)
+}
+
+// monitorIdle watches the TV's Ambilight write activity and, once it has gone
+// silent for idleTimeout after having been active, flashes the Bridge Pro lights
+// green twice and turns them off (bridge.FlashIdle). The TV sends no explicit
+// off signal — it just stops writing — so this inactivity timeout stands in for
+// it. It fires once per active→idle transition and re-arms when the TV resumes
+// writing. The flash is a no-op while no Pro is paired or the Pro is unreachable.
+func monitorIdle(ctx context.Context, clip *clipv1.Server, cfg *config.Config, idleTimeout time.Duration, log *slog.Logger) {
+	interval := 2 * time.Second
+	if idleTimeout < interval {
+		interval = idleTimeout
+	}
+	t := time.NewTicker(interval)
+	defer t.Stop()
+
+	var lastSeen time.Time
+	fired := false
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case now := <-t.C:
+			act := clip.LastActivity()
+			if act.After(lastSeen) {
+				// New activity since the last observation → re-arm.
+				lastSeen, fired = act, false
+				continue
+			}
+			if !idleShouldFire(now, lastSeen, fired, idleTimeout) {
+				continue
+			}
+			fired = true
+			// GetPro reads the pairing under its mutex — autoPairPro/watchPro may
+			// re-pair concurrently. nil while no Pro is paired: nothing to flash.
+			if pro := cfg.GetPro(); pro != nil {
+				log.Info("ambilight idle: flashing lights off", "idle_for", now.Sub(lastSeen).Round(time.Second).String())
+				bridge.FlashIdle(bridgepro.New(pro), log)
+			}
+		}
+	}
+}
+
+// idleShouldFire reports whether the idle-off flash should fire this tick: the TV
+// has been active at least once (lastSeen non-zero), has now been silent for the
+// timeout, and the flash has not already fired for this active→idle transition.
+func idleShouldFire(now, lastSeen time.Time, fired bool, idleTimeout time.Duration) bool {
+	return !fired && !lastSeen.IsZero() && now.Sub(lastSeen) >= idleTimeout
 }
 
 // autoPairPro pairs relume with the Bridge Pro in the background, independently of

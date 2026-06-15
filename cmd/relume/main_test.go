@@ -99,6 +99,32 @@ func TestParseServeOptions_bridgeProAutoPairFlags(t *testing.T) {
 	}
 }
 
+func TestIdleShouldFire(t *testing.T) {
+	const timeout = 30 * time.Second
+	base := time.Unix(1_700_000_000, 0)
+	active := base // a real, non-zero activity time
+	cases := []struct {
+		name     string
+		now      time.Time
+		lastSeen time.Time
+		fired    bool
+		want     bool
+	}{
+		{"never active → never fires", base.Add(time.Hour), time.Time{}, false, false},
+		{"active but within timeout", active.Add(29 * time.Second), active, false, false},
+		{"active and idle past timeout", active.Add(31 * time.Second), active, false, true},
+		{"exactly at timeout", active.Add(timeout), active, false, true},
+		{"already fired this transition", active.Add(time.Hour), active, true, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := idleShouldFire(tc.now, tc.lastSeen, tc.fired, timeout); got != tc.want {
+				t.Fatalf("idleShouldFire = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestReconnectProConfig_preservesCredentialsAndRefreshesHostCert(t *testing.T) {
 	// Given a paired Pro and a new IP + cert discovered on reconnect
 	old := &config.BridgePro{Host: "192.0.2.1", AppKey: "app", ClientKey: "CK", CertSHA256: "oldfp", SkipTLSVerify: false}

@@ -587,6 +587,40 @@ func TestDatastore_lightsEmptyWhenNoProvider(t *testing.T) {
 	}
 }
 
+// LastActivity must advance when the TV writes a light state, so the idle-off
+// monitor can detect the TV going silent. It must stay zero before any write.
+func TestLastActivity_advancesOnLightStateWrite(t *testing.T) {
+	// Given: a paired TV and a light provider
+	s, ts := newTestServer(t)
+	s.SetLightProvider(fakeLightProvider{lights: map[string]any{
+		"1": map[string]any{"name": "Lamp", "type": "Extended color light"},
+	}})
+	if !s.LastActivity().IsZero() {
+		t.Fatalf("LastActivity before any write = %v, want zero", s.LastActivity())
+	}
+	resp := mustPostUA(t, ts.URL+"/api", `{"devicetype":"Philips_TV#Ambilight","generateclientkey":true}`, tvUserAgent)
+	defer resp.Body.Close()
+	var paired []map[string]map[string]string
+	json.NewDecoder(resp.Body).Decode(&paired)
+	username := paired[0]["success"]["username"]
+
+	// When: the TV writes a light state
+	req, err := http.NewRequest(http.MethodPut, ts.URL+"/api/"+username+"/lights/1/state", strings.NewReader(`{"on":true,"bri":254}`))
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	put, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("put: %v", err)
+	}
+	put.Body.Close()
+
+	// Then
+	if s.LastActivity().IsZero() {
+		t.Fatal("LastActivity still zero after a light-state write")
+	}
+}
+
 func TestLightStateWriteID_matchesOnlyStatePUTs(t *testing.T) {
 	cases := []struct {
 		method, path string

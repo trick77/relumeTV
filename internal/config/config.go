@@ -149,6 +149,16 @@ func (c *Config) ApiUserByDeviceType(deviceType string) (*ApiUser, bool) {
 	return nil, false
 }
 
+// GetPro returns the current Bridge Pro pairing data (nil if unpaired). Safe to
+// call concurrently with SetPro, which autoPairPro/watchPro invoke from their own
+// goroutines. SetPro replaces the pointer with a fresh *BridgePro rather than
+// mutating fields in place, so the returned value stays immutable for the caller.
+func (c *Config) GetPro() *BridgePro {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.Pro
+}
+
 // SetPro stores the Bridge Pro pairing data and persists it.
 func (c *Config) SetPro(p *BridgePro) error {
 	c.mu.Lock()

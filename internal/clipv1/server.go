@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -63,6 +64,10 @@ type Server struct {
 	activityMu    sync.Mutex
 	lightWrites   uint64
 	lightsTouched map[string]struct{}
+	// lastWriteAt is the time of the most recent Ambilight light-state write,
+	// stamped in handleSetLightState (so it is independent of Debug, unlike the
+	// activity counters above). The idle-off monitor reads it via LastActivity.
+	lastWriteAt time.Time
 
 	// pairMu guards firstPairSeen, the timestamp of the TV's first auto-pairing
 	// attempt. New pairings are held off for pairAcceptDelay after that (returning
@@ -205,6 +210,43 @@ func (s *Server) recordLightWrite(id string) {
 	s.lightWrites++
 	s.lightsTouched[id] = struct{}{}
 	s.activityMu.Unlock()
+}
+
+// idleGapLogFloor is the smallest inter-write gap worth logging when gap tracing
+// is on. It exists to calibrate the idle-off timeout: during a real viewing
+// session the largest legitimate gap (static/dark/paused scenes) must stay well
+// below the configured -idle-off-timeout.
+const idleGapLogFloor = time.Second
+
+// gapTrace gates the temporary inter-write gap log used to calibrate the
+// idle-off timeout. It is a dedicated env var (not -debug) so a calibration run
+// is not buried under per-request http rx/tx spam: set RELUME_GAP_TRACE=1 and
+// grep "ambilight write gap". Remove once the timeout default is settled.
+var gapTrace = os.Getenv("RELUME_GAP_TRACE") != ""
+
+// recordWriteTime stamps the time of an Ambilight light-state write for the
+// idle-off monitor (independent of Debug). With RELUME_GAP_TRACE set it also logs
+// the gap since the previous write when it exceeds idleGapLogFloor, to calibrate
+// the idle-off timeout against the TV's real maximum legitimate pause.
+func (s *Server) recordWriteTime() {
+	now := time.Now()
+	s.activityMu.Lock()
+	prev := s.lastWriteAt
+	s.lastWriteAt = now
+	s.activityMu.Unlock()
+	if gapTrace && !prev.IsZero() {
+		if gap := now.Sub(prev); gap >= idleGapLogFloor {
+			s.log.Info("ambilight write gap", "gap", gap.Round(time.Millisecond).String())
+		}
+	}
+}
+
+// LastActivity returns the time of the most recent Ambilight light-state write
+// (zero if none yet). Used by the idle-off monitor.
+func (s *Server) LastActivity() time.Time {
+	s.activityMu.Lock()
+	defer s.activityMu.Unlock()
+	return s.lastWriteAt
 }
 
 // LogActivitySummary logs a rollup of the accumulated Ambilight light-state
@@ -477,6 +519,7 @@ func (s *Server) handleSetLightState(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 3, "/lights/"+id, "no bridge pro paired")
 		return
 	}
+	s.recordWriteTime()
 	// Optimistic: the provider queues the write and forwards it to the Bridge Pro
 	// asynchronously, so this returns immediately without blocking on the round-trip.
 	if err := lp.SetLightV1(id, state); err != nil {

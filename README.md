@@ -57,7 +57,12 @@ query-scoped `description.xml` device type alias; uses a cache-busted SSDP locat
 `-ssdp-media-server-basic-body` (keep the `?relume=ms1` MediaServer alias URL but serve
 a Hue Basic descriptor body),
 `-ssdp-descriptor-variants` (extra query-scoped SSDP locations for one-scan
-descriptor-body experiments; use together with `-ssdp-media-server-alias`).
+descriptor-body experiments; use together with `-ssdp-media-server-alias`),
+`-idle-off-timeout` (default 30s; when the TV stops sending light writes for this
+long it flashes the lights green twice and turns them off — the TV sends no off
+signal, it just goes silent; `0` disables). To calibrate the timeout against the
+TV's real maximum legitimate pause (static/dark/paused scenes), run a session with
+`RELUME_GAP_TRACE=1` and watch the `ambilight write gap` log lines.
 
 ## Important caveats
 
