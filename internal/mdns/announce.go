@@ -77,7 +77,17 @@ func (a *Announcer) Run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("mdns register: %w", err)
 	}
-	defer server.Shutdown()
+	// Deliberately NOT calling server.Shutdown() on exit. zeroconf's Shutdown
+	// multicasts an mDNS "goodbye" (records with TTL 0); the Ambilight TV caches
+	// the _hue._tcp answer, so a goodbye evicts relume from its bridge list. With a
+	// powered-on Bridge Pro on the LAN the TV then will NOT re-list relume on
+	// re-discovery (it prefers the Pro/BSB003), so a plain restart would drop the
+	// bridge from the Ambilight list until the Pro is power-cycled. Letting the
+	// process exit closes the socket WITHOUT a goodbye, so the TV keeps relume
+	// cached across restarts; the next start simply re-announces. This is the same
+	// "never emit a goodbye" reasoning as the no-periodic-re-register note below —
+	// the shutdown path was the remaining goodbye source.
+	_ = server
 	a.log.Info("mdns: announced as hue bridge",
 		"instance", spec.instance, "host", spec.host+"."+spec.domain, "ip", a.advIP, "port", a.port, "bridgeid", a.id.BridgeID())
 
