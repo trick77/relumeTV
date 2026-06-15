@@ -268,6 +268,17 @@ func (s *Server) recordGroupActionWrite() {
 	s.activityMu.Unlock()
 }
 
+// MarkActivity stamps the most-recent-activity time from a non-REST source — the
+// entertainment DTLS stream. In entertainment mode the TV streams frames over DTLS
+// instead of REST writes, so without this the idle-off monitor (which watches
+// LastActivity) would treat an actively-streaming TV as idle and flash the lights
+// off mid-stream. The stream stopping then correctly lets idle-off fire.
+func (s *Server) MarkActivity() {
+	s.activityMu.Lock()
+	s.lastWriteAt = time.Now()
+	s.activityMu.Unlock()
+}
+
 // idleGapLogFloor is the smallest inter-write gap worth logging when gap tracing
 // is on. It exists to calibrate the idle-off timeout: during a real viewing
 // session the largest legitimate gap (static/dark/paused scenes) must stay well

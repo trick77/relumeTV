@@ -621,6 +621,22 @@ func TestLastActivity_advancesOnLightStateWrite(t *testing.T) {
 	}
 }
 
+func TestMarkActivity_advancesLastActivity(t *testing.T) {
+	// Given: a server with no activity yet (entertainment mode has no REST writes)
+	s, _ := newTestServer(t)
+	if !s.LastActivity().IsZero() {
+		t.Fatalf("LastActivity before any activity = %v, want zero", s.LastActivity())
+	}
+
+	// When: a decoded entertainment frame marks activity
+	s.MarkActivity()
+
+	// Then: the idle-off monitor sees the TV as active
+	if s.LastActivity().IsZero() {
+		t.Fatal("LastActivity still zero after MarkActivity")
+	}
+}
+
 func TestLightStateWriteID_matchesOnlyStatePUTs(t *testing.T) {
 	cases := []struct {
 		method, path string

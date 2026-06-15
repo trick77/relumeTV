@@ -31,6 +31,9 @@ type Receiver struct {
 	// OnFrame, if set, is called for every decoded frame (in addition to logging).
 	// A later phase wires this to forward the colors to the Bridge Pro.
 	OnFrame func(remote string, f *huestream.Frame)
+	// OnActivity, if set, is called once per decoded frame — used to feed the
+	// idle-off monitor so a streaming TV is not treated as idle.
+	OnActivity func()
 }
 
 // NewReceiver creates the receiver. bindIP is the advertised IP (pins the socket
@@ -122,6 +125,9 @@ func (r *Receiver) handle(ctx context.Context, conn net.Conn) {
 			if perr != nil {
 				r.log.Warn("entertainment: bad frame", "from", remote, "bytes", n, "err", perr)
 				continue
+			}
+			if r.OnActivity != nil {
+				r.OnActivity()
 			}
 			if r.OnFrame != nil {
 				r.OnFrame(remote, f)

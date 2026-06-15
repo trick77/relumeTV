@@ -257,6 +257,9 @@ func runServe(args []string, log *slog.Logger) error {
 		// TV's stream (PSK = the clientkey relume minted at pairing) and decodes the
 		// HueStream frames. This phase only logs them; forwarding to the Pro follows.
 		recv := entertainment.NewReceiver(ip, cfg.PSKForUser, log)
+		// Count stream frames as activity so the idle-off monitor doesn't flash the
+		// lights off mid-stream (the TV streams via DTLS, not REST writes, here).
+		recv.OnActivity = clip.MarkActivity
 		log.Info("entertainment mode: starting DTLS receiver on udp :2100 (decode + log)")
 		go func() {
 			if err := recv.Run(ctx); err != nil && ctx.Err() == nil {
