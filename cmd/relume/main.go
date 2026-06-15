@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/trick77/relume/internal/config"
 	"github.com/trick77/relume/internal/diag"
 	"github.com/trick77/relume/internal/entertainment"
+	"github.com/trick77/relume/internal/huestream"
 	"github.com/trick77/relume/internal/mdns"
 	"github.com/trick77/relume/internal/ssdp"
 )
@@ -260,7 +262,15 @@ func runServe(args []string, log *slog.Logger) error {
 		// Count stream frames as activity so the idle-off monitor doesn't flash the
 		// lights off mid-stream (the TV streams via DTLS, not REST writes, here).
 		recv.OnActivity = clip.MarkActivity
-		log.Info("entertainment mode: starting DTLS receiver on udp :2100 (decode + log)")
+		// Forward each decoded frame's channels to the Bridge Pro via the coalescing
+		// REST provider, so the lights follow the Ambilight stream (Phase B). The
+		// channel id IS the v1 light id the TV referenced in its entertainment group.
+		recv.OnFrame = func(_ string, f *huestream.Frame) {
+			for _, ch := range f.Channels {
+				clip.ForwardLight(strconv.Itoa(int(ch.ID)), entertainment.ToHueV1State(f.ColorSpace, ch))
+			}
+		}
+		log.Info("entertainment mode: starting DTLS receiver on udp :2100 (decode + forward to Pro via REST)")
 		go func() {
 			if err := recv.Run(ctx); err != nil && ctx.Err() == nil {
 				log.Warn("entertainment receiver", "err", err)

@@ -621,6 +621,37 @@ func TestLastActivity_advancesOnLightStateWrite(t *testing.T) {
 	}
 }
 
+type recordingProvider struct {
+	fakeLightProvider
+	gotID    string
+	gotState map[string]any
+}
+
+func (p *recordingProvider) SetLightV1(id string, state map[string]any) error {
+	p.gotID, p.gotState = id, state
+	return nil
+}
+
+func TestForwardLight_goesToProvider(t *testing.T) {
+	// Given
+	s, _ := newTestServer(t)
+	rp := &recordingProvider{}
+	s.SetLightProvider(rp)
+
+	// When: the entertainment receiver forwards a decoded channel
+	s.ForwardLight("6", map[string]any{"on": true, "bri": 200})
+
+	// Then: it reaches the current provider's SetLightV1
+	if rp.gotID != "6" || rp.gotState["bri"] != 200 {
+		t.Fatalf("forwarded id=%q state=%v", rp.gotID, rp.gotState)
+	}
+}
+
+func TestForwardLight_noProviderIsNoop(t *testing.T) {
+	s, _ := newTestServer(t)
+	s.ForwardLight("6", map[string]any{"on": true}) // must not panic with no provider
+}
+
 func TestMarkActivity_advancesLastActivity(t *testing.T) {
 	// Given: a server with no activity yet (entertainment mode has no REST writes)
 	s, _ := newTestServer(t)

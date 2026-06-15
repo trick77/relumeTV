@@ -135,6 +135,16 @@ func (s *Server) SetLightProvider(p LightProvider) {
 	s.lightsMu.Unlock()
 }
 
+// ForwardLight pushes a light state (v1 id + state) to the Bridge Pro via the
+// current provider — used by the entertainment receiver to drive the lights from
+// the decoded DTLS stream, reusing the same coalescing async path as REST writes.
+// No-op until a Pro is paired.
+func (s *Server) ForwardLight(v1id string, state map[string]any) {
+	if lp := s.lightProvider(); lp != nil {
+		_ = lp.SetLightV1(v1id, state)
+	}
+}
+
 // lightProvider returns the current backend (may be nil until the Pro is paired).
 func (s *Server) lightProvider() LightProvider {
 	s.lightsMu.RLock()

@@ -59,7 +59,9 @@ The Bridge Pro breaks the Ambilight+Hue path in three ways:
 - **M4 — Entertainment** 🚧 in progress (opt-in `-mode entertainment`; REST stays default).
   - Phase A ✅ `internal/huestream` parser (+tests) + `internal/entertainment` DTLS-PSK receiver
     on :2100 (PSK = the TV's minted clientkey), decodes + logs frames. Verified: TV uses DTLS.
-  - Phase B ⏳ forward decoded frames to the Pro via the REST provider (interim end-to-end).
+  - Phase B ✅ forward decoded frames to the Pro via the coalescing REST provider
+    (entertainment.ToHueV1State → clipv1.ForwardLight). Interim end-to-end: lights
+    follow at the REST rate (~10 Hz/light); Phase C lifts this to true 25fps.
   - Phase C ⏳ DTLS client to the Pro (entertainment-config create/activate + HueStream encode)
     for true 25fps. Phase D ⏳ group persistence + activation lifecycle.
   Confirmed the TV opens a real DTLS entertainment stream once relume confirms activation.
