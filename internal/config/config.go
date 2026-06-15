@@ -8,8 +8,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -77,6 +79,30 @@ type BridgePro struct {
 	CertSHA256 string `json:"certSha256,omitempty"`
 	// SkipTLSVerify disables TLS verification (fallback instead of pinning).
 	SkipTLSVerify bool `json:"skipTlsVerify"`
+	// Name is the Bridge Pro's user-set name, captured at pairing (best-effort).
+	// Used purely as a human-friendly reference in logs.
+	Name string `json:"name,omitempty"`
+	// BridgeID is the Bridge Pro's bridge id, captured at pairing (best-effort).
+	// A stable reference in logs, independent of the IP.
+	BridgeID string `json:"bridgeId,omitempty"`
+}
+
+// LogValue renders the Bridge Pro as a compact reference for structured logs:
+// its name and bridge id when known, always its host. Use as a single log attr,
+// e.g. log.Warn("...", "pro", cfg.Pro).
+func (p *BridgePro) LogValue() slog.Value {
+	if p == nil {
+		return slog.StringValue("<none>")
+	}
+	attrs := make([]slog.Attr, 0, 3)
+	if p.Name != "" {
+		attrs = append(attrs, slog.String("name", p.Name))
+	}
+	if p.BridgeID != "" {
+		attrs = append(attrs, slog.String("id", p.BridgeID))
+	}
+	attrs = append(attrs, slog.String("host", p.Host))
+	return slog.GroupValue(attrs...)
 }
 
 // Config is the entire persistent state.
@@ -126,6 +152,19 @@ func (c *Config) AddApiUser(u *ApiUser) error {
 	defer c.mu.Unlock()
 	c.ApiUsers[u.Username] = u
 	return c.save()
+}
+
+// PairedDeviceTypes returns the devicetypes of all paired clients (no secrets),
+// sorted — for a startup config summary.
+func (c *Config) PairedDeviceTypes() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make([]string, 0, len(c.ApiUsers))
+	for _, u := range c.ApiUsers {
+		out = append(out, u.DeviceType)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // HasApiUser checks whether a username is known (paired).

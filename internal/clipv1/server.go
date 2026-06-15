@@ -103,9 +103,13 @@ type Server struct {
 }
 
 // defaultPairAcceptDelay is how long relume defers auto-accepting the TV's first
-// pairing. The TV polls POST /api and waits up to ~30s, so this stays well inside
-// its window.
-const defaultPairAcceptDelay = 5 * time.Second
+// pairing. This is purely cosmetic — to make pairing feel natural: a real Hue
+// bridge only pairs after you physically tap its link button, so accepting
+// instantly would feel "off". relume always auto-accepts; the delay just mimics
+// that short, expected wait. It stays well inside the TV's ~30s POST /api polling
+// window. Only the FIRST pairing of a devicetype is delayed; an already-paired TV
+// is served instantly from the idempotent path.
+const defaultPairAcceptDelay = 10 * time.Second
 
 // New creates the CLIP-v1 server.
 func New(cfg *config.Config, advIP string, httpPort int, log *slog.Logger) *Server {
@@ -459,10 +463,11 @@ func (s *Server) handlePairing(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Hold off the first auto-pairing for pairAcceptDelay, mirroring a real bridge
-	// that waits for the link-button tap. The TV polls POST /api and keeps trying
-	// (it waits up to ~30s), so returning the standard 101 until the window elapses
-	// just delays acceptance without aborting the TV.
+	// Hold off the first auto-pairing for pairAcceptDelay — purely so it feels
+	// natural, like pairing with a real bridge after a link-button tap (relume
+	// auto-accepts regardless; this is cosmetic, not a requirement). The TV polls
+	// POST /api and keeps trying (it waits up to ~30s), so returning the standard
+	// 101 until the window elapses just delays acceptance without aborting the TV.
 	s.pairMu.Lock()
 	if s.firstPairSeen.IsZero() {
 		s.firstPairSeen = time.Now()

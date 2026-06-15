@@ -148,6 +148,15 @@ func runServe(args []string, log *slog.Logger) error {
 	}
 	log.Info("relume", "version", version)
 	log.Info("identity", "serial", cfg.Identity.Serial, "bridgeid", cfg.Identity.BridgeID(), "advertise", ip)
+	// Dump the saved state on startup (no secrets): which Bridge Pro is paired and
+	// which TVs are already paired. An already-paired TV explains an "instant"
+	// re-pairing — POST /api then returns the stored user without the 5s delay.
+	log.Info("saved config",
+		"path", opts.configPath,
+		"pro", cfg.Pro, // LogValue → name/id/host, or <none> when unpaired
+		"tv_paired", len(cfg.PairedDeviceTypes()),
+		"tv_devicetypes", cfg.PairedDeviceTypes(),
+	)
 
 	// entProbe enables the entertainment diagnostic (RELUME_ENT_PROBE=1): confirm
 	// the TV's stream activation and observe whether it then opens a DTLS stream on
@@ -179,7 +188,7 @@ func runServe(args []string, log *slog.Logger) error {
 	if cfg.Pro != nil {
 		client := bridgepro.New(cfg.Pro)
 		clip.SetLightProvider(newProvider(client, controlled, log))
-		log.Info("bridge pro paired", "host", cfg.Pro.Host)
+		log.Info("bridge pro paired", "pro", cfg.Pro)
 	}
 	var responder *ssdp.Responder
 	if opts.disableSSDP {
@@ -403,13 +412,18 @@ func autoPairPro(ctx context.Context, cfg *config.Config, clip *clipv1.Server, c
 		if perr == nil {
 			pro.AppKey = res.AppKey
 			pro.ClientKey = res.ClientKey
+			client := bridgepro.New(pro)
+			// Best-effort: capture the Pro's name + bridge id while it is reachable,
+			// so logs can reference it (not just the IP). See config.BridgePro.LogValue.
+			if name, id, ierr := client.BridgeInfo(); ierr == nil {
+				pro.Name, pro.BridgeID = name, id
+			}
 			if serr := cfg.SetPro(pro); serr != nil {
 				log.Error("persisting bridge pro pairing", "err", serr)
 				return
 			}
-			client := bridgepro.New(pro)
 			clip.SetLightProvider(newProvider(client, controlled, log))
-			log.Info("bridge pro paired (auto)", "host", host)
+			log.Info("bridge pro paired (auto)", "pro", pro)
 			if lights, lerr := client.Lights(); lerr == nil {
 				log.Info("bridge pro lights available", "count", len(lights))
 			}
@@ -435,11 +449,23 @@ func watchPro(ctx context.Context, cfg *config.Config, clip *clipv1.Server, cont
 	if pro == nil {
 		return
 	}
+	// Backfill the Pro's name/id for installs paired before they were captured, so
+	// logs can reference it. Best-effort and only while the Pro is reachable.
+	if pro.Name == "" && pro.BridgeID == "" {
+		if name, id, ierr := bridgepro.New(pro).BridgeInfo(); ierr == nil && (name != "" || id != "") {
+			pro.Name, pro.BridgeID = name, id
+			if serr := cfg.SetPro(pro); serr != nil {
+				log.Warn("persisting hue bridge pro name/id", "err", serr)
+			}
+		}
+	}
 	for sleepCtx(ctx, checkInterval) {
 		if _, err := bridgepro.New(pro).Lights(); err == nil {
 			continue // still reachable
 		}
-		log.Warn("bridge pro unreachable; attempting to reconnect", "host", pro.Host)
+		log.Warn("Hue Bridge Pro not reachable — is it turned off? "+
+			"Turn it back on (or check its power/network cable); "+
+			"relume can't control the lights until it is back. Retrying.", "pro", pro)
 
 		host := bridgeIP
 		if host == "" {
@@ -448,7 +474,7 @@ func watchPro(ctx context.Context, cfg *config.Config, clip *clipv1.Server, cont
 			}
 		}
 		if host == "" {
-			log.Warn("bridge pro reconnect: not found via discovery; will retry")
+			log.Warn("Hue Bridge Pro reconnect: not found via discovery; will retry")
 			continue
 		}
 
@@ -456,7 +482,7 @@ func watchPro(ctx context.Context, cfg *config.Config, clip *clipv1.Server, cont
 		if !skipTLS && !pro.SkipTLSVerify {
 			fp, ferr := bridgepro.FetchLeafFingerprint(host)
 			if ferr != nil {
-				log.Warn("bridge pro reconnect: cert fetch failed; will retry", "host", host, "err", ferr)
+				log.Warn("Hue Bridge Pro reconnect: cert fetch failed; will retry", "host", host, "err", ferr)
 				continue
 			}
 			certSHA = fp
@@ -464,16 +490,16 @@ func watchPro(ctx context.Context, cfg *config.Config, clip *clipv1.Server, cont
 
 		updated := reconnectProConfig(pro, host, certSHA, skipTLS)
 		if _, err := bridgepro.New(updated).Lights(); err != nil {
-			log.Warn("bridge pro reconnect: still unreachable", "host", host, "err", err)
+			log.Warn("Hue Bridge Pro reconnect: still unreachable", "host", host, "err", err)
 			continue
 		}
 		if serr := cfg.SetPro(updated); serr != nil {
-			log.Error("persisting reconnected bridge pro", "err", serr)
+			log.Error("persisting reconnected Hue Bridge Pro", "err", serr)
 			continue
 		}
 		clip.SetLightProvider(newProvider(bridgepro.New(updated), controlled, log))
 		pro = updated
-		log.Info("bridge pro reconnected", "host", host)
+		log.Info("Hue Bridge Pro reconnected", "pro", pro)
 	}
 }
 
@@ -487,6 +513,8 @@ func reconnectProConfig(old *config.BridgePro, host, certSHA256 string, skipTLS 
 		ClientKey:     old.ClientKey,
 		CertSHA256:    certSHA256,
 		SkipTLSVerify: skipTLS || old.SkipTLSVerify,
+		Name:          old.Name,
+		BridgeID:      old.BridgeID,
 	}
 }
 
@@ -604,13 +632,17 @@ func runSetup(args []string, log *slog.Logger) error {
 
 	pro.AppKey = res.AppKey
 	pro.ClientKey = res.ClientKey
+	// Best-effort: capture the Pro's name + bridge id for log references.
+	client := bridgepro.New(pro)
+	if name, id, ierr := client.BridgeInfo(); ierr == nil {
+		pro.Name, pro.BridgeID = name, id
+	}
 	if err := cfg.SetPro(pro); err != nil {
 		return err
 	}
 	fmt.Println("Pairing successful, app key saved.")
 
 	// List lights as confirmation.
-	client := bridgepro.New(pro)
 	lights, lerr := client.Lights()
 	if lerr != nil {
 		fmt.Printf("Note: lights could not be read: %v\n", lerr)

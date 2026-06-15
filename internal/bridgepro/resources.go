@@ -1,8 +1,57 @@
 package bridgepro
 
 import (
+	"fmt"
 	"sort"
 )
+
+// bridgeResource is the subset of a CLIP v2 bridge resource relevant for relume.
+type bridgeResource struct {
+	ID       string `json:"id"`
+	BridgeID string `json:"bridge_id"`
+	Owner    struct {
+		RID string `json:"rid"`
+	} `json:"owner"`
+}
+
+// deviceResource is the subset of a CLIP v2 device resource relevant for relume
+// (used to read the bridge's user-set name via the bridge's owning device).
+type deviceResource struct {
+	ID       string `json:"id"`
+	Metadata struct {
+		Name string `json:"name"`
+	} `json:"metadata"`
+}
+
+// BridgeInfo returns the Bridge Pro's user-set name and bridge id (best-effort:
+// either may be empty if the bridge does not report it). The name comes from the
+// device that owns the bridge resource. Requires the Pro to be reachable.
+func (c *Client) BridgeInfo() (name, bridgeID string, err error) {
+	var bl struct {
+		Data []bridgeResource `json:"data"`
+	}
+	if err := c.get("/clip/v2/resource/bridge", &bl); err != nil {
+		return "", "", err
+	}
+	if len(bl.Data) == 0 {
+		return "", "", fmt.Errorf("no bridge resource returned")
+	}
+	b := bl.Data[0]
+	bridgeID = b.BridgeID
+	if b.Owner.RID == "" {
+		return "", bridgeID, nil
+	}
+	var dl struct {
+		Data []deviceResource `json:"data"`
+	}
+	if err := c.get("/clip/v2/resource/device/"+b.Owner.RID, &dl); err != nil {
+		return "", bridgeID, nil // name is best-effort; keep the id
+	}
+	if len(dl.Data) > 0 {
+		name = dl.Data[0].Metadata.Name
+	}
+	return name, bridgeID, nil
+}
 
 // Light is the subset of a CLIP v2 light resource that is relevant for relume.
 type Light struct {
