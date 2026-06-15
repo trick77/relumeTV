@@ -431,49 +431,95 @@ func autoPairPro(ctx context.Context, cfg *config.Config, clip *clipv1.Server, c
 // across reboots and DHCP IP changes.
 func watchPro(ctx context.Context, cfg *config.Config, clip *clipv1.Server, controlled *bridge.ControlledSet, bridgeIP string, skipTLS bool, log *slog.Logger) {
 	const checkInterval = 60 * time.Second
+	// While the Pro stays down, remind only occasionally instead of warning every
+	// check — a powered-off Pro is an expected state (e.g. the discovery workaround).
+	const downReminderInterval = 15 * time.Minute
 	pro := cfg.Pro
 	if pro == nil {
 		return
 	}
+
+	down := false
+	var downSince, lastDownLog time.Time
+	// noteDown reports the Pro is unreachable: one clear, actionable warning on the
+	// transition, then a throttled reminder — the intermediate reconnect attempts
+	// (rediscovery, cert fetch) are folded in and not warned about individually.
+	noteDown := func(reason error) {
+		now := time.Now()
+		if !down {
+			down, downSince, lastDownLog = true, now, now
+			log.Warn("bridge pro not reachable — it looks powered off or off the network. "+
+				"relume cannot control the lights until it is back; retrying every 60s. "+
+				"If you powered it off on purpose, turn it back on; otherwise check its power/network.",
+				"host", pro.Host, "err", reason)
+			return
+		}
+		if now.Sub(lastDownLog) >= downReminderInterval {
+			lastDownLog = now
+			log.Warn("bridge pro still not reachable", "host", pro.Host,
+				"down_for", time.Since(downSince).Round(time.Second).String())
+		}
+	}
+	// noteUp clears the down state and logs recovery once.
+	noteUp := func(host string) {
+		if down {
+			log.Info("bridge pro reachable again", "host", host,
+				"down_for", time.Since(downSince).Round(time.Second).String())
+			down = false
+		}
+	}
+
 	for sleepCtx(ctx, checkInterval) {
 		if _, err := bridgepro.New(pro).Lights(); err == nil {
-			continue // still reachable
-		}
-		log.Warn("bridge pro unreachable; attempting to reconnect", "host", pro.Host)
+			noteUp(pro.Host)
+			continue // reachable at the known address
+		} else {
+			lastErr := err
 
-		host := bridgeIP
-		if host == "" {
-			if bridges, derr := bridgepro.Discover(); derr == nil && len(bridges) > 0 {
-				host = bridges[0].InternalIPAddress
+			// Try to recover the Pro at a (possibly new) address — quietly; only the
+			// down state above is surfaced, and only the outcome below.
+			host := bridgeIP
+			if host == "" {
+				if bridges, derr := bridgepro.Discover(); derr == nil && len(bridges) > 0 {
+					host = bridges[0].InternalIPAddress
+				}
 			}
-		}
-		if host == "" {
-			log.Warn("bridge pro reconnect: not found via discovery; will retry")
-			continue
-		}
-
-		certSHA := pro.CertSHA256
-		if !skipTLS && !pro.SkipTLSVerify {
-			fp, ferr := bridgepro.FetchLeafFingerprint(host)
-			if ferr != nil {
-				log.Warn("bridge pro reconnect: cert fetch failed; will retry", "host", host, "err", ferr)
+			if host == "" {
+				noteDown(lastErr)
 				continue
 			}
-			certSHA = fp
-		}
 
-		updated := reconnectProConfig(pro, host, certSHA, skipTLS)
-		if _, err := bridgepro.New(updated).Lights(); err != nil {
-			log.Warn("bridge pro reconnect: still unreachable", "host", host, "err", err)
-			continue
+			certSHA := pro.CertSHA256
+			if !skipTLS && !pro.SkipTLSVerify {
+				fp, ferr := bridgepro.FetchLeafFingerprint(host)
+				if ferr != nil {
+					noteDown(ferr)
+					continue
+				}
+				certSHA = fp
+			}
+
+			updated := reconnectProConfig(pro, host, certSHA, skipTLS)
+			if _, err := bridgepro.New(updated).Lights(); err != nil {
+				noteDown(err)
+				continue
+			}
+			if serr := cfg.SetPro(updated); serr != nil {
+				log.Error("persisting reconnected bridge pro", "err", serr)
+				continue
+			}
+			clip.SetLightProvider(newProvider(bridgepro.New(updated), controlled, log))
+			movedTo := ""
+			if updated.Host != pro.Host {
+				movedTo = updated.Host
+			}
+			pro = updated
+			if down {
+				noteUp(host)
+			} else if movedTo != "" {
+				log.Info("bridge pro reconnected at a new address", "host", movedTo)
+			}
 		}
-		if serr := cfg.SetPro(updated); serr != nil {
-			log.Error("persisting reconnected bridge pro", "err", serr)
-			continue
-		}
-		clip.SetLightProvider(newProvider(bridgepro.New(updated), controlled, log))
-		pro = updated
-		log.Info("bridge pro reconnected", "host", host)
 	}
 }
 
