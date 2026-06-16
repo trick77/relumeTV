@@ -65,48 +65,49 @@ The Bridge Pro breaks the Ambilight+Hue path in three ways:
     `forwarding lights to bridge pro failing ... 503 command queue is full` with
     `coalesced_frames` piling up. Empirical proof that per-light REST cannot sustain
     the 25fps stream → Phase C is mandatory, not optional.
-  - Phase C ✅ implemented (pending real-Pro verification). relume opens its OWN
-    Entertainment stream TO the Pro over DTLS, replacing the REST forward when up:
-    `huestream.Encode` (v1/v2, round-trip tested); `bridgepro` entertainment calls
-    (`EntertainmentServices`/`CreateEntertainmentConfig`/`GetEntertainmentConfig`/
-    `StartStream`/`StopStream` + `post` helper); `entertainment.ProStreamer` (DTLS-PSK
-    client via pion/dtls `DialWithOptions`, ensure+start a `relume` config, steady
-    50Hz send loop, ground-truth TV-v1-id→Pro-channel-id remap from the read-back
-    config, auto-fallback to the REST sink, mutually exclusive). Receiver gained
-    `OnStreamStart`/`OnStreamStop` so the Pro area lives exactly as long as the TV
-    stream. Wired in `main.go` (entertainment mode, Pro paired). Verified by unit +
-    DTLS-loopback tests. `defaultPairAcceptDelay` 10s→5s. Also fixed: the xy colour
-    was dropped on the REST path (`[]float64` vs `[]any`) — merged separately (#43).
-    STILL TO VERIFY on the real Pro: exact `entertainment_configuration` POST shape
-    (channels/locations/stream_proxy/positions), HueStream v2 vs v1 acceptance, and
-    the keepalive interval that prevents the area auto-stopping.
-  - (historic) Phase C original plan. relume opens its OWN Entertainment stream TO the Pro over DTLS,
-    replacing the REST forward in entertainment mode. Design:
-    `docs/superpowers/specs/2026-06-15-m4-phase-c-dtls-to-pro-design.md`. Approved
-    approach: 1A (relume owns the entertainment_configuration) + 2A (auto-fallback to
-    REST) + clear per-step logging (`forward_path=dtls|rest`). Concrete next steps:
-    1. `internal/huestream`: add `Encode(*Frame) []byte` (inverse of `Parse`, v2 wire
-       format: 16B header + 36B config-id + 7B/channel), round-trip tested.
-    2. `internal/bridgepro`: `EntertainmentServices()` (GET /clip/v2/resource/entertainment),
-       `CreateEntertainmentConfig()` (POST, channels→color-capable lights, returns UUID),
-       `StartStream()/StopStream()` (PUT {action:start|stop}). Reuse existing
-       `EntertainmentConfigs()` to find/reuse a `relume`-named config.
-    3. `internal/entertainment`: DTLS-PSK CLIENT via pion/dtls/v3 `Dial` to Pro:2100
-       (identity=appKey, PSK=clientKey hex, cipher TLS_PSK_WITH_AES_128_GCM_SHA256,
-       DisableExtendedMasterSecret) + a `ProStreamer` (lifecycle + ~25–50Hz keepalive
-       send loop; remaps TV v1-channel → Pro channel_id; xy/bri pass through).
-    4. `cmd/relume/main.go`: in entertainment mode wire `recv.OnFrame → streamer.Push`;
-       streamer chooses DTLS vs REST fallback internally and logs the active path.
-    Verify on the NAS: `pro DTLS stream connected`, `forward_path=dtls`, NO more
-    `503 command queue is full`, smoother than Phase B.
-    Open unknowns to confirm against the real Pro: exact entertainment_configuration
-    POST payload (channels/locations nesting, position ranges, configuration_type) —
-    GET an existing config first and mirror its shape; whether the Pro wants HueStream
-    v2 vs v1; the keepalive interval that stops the area auto-stopping.
-  - Phase D ⏳ group persistence + activation lifecycle (after C).
-  Confirmed the TV opens a real DTLS entertainment stream once relume confirms activation.
+  - Phase C ✅ done & VERIFIED on the real TV+Pro (2026-06-16). relume opens its OWN
+    Entertainment stream TO the Pro over DTLS, replacing the REST forward when up — no
+    more `503 command queue is full`. `huestream.Encode` (v1/v2, round-trip tested);
+    `bridgepro` entertainment calls (`EntertainmentServices`/`CreateEntertainmentConfig`/
+    `GetEntertainmentConfig`/`StartStream`/`StopStream` + `post` helper);
+    `entertainment.ProStreamer` (DTLS-PSK client via pion/dtls `DialWithOptions`,
+    ensure+start a `relume` config, steady 50Hz send loop, ground-truth
+    TV-v1-id→Pro-channel-id remap from the read-back config, auto-fallback to the REST
+    sink, mutually exclusive; stop-then-start a leftover-active reused config). Receiver
+    gained `OnStreamStart`/`OnStreamStop`. The BSB003 accepted the
+    `entertainment_configuration` POST and HueStream v2/XY frames as built. Also fixed:
+    the xy colour was dropped on the REST path (`[]float64` vs `[]any`, #43);
+    `defaultPairAcceptDelay` 10s→5s.
+  - Phase C.1 ✅ TV-side DTLS watchdog fallback (#50). Confirming activation commits the
+    TV to DTLS (it stops sending REST PUTs), so a TV that confirms but never opens its
+    stream would have no light control. `clipv1` now waits 5s after confirming an
+    activation; if no DTLS stream arrives it stickily reverts to REST-follow (stops
+    confirming, reports the group inactive → TV resumes PUTs). Guarded against false-fire
+    on re-activation during a healthy stream. Dormant on the verified happy path. This is
+    the safety net required before the default flip (see Next steps).
+  - Phase D ⏳ group persistence + activation lifecycle (after the items below).
 - **M5 — Packaging** ✅ done. Containerfile (static, multi-stage), `compose.yaml` (host networking),
   README, CI (test + release to ghcr.io). Image builds.
+
+## Next steps
+
+1. **Verify the TV-side watchdog fallback (Phase C.1) on real hardware.** The state machine
+   is unit-tested, but the load-bearing real-TV unknown is: once relume reverts to inactive,
+   does the TV actually resume per-light PUTs? Ideally test a TV/situation that does NOT open
+   the DTLS stream. If the TV does not revert, the documented reserve is an active stream-stop
+   nudge (Ansatz 2 from the watchdog design).
+2. **Flip the default to `-mode entertainment`** (REST becomes the explicit fallback). Only
+   after step 1 — the watchdog is the safety net that makes entertainment safe as the default.
+   Includes: change the `-mode` default in `cmd/relume/main.go`, update the README/`docs/DESIGN.md`
+   mode wording, and confirm a fresh `serve` (no `-mode`) lights the TV over DTLS.
+3. **Phase D — group persistence + activation lifecycle.** Persist/clean up the `relume`
+   `entertainment_configuration` instead of re-finding it each stream; handle the light-set
+   changing under a live config; tidy `StopStream` on shutdown so the Pro area never leaks.
+4. **Optional / lower priority:** colour accuracy check on the Pro path (v2 XY-vs-RGB semantics);
+   a `-entertainment-dtls-timeout` flag if 5s needs tuning on other TVs.
+
+(M1 TV discovery/pairing coexistence with a powered-on Pro remains the separate open product
+problem — see Discovery finding below and `docs/TROUBLESHOOTING.md`.)
 
 ## Discovery finding (measured on the real Philips TV)
 
