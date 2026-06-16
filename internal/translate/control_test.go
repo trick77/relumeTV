@@ -35,6 +35,31 @@ func TestStateV1ToV2(t *testing.T) {
 	}
 }
 
+func TestStateV1ToV2_xyFloat64Slice(t *testing.T) {
+	// Given: the entertainment decode path (entertainment.ToHueV1State) produces
+	// xy as a []float64, not the []any that a JSON-decoded TV REST PUT yields.
+	// StateV1ToV2 must still emit the color, otherwise the Pro only gets on/bri
+	// and the lights keep their last colour (observed as "stuck red").
+	v1 := map[string]any{
+		"on":  true,
+		"bri": 200,
+		"xy":  []float64{0.2, 0.6},
+	}
+
+	// When
+	v2 := StateV1ToV2(v1)
+
+	// Then
+	colWrap, ok := v2["color"].(map[string]any)
+	if !ok {
+		t.Fatalf("color missing for []float64 xy: %#v", v2)
+	}
+	col := colWrap["xy"].(map[string]any)
+	if col["x"] != 0.2 || col["y"] != 0.6 {
+		t.Errorf("xy = %#v", col)
+	}
+}
+
 func TestStateV1ToV2_ctOnly(t *testing.T) {
 	// Given: only white/CT control
 	v2 := StateV1ToV2(map[string]any{"on": false, "ct": float64(300)})
