@@ -1,6 +1,6 @@
 # AGENTS.md — relume
 
-Module `github.com/trick77/relume`. Binary `relume`. Dir still named `ambibridge` (cosmetic).
+Module `github.com/trick77/relume`. Binary `relume` (`cmd/relume`).
 Emulates a gen-2 Hue Bridge (BSB002) toward a Philips Ambilight TV; proxies to a real Hue
 Bridge Pro (BSB003) via CLIP v2.
 
@@ -12,15 +12,19 @@ All repo content (docs, code comments, logs) is English.
 - diagnostics: `relume serve -debug` (SSDP header log + mDNS observer + HTTP body log);
   `-disable-ssdp` runs mDNS-only (like ha-hue-entertainment) to isolate SSDP from discovery
 - modes: `-mode rest` (DEFAULT, proven REST-follow — relume gives the generic stream-activation
-  ack so the TV stays on per-light PUTs) or `-mode entertainment` (M4: confirms stream activation
-  for real + runs the DTLS-PSK receiver on :2100, PSK = the clientkey relume minted for the TV at
-  pairing). Entertainment is OPT-IN; REST is untouched. Confirmed 2026-06-15: the TV DOES use
-  entertainment/DTLS once activation is confirmed (the old "REST-only" reading was circular).
+  ack so the TV stays on per-light PUTs) or `-mode entertainment` (M4, OPT-IN; REST untouched):
+  confirms stream activation for real, runs the DTLS-PSK receiver on :2100 (PSK = the clientkey
+  relume minted for the TV) to decode the TV's HueStream, AND opens relume's OWN entertainment
+  stream TO the Pro over DTLS — creates/reuses a `relume` entertainment_configuration, re-encodes
+  frames as HueStream v2 at ~50Hz; PSK to the Pro = the Pro's appKey/clientkey. Auto-falls back to
+  the per-light REST forward if DTLS can't establish (DTLS and REST are mutually exclusive — never
+  both). The DTLS path EXISTS because per-light REST forwarding alone overflows the Pro's command
+  queue (503). A relume restart mid-stream orphans the TV's session: toggle Ambilight (not
+  Ambilight+Hue) on the TV to reconnect.
 - env diagnostics (no -debug flood): `RELUME_GAP_TRACE=1` logs inter-write gaps (idle-off
-  calibration). `RELUME_ENT_PROBE=1` is the passive entertainment probe (REST mode only):
-  confirms stream activation + watches udp :2100 for the TV's ClientHello + adds Hz to the
-  `ambilight activity` rollup. Superseded by `-mode entertainment` (which services the stream).
-  grep `ENTERTAINMENT` and `ambilight activity`. Probe never sends DTLS.
+  calibration). `RELUME_ENT_PROBE=1` = passive entertainment probe (REST mode, never sends DTLS):
+  confirms activation + watches udp :2100 for the TV's ClientHello; superseded by `-mode
+  entertainment`. grep `ENTERTAINMENT` / `ambilight activity`.
 - commands: `serve` (default), `setup` (manual Pro pair — optional), `discover` (cloud), `avahi-service`, `version`
 - pairing is auto-accepted (no link button, no UI) — but ONLY for the TV (source IP == `-tv-ip`, or
   the Android/Dalvik Philips-TV User-Agent); other LAN devices get error 101. POST /api is
@@ -53,14 +57,15 @@ All repo content (docs, code comments, logs) is English.
   `Server.Shutdown()`: grandcat/zeroconf's Shutdown multicasts an mDNS goodbye (TTL 0) that evicts
   relume from the TV's cache → bridge flickers out of the Ambilight list. This (not the descriptor)
   was the real discovery bug; fixed in `internal/mdns/announce.go`.
-- Measured: the TV (65OLED806, Android 11) DOES actively query `_hue._tcp` during the Ambilight
-  search (capture), then fetches plain `/description.xml`. It does NOT send hue SSDP M-SEARCH (only
-  `MediaServer`), does NOT use cloud (no DNS for discovery.meethue.com).
-- So mDNS announce is the primary path. Working ref = hass-emulated-hue: instance name exactly `Philips Hue - XXXXXX` (last 6 of bridgeid, spaces around dash), TXT bridgeid+modelid. diyHue name `DIYHue-XXXXXX` NOT found by TV.
-- The real Bridge Pro also announces `_hue._tcp` as `Hue Bridge - XXXXXX` / `modelid=BSB003`. TV likely filters BSB003 out.
-- Port 10102 broadcasts from the TV are DTS Play-Fi (audio), a red herring — not Hue.
-- SSDP still served (3 ST: rootdevice, uuid, basic) but secondary. Respond instantly (short TV search window).
-- multi-NIC: bind multicast to the interface owning advertise-IP, else Go uses the default iface (wrong LAN). Dual-homed host = bad test env. macOS system mDNSResponder owns 5353 → built-in announcer fails there; test on Linux (NAS).
+- Measured (65OLED806/Android 11): the TV actively queries `_hue._tcp` then fetches plain
+  `/description.xml`; NO hue SSDP M-SEARCH (only `MediaServer`), NO cloud. So mDNS announce is the
+  PRIMARY path. Working ref = hass-emulated-hue: instance name exactly `Philips Hue - XXXXXX` (last 6
+  of bridgeid, spaces around the dash), TXT bridgeid+modelid. diyHue `DIYHue-XXXXXX` is NOT found.
+- The real Bridge Pro announces `_hue._tcp` as `Hue Bridge - XXXXXX`/`modelid=BSB003`; TV likely
+  filters BSB003 out. Port 10102 TV broadcasts = DTS Play-Fi (audio), red herring.
+- SSDP still served (3 ST: rootdevice, uuid, basic) but secondary; respond instantly (short window).
+- multi-NIC: bind multicast to the iface owning advertise-IP (else Go picks the default iface = wrong
+  LAN). Dual-homed host = bad test env. macOS mDNSResponder owns 5353 → test on Linux (NAS).
 
 ## Bridge Pro (BSB003) facts
 - HTTPS:443 only; HTTP:80 → 301. CLIP v2 only.
@@ -71,6 +76,9 @@ All repo content (docs, code comments, logs) is English.
   lights (CLIP v2 `color` present); white/CT/dimmable/on-off are filtered out. Light type/modelid
   reflect real capability (not always "Extended color light"). v2 lights have no reliable id_v1 →
   assign stable v1 ids by sorted-UUID order over the KEPT lights.
+- `translate.StateV1ToV2` must accept `xy` as `[]any` (TV JSON REST path) AND `[]float64`/`[]float32`
+  (the in-process entertainment decode path, `entertainment.ToHueV1State`). A type-assert to only
+  `[]any` silently drops the colour → lights stuck on their last colour (the "stuck red" bug).
 
 ## deployment
 - needs same L2 as TV (SSDP+mDNS multicast) → Docker `network_mode: host`.
@@ -84,8 +92,10 @@ All repo content (docs, code comments, logs) is English.
 - `relume.json` holds Pro appKey/clientkey + TV tokens. Gitignored. Never commit.
 
 ## status
-M2 Pro client, M3 REST light control: done+verified on real Pro. M1 discovery+pairing: VERIFIED on
-65OLED806 — TV lists relume and completes `POST /api` — but ONLY with the real Bridge Pro powered
-OFF (coexistence is the open problem). Pairing is auto-accepted (TV-only) + idempotent; mDNS is
-register-once (no goodbye); description.xml is text/xml. M4 entertainment (DTLS+HueStream) not
-started. See PLAN.md.
+M1 discovery+pairing: VERIFIED on 65OLED806 — TV lists relume and completes `POST /api` — but ONLY
+with the real Bridge Pro powered OFF (coexistence is the open problem). M2 Pro client, M3 REST light
+control: done+verified on real Pro. M4 entertainment (DTLS+HueStream): Phase A–C done and VERIFIED on
+the real TV+Pro (2026-06-16) — relume decodes the TV stream and streams it on to the Pro over its own
+DTLS entertainment_configuration; the 503 command-queue overflow is gone. Phase D (config persistence
++ activation lifecycle) is next. Pairing is auto-accepted (TV-only) + idempotent; mDNS is
+register-once (no goodbye); description.xml is text/xml. See PLAN.md.
