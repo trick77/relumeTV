@@ -115,7 +115,7 @@ type Server struct {
 // that short, expected wait. It stays well inside the TV's ~30s POST /api polling
 // window. Only the FIRST pairing of a devicetype is delayed; an already-paired TV
 // is served instantly from the idempotent path.
-const defaultPairAcceptDelay = 10 * time.Second
+const defaultPairAcceptDelay = 5 * time.Second
 
 // New creates the CLIP-v1 server.
 func New(cfg *config.Config, advIP string, httpPort int, log *slog.Logger) *Server {

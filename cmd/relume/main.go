@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -257,20 +258,35 @@ func runServe(args []string, log *slog.Logger) error {
 	case entertainmentMode:
 		// Entertainment mode: run the real DTLS receiver on :2100. It decrypts the
 		// TV's stream (PSK = the clientkey relume minted at pairing) and decodes the
-		// HueStream frames. This phase only logs them; forwarding to the Pro follows.
+		// HueStream frames.
 		recv := entertainment.NewReceiver(ip, cfg.PSKForUser, log)
 		// Count stream frames as activity so the idle-off monitor doesn't flash the
 		// lights off mid-stream (the TV streams via DTLS, not REST writes, here).
 		recv.OnActivity = clip.MarkActivity
-		// Forward each decoded frame's channels to the Bridge Pro via the coalescing
-		// REST provider, so the lights follow the Ambilight stream (Phase B). The
-		// channel id IS the v1 light id the TV referenced in its entertainment group.
-		recv.OnFrame = func(_ string, f *huestream.Frame) {
-			for _, ch := range f.Channels {
-				clip.ForwardLight(strconv.Itoa(int(ch.ID)), entertainment.ToHueV1State(f.ColorSpace, ch))
+
+		if cfg.Pro != nil {
+			// Phase C: relume opens its OWN entertainment stream to the Pro over DTLS
+			// and re-encodes the decoded TV frames at full rate, avoiding the per-light
+			// REST writes that overflow the Pro's command queue (503). The streamer
+			// auto-falls back to the REST forward (Phase B) if DTLS cannot establish.
+			proClient := bridgepro.New(cfg.Pro)
+			clientKey, _ := hex.DecodeString(cfg.Pro.ClientKey)
+			streamer := entertainment.NewProStreamer(proClient, cfg.Pro.Host, cfg.Pro.AppKey, clientKey, clip.ForwardLight, log)
+			recv.OnStreamStart = streamer.Start
+			recv.OnStreamStop = streamer.Stop
+			recv.OnFrame = streamer.Push
+			log.Info("entertainment mode: DTLS receiver on udp :2100 → streaming to the Pro over DTLS (REST fallback)")
+		} else {
+			// No Pro paired yet: forward decoded frames to the Pro via the coalescing
+			// REST provider (Phase B) until pairing completes. The channel id IS the v1
+			// light id the TV referenced in its entertainment group.
+			recv.OnFrame = func(_ string, f *huestream.Frame) {
+				for _, ch := range f.Channels {
+					clip.ForwardLight(strconv.Itoa(int(ch.ID)), entertainment.ToHueV1State(f.ColorSpace, ch))
+				}
 			}
+			log.Info("entertainment mode: DTLS receiver on udp :2100 → REST forward (no Pro paired yet)")
 		}
-		log.Info("entertainment mode: starting DTLS receiver on udp :2100 (decode + forward to Pro via REST)")
 		go func() {
 			if err := recv.Run(ctx); err != nil && ctx.Err() == nil {
 				log.Warn("entertainment receiver", "err", err)

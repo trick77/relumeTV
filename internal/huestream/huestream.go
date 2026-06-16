@@ -45,6 +45,45 @@ func (f *Frame) ColorSpaceName() string {
 	return "rgb"
 }
 
+// Encode serialises a Frame back into a HueStream datagram — the exact inverse of
+// Parse. Phase C re-encodes the frames decoded from the TV and streams them to the
+// Bridge Pro. v1 emits 9-byte light records (type, id[2], A[2], B[2], C[2]); v2
+// emits the 36-byte config id then 7-byte channel records (id, A[2], B[2], C[2]).
+// The channel ID is written as the version dictates: 2 bytes for v1, 1 byte for v2
+// (callers must have remapped it into 0..255 for v2 before encoding).
+func Encode(f *Frame) []byte {
+	b := make([]byte, 0, 16+len(f.ConfigID)+len(f.Channels)*9)
+	b = append(b, magic...)
+	b = append(b, f.Major, f.Minor, f.Sequence, 0x00, 0x00, f.ColorSpace, 0x00)
+
+	switch f.Major {
+	case 2:
+		// ConfigID is 36 ASCII bytes; pad/truncate defensively so the layout stays fixed.
+		id := make([]byte, 36)
+		copy(id, f.ConfigID)
+		b = append(b, id...)
+		for _, c := range f.Channels {
+			b = append(b, byte(c.ID))
+			b = appendU16(b, c.A)
+			b = appendU16(b, c.B)
+			b = appendU16(b, c.C)
+		}
+	default: // v1 layout
+		for _, c := range f.Channels {
+			b = append(b, 0x00) // device type: light
+			b = appendU16(b, c.ID)
+			b = appendU16(b, c.A)
+			b = appendU16(b, c.B)
+			b = appendU16(b, c.C)
+		}
+	}
+	return b
+}
+
+func appendU16(b []byte, v uint16) []byte {
+	return append(b, byte(v>>8), byte(v))
+}
+
 // Parse decodes a HueStream datagram. The 16-byte header is:
 // "HueStream"(9) major(1) minor(1) seq(1) reserved(2) colorspace(1) reserved(1).
 // v1 then has 9-byte light records (type, id[2], A[2], B[2], C[2]); v2 has a

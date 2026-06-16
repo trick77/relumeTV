@@ -161,6 +161,43 @@ func (c *Client) get(path string, v any) error {
 	return json.NewDecoder(resp.Body).Decode(v)
 }
 
+// post performs an authenticated CLIP v2 POST and returns the rid of the created
+// resource (CLIP v2 replies {"errors":[],"data":[{"rid":...,"rtype":...}]}). Used
+// to create the entertainment_configuration in entertainment mode.
+func (c *Client) post(path string, payload any) (string, error) {
+	body, _ := json.Marshal(payload)
+	req, _ := http.NewRequest(http.MethodPost, "https://"+c.host+path, bytes.NewReader(body))
+	req.Header.Set(appKeyHeader, c.appKey)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("POST %s: %w", path, err)
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 400 {
+		return "", fmt.Errorf("POST %s: status %d: %s", path, resp.StatusCode, string(raw))
+	}
+	var out struct {
+		Errors []struct {
+			Description string `json:"description"`
+		} `json:"errors"`
+		Data []struct {
+			RID string `json:"rid"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return "", fmt.Errorf("POST %s: decode response: %w", path, err)
+	}
+	if len(out.Errors) > 0 {
+		return "", fmt.Errorf("POST %s: %s", path, out.Errors[0].Description)
+	}
+	if len(out.Data) == 0 {
+		return "", fmt.Errorf("POST %s: no resource id returned", path)
+	}
+	return out.Data[0].RID, nil
+}
+
 // put performs an authenticated CLIP v2 PUT (for REST control). The
 // Bridge Pro responds with 200 (ok) or 207 (multi-status) and carries domain
 // errors in the "errors" array; HTTP status errors (>=400) remain hard errors.

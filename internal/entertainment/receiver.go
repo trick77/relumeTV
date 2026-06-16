@@ -34,6 +34,11 @@ type Receiver struct {
 	// OnActivity, if set, is called once per decoded frame — used to feed the
 	// idle-off monitor so a streaming TV is not treated as idle.
 	OnActivity func()
+	// OnStreamStart / OnStreamStop, if set, bracket a TV DTLS connection — Phase C
+	// wires these to establish / tear down relume's own stream to the Pro so the
+	// Pro area lives exactly as long as the TV is streaming.
+	OnStreamStart func(remote string)
+	OnStreamStop  func(remote string)
 }
 
 // NewReceiver creates the receiver. bindIP is the advertised IP (pins the socket
@@ -103,6 +108,12 @@ func (r *Receiver) handle(ctx context.Context, conn net.Conn) {
 		}
 	}
 	r.log.Info("entertainment stream connected", "from", remote)
+	if r.OnStreamStart != nil {
+		r.OnStreamStart(remote)
+	}
+	if r.OnStreamStop != nil {
+		defer r.OnStreamStop(remote)
+	}
 
 	var (
 		mu          sync.Mutex
