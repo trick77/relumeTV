@@ -7,15 +7,18 @@ import (
 	"github.com/trick77/relume/internal/translate"
 )
 
-// flashGreenXY is Hue's green primary in CIE xy.
-var flashGreenXY = []any{0.217, 0.722}
+// flashGreenXY / flashBlueXY are Hue's green and blue primaries in CIE xy. The
+// restart flash is green, the idle flash is blue.
+var (
+	flashGreenXY = []any{0.217, 0.722}
+	flashBlueXY  = []any{0.167, 0.04}
+)
 
-// restartFlashCount / idleFlashCount are how many green blinks each indicator shows
-// — the restart flash blinks one more time so it stays distinguishable from the
-// idle flash now that both use green. The durations are package vars so tests can
-// shrink them.
+// restartFlashCount / idleFlashCount are how many blinks each indicator shows — the
+// restart flash (green) and the idle flash (blue) each blink twice; they are
+// distinguished by colour. The durations are package vars so tests can shrink them.
 const (
-	restartFlashCount = 3
+	restartFlashCount = 2
 	idleFlashCount    = 2
 )
 
@@ -34,7 +37,7 @@ func FlashRestart(client proClient, log *slog.Logger, targetUUIDs []string) {
 	flashColor(client, log, flashGreenXY, restartFlashCount, "restart flash", targetUUIDs)
 }
 
-// FlashIdle blinks the TV-controlled Ambilight bulbs green idleFlashCount times and
+// FlashIdle blinks the TV-controlled Ambilight bulbs blue idleFlashCount times and
 // leaves them off — the idle-off indicator. When the TV is switched off it simply
 // stops sending its REST light-state writes (there is no off signal), so those
 // lights would otherwise stay frozen on their last Ambilight color. The idle
@@ -42,7 +45,7 @@ func FlashRestart(client proClient, log *slog.Logger, targetUUIDs []string) {
 // timeout. targetUUIDs scopes it to the Ambilight bulbs only — never the rest of
 // the home.
 func FlashIdle(client proClient, log *slog.Logger, targetUUIDs []string) {
-	flashColor(client, log, flashGreenXY, idleFlashCount, "idle flash", targetUUIDs)
+	flashColor(client, log, flashBlueXY, idleFlashCount, "idle flash", targetUUIDs)
 }
 
 // flashColor blinks the given Bridge Pro light UUIDs with the CIE-xy color

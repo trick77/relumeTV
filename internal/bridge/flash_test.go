@@ -32,7 +32,7 @@ func (f *flashFake) SetLight(_ string, body map[string]any) error {
 	return nil
 }
 
-func TestFlashRestart_blinksGreenThreeTimesThenOff(t *testing.T) {
+func TestFlashRestart_blinksGreenTwiceThenOff(t *testing.T) {
 	// Given: a single light and near-instant blink timings
 	defer withFastFlash()()
 	fc := &flashFake{lights: []bridgepro.Light{{ID: "uuid-1"}}}
@@ -40,9 +40,8 @@ func TestFlashRestart_blinksGreenThreeTimesThenOff(t *testing.T) {
 	// When
 	FlashRestart(fc, nil, []string{"uuid-1"})
 
-	// Then: on(color), off ×3 — three blinks ending off
+	// Then: on(color), off ×2 — two blinks ending off
 	want := []flashStep{
-		{on: true, colored: true}, {on: false},
 		{on: true, colored: true}, {on: false},
 		{on: true, colored: true}, {on: false},
 	}
@@ -67,7 +66,7 @@ func TestFlashRestart_usesGreen(t *testing.T) {
 	// When
 	FlashRestart(cf, nil, []string{"uuid-1"})
 
-	// Then: three on-writes, each the green primary's x (0.217), never red
+	// Then: two on-writes, each the green primary's x (0.217)
 	cf.mu.Lock()
 	xs := cf.xs
 	cf.mu.Unlock()
@@ -152,7 +151,7 @@ func (f *colorFake) SetLight(_ string, body map[string]any) error {
 	return nil
 }
 
-func TestFlashIdle_blinksGreenTwiceThenOff(t *testing.T) {
+func TestFlashIdle_blinksTwiceThenOff(t *testing.T) {
 	// Given
 	defer withFastFlash()()
 	fc := &flashFake{lights: []bridgepro.Light{{ID: "uuid-1"}}}
@@ -175,7 +174,7 @@ func TestFlashIdle_blinksGreenTwiceThenOff(t *testing.T) {
 	}
 }
 
-func TestFlashIdle_usesGreenNotRed(t *testing.T) {
+func TestFlashIdle_usesBlue(t *testing.T) {
 	// Given
 	defer withFastFlash()()
 	cf := &colorFake{}
@@ -183,7 +182,8 @@ func TestFlashIdle_usesGreenNotRed(t *testing.T) {
 	// When
 	FlashIdle(cf, nil, []string{"uuid-1"})
 
-	// Then: every on-write uses the green primary's x (0.217), not red's (0.675)
+	// Then: every on-write uses the blue primary's x (0.167), distinct from the
+	// restart flash's green (0.217)
 	cf.mu.Lock()
 	xs := cf.xs
 	cf.mu.Unlock()
@@ -191,8 +191,8 @@ func TestFlashIdle_usesGreenNotRed(t *testing.T) {
 		t.Fatalf("color writes = %d, want %d", len(xs), idleFlashCount)
 	}
 	for _, x := range xs {
-		if x != 0.217 {
-			t.Fatalf("flash color x = %v, want green 0.217", x)
+		if x != 0.167 {
+			t.Fatalf("flash color x = %v, want blue 0.167", x)
 		}
 	}
 }
