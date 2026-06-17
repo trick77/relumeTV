@@ -1,5 +1,5 @@
 <p align="left">
-  <img src="docs/relume.png" alt="relume" width="140">
+  <img src="docs/relume.png" alt="relume" width="80">
 </p>
 
 # relume
