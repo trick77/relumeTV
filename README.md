@@ -5,7 +5,7 @@
 # relume
 
 A software bridge that connects a **Philips Ambilight TV** to a **Hue Bridge Pro (BSB003)**.
-relume presents itself to the TV as an old gen-2 bridge (BSB002) and proxies every request
+Relume presents itself to the TV as an old gen-2 bridge (BSB002) and proxies every request
 to the real Bridge Pro over HTTPS/CLIP v2.
 
 ![How relume sits between the Ambilight TV and the Hue Bridge Pro](docs/architecture.png)
@@ -23,9 +23,17 @@ How it works (identity, pairing, the two control modes): see [docs/DESIGN.md](do
 
 ## Requirements
 
-- relume must run on the **same L2 network** as the TV (discovery uses multicast).
-  → Docker requires `network_mode: host`.
-- A reachable Hue Bridge Pro on the same network.
+- **A Philips Ambilight TV** with the built-in Ambilight+Hue feature — the TV is what
+  discovers and drives the bridge.
+- **A Hue Bridge Pro (BSB003)**, already set up with your lights and reachable on the LAN.
+- **A Linux host** to run Relume on. Discovery uses multicast (mDNS/SSDP), so the container
+  needs `network_mode: host` — **Docker Desktop on macOS/Windows won't work**, its
+  host-networking mode doesn't reliably carry the multicast traffic.
+- **TV, Relume host, and Bridge Pro on the same L2 network / VLAN**, with multicast allowed
+  (no client/AP isolation between them).
+- **TCP port 80 free on the host** — Relume emulates a gen-2 bridge, which speaks on `:80`.
+  Pick another with `-http-port`; under rootless Docker see the [port-80 note](#rootless-docker-and-port-80).
+- *(Only when building from source)* **Go 1.26+**.
 
 ## Quick start (Docker)
 
@@ -57,15 +65,13 @@ To build locally instead: `docker build -f Containerfile -t relume:dev .`
 
 ## Flags (`serve`)
 
-| Flag | Default | Purpose |
-|------|---------|---------|
-| `-mode` | `rest` | Control mode: `rest` (per-light REST-follow) or `entertainment` (low-latency DTLS stream to the Pro). See [docs/DESIGN.md](docs/DESIGN.md#control-modes). |
-| `-http-port` | `80` | HTTP port the TV connects to. |
-| `-advertise-ip` | auto | IP advertised via mDNS/SSDP; set it on a multi-homed host. |
-| `-bridge-ip` | — | Bridge Pro IP (skips cloud discovery). |
-| `-idle-off-timeout` | `30s` | When the TV stops driving the lights for this long, flash them and turn them off (the TV sends no off signal, it just goes silent). `0` disables. |
-| `-skip-tls-verify` | off | Skip Bridge Pro certificate pinning (fallback). |
-| `-debug` | off | SSDP/HTTP diagnostics + mDNS observer. |
+- **`-mode`** &nbsp;·&nbsp; default `rest` — Control mode: `rest` (per-light REST-follow) or `entertainment` (low-latency DTLS stream to the Pro). See [docs/DESIGN.md](docs/DESIGN.md#control-modes).
+- **`-http-port`** &nbsp;·&nbsp; default `80` — HTTP port the TV connects to.
+- **`-advertise-ip`** &nbsp;·&nbsp; default auto — IP advertised via mDNS/SSDP; set it on a multi-homed host.
+- **`-bridge-ip`** — Bridge Pro IP (skips cloud discovery).
+- **`-idle-off-timeout`** &nbsp;·&nbsp; default `30s` — When the TV stops driving the lights for this long, flash them and turn them off (the TV sends no off signal, it just goes silent). `0` disables.
+- **`-skip-tls-verify`** &nbsp;·&nbsp; default off — Skip Bridge Pro certificate pinning (fallback).
+- **`-debug`** &nbsp;·&nbsp; default off — SSDP/HTTP diagnostics + mDNS observer.
 
 Discovery-debugging flags (`-identity-profile`, `-ssdp-*`, `-description-profile`,
 `-discovery-burst-*`) are documented in [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).

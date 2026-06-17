@@ -1,12 +1,10 @@
 # How relume works
 
-relume sits between a **Philips Ambilight TV** and a **Hue Bridge Pro (BSB003)**. To the
+Relume sits between a **Philips Ambilight TV** and a **Hue Bridge Pro (BSB003)**. To the
 TV it pretends to be an old gen-2 Hue bridge (BSB002); to the Bridge Pro it acts as a
 normal Hue app. Every TV request is translated and proxied to the real bridge.
 
-```
-Ambilight TV  ──mDNS/SSDP + HTTP──▶  relume  ──HTTPS/CLIP v2──▶  Hue Bridge Pro  ──Zigbee──▶  lights
-```
+![How relume sits between the Ambilight TV and the Hue Bridge Pro](architecture.png)
 
 ## Why a bridge is needed
 
@@ -19,7 +17,7 @@ The Bridge Pro breaks the Ambilight+Hue integration in three ways that relume pa
 3. **CLIP v2 only** — the v1 discovery/pairing/control endpoints the TV speaks no longer
    resolve on the Pro.
 
-relume presents the old BSB002 identity and the v1 HTTP API the TV expects, and translates
+Relume presents the old BSB002 identity and the v1 HTTP API the TV expects, and translates
 everything to CLIP v2 against the Pro.
 
 ## Key design decisions
@@ -55,7 +53,7 @@ everything to CLIP v2 against the Pro.
 
 ## Pairing
 
-- **TV → relume:** auto-accepted, no link button or UI. relume only pairs the TV (by source IP
+- **TV → relume:** auto-accepted, no link button or UI. Relume only pairs the TV (by source IP
   matching `-tv-ip`, or the Philips-TV Android/Dalvik User-Agent); other LAN devices get error
   101. `POST /api` is idempotent per devicetype (the TV polls it quickly).
 - **relume → Bridge Pro:** automatic in `serve`. If no Pro is paired, a background task discovers
@@ -66,12 +64,12 @@ everything to CLIP v2 against the Pro.
 
 ## Control modes
 
-relume drives the lights in one of two modes (`-mode`):
+Relume drives the lights in one of two modes (`-mode`):
 
 ### REST-follow (`-mode rest`, default)
 
-relume gives the TV the generic stream-activation acknowledgement, so the TV stays on its
-fallback path: per-light v1 `PUT` writes. relume translates each write to CLIP v2 and forwards
+Relume gives the TV the generic stream-activation acknowledgement, so the TV stays on its
+fallback path: per-light v1 `PUT` writes. Relume translates each write to CLIP v2 and forwards
 it to the Pro through a coalescing async provider (it acknowledges the TV immediately and keeps
 only the latest state per light, so the TV's control loop never blocks on the Pro round-trip).
 
@@ -84,10 +82,10 @@ under a real ~25 fps stream.
 This is the low-latency path a real Hue entertainment app uses, and it removes the REST
 bottleneck:
 
-1. **Receive.** relume confirms the TV's stream activation for real, so the TV opens a DTLS
+1. **Receive.** Relume confirms the TV's stream activation for real, so the TV opens a DTLS
    stream to relume on udp :2100 (PSK = the client key relume minted for the TV at pairing).
    `internal/huestream` decodes each HueStream frame.
-2. **Re-stream to the Pro.** relume opens its **own** entertainment stream to the Bridge Pro: it
+2. **Re-stream to the Pro.** Relume opens its **own** entertainment stream to the Bridge Pro: it
    creates (or reuses) a `relume` `entertainment_configuration` covering the colour-capable
    lights, starts it, and dials a DTLS-PSK client to the Pro (PSK = the Pro's app key / client
    key). Each decoded TV frame is re-encoded as a HueStream v2 frame and streamed at ~50 Hz.
@@ -123,10 +121,10 @@ The TV is picky about the emulated bridge identity:
 ## Bridge Pro facts
 
 - HTTPS:443 only; HTTP:80 returns 301. CLIP v2 only.
-- Self-signed Signify certificate (leaf OU=BSB003). relume pins the leaf SHA-256 and does not
+- Self-signed Signify certificate (leaf OU=BSB003). Relume pins the leaf SHA-256 and does not
   trust the CA chain.
 - `PUT` returns `207` multi-status with per-attribute `errors[]` even when the HTTP status is OK —
   the error array must be inspected, not just the status code.
-- CT-only / white / dimmable / on-off bulbs reject `color.xy` (`207`). relume therefore offers
+- CT-only / white / dimmable / on-off bulbs reject `color.xy` (`207`). Relume therefore offers
   **only colour-capable lights** to the TV; v1 light ids are assigned in sorted-UUID order over
   the kept lights so they stay stable.
