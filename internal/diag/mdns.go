@@ -10,6 +10,8 @@ import (
 	"net"
 	"strings"
 	"time"
+
+	"github.com/trick77/relume/internal/netutil"
 )
 
 const mdnsGroup = "224.0.0.251:5353"
@@ -34,7 +36,7 @@ func (o *MDNSObserver) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	iface, ierr := interfaceForIP(o.advIP)
+	iface, ierr := netutil.InterfaceForIP(o.advIP)
 	if ierr != nil {
 		o.log.Warn("mdns: interface for advertise IP not found, using default", "err", ierr)
 	}
@@ -65,33 +67,6 @@ func (o *MDNSObserver) Run(ctx context.Context) error {
 }
 
 func deadline() time.Time { return time.Now().Add(time.Second) }
-
-// interfaceForIP returns the multicast-capable interface that carries the given IP.
-func interfaceForIP(ip string) (*net.Interface, error) {
-	target := net.ParseIP(ip)
-	if target == nil {
-		return nil, fmt.Errorf("invalid IP %q", ip)
-	}
-	ifaces, err := net.Interfaces()
-	if err != nil {
-		return nil, err
-	}
-	for i := range ifaces {
-		if ifaces[i].Flags&net.FlagMulticast == 0 || ifaces[i].Flags&net.FlagUp == 0 {
-			continue
-		}
-		addrs, aerr := ifaces[i].Addrs()
-		if aerr != nil {
-			continue
-		}
-		for _, a := range addrs {
-			if ipn, ok := a.(*net.IPNet); ok && ipn.IP.Equal(target) {
-				return &ifaces[i], nil
-			}
-		}
-	}
-	return nil, fmt.Errorf("no multicast-capable interface with IP %s", ip)
-}
 
 // inspect parses the questions of an mDNS message and logs Hue references.
 func (o *MDNSObserver) inspect(src *net.UDPAddr, msg []byte) {
