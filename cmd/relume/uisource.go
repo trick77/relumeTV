@@ -17,6 +17,10 @@ type uiSource struct {
 	advName    string
 	version    string
 	started    time.Time
+	// activeWindow is how recently the TV must have driven the lights to count as
+	// "active" in the UI. Mirrors the idle-off window so the UI reports "idle" once
+	// relume itself considers the TV gone.
+	activeWindow time.Duration
 }
 
 func (u *uiSource) Version() string      { return u.version }
@@ -38,3 +42,11 @@ func (u *uiSource) LastActivity() time.Time            { return u.clip.LastActiv
 func (u *uiSource) LightsV1() (map[string]any, bool)   { return u.clip.LightsV1Snapshot() }
 func (u *uiSource) UUIDForV1(id string) (string, bool) { return u.clip.UUIDForV1(id) }
 func (u *uiSource) DrivenUUIDs() []string              { return u.controlled.Current() }
+
+func (u *uiSource) Active() bool {
+	last := u.clip.LastActivity()
+	if last.IsZero() {
+		return false
+	}
+	return time.Since(last) < u.activeWindow
+}

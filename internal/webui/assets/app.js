@@ -21,9 +21,17 @@ function healthLabel(h) {
   return {
     "streaming-pro": "Active · streaming to Pro",
     "following-rest": "Active · REST-follow",
+    "idle": "Idle · TV not driving",
     "no-tv": "Waiting for TV pairing",
     "unpaired-pro": "Bridge Pro not paired",
   }[h] || h;
+}
+
+// healthDotClass colours the status dot: green only when actively driving.
+function healthDotClass(h) {
+  if (h === "streaming-pro" || h === "following-rest") return "dot ok pulse";
+  if (h === "idle") return "dot pulse"; // amber standby
+  return "dot pulse"; // amber: needs attention (no-tv / unpaired-pro)
 }
 
 function renderSetup(s) {
@@ -92,7 +100,7 @@ function renderDashboard(s) {
   app.innerHTML = `
     <div class="wrap">
       <div class="top"><div class="brand">re<span>lume</span></div><div class="ver">v${esc(s.version)}</div>
-        <div class="spacer"></div><div class="health"><span class="dot ok pulse"></span> ${esc(healthLabel(s.health))}</div></div>
+        <div class="spacer"></div><div class="health"><span class="${healthDotClass(s.health)}"></span> ${esc(healthLabel(s.health))}</div></div>
       <div class="pipe">
         <div class="step"><div class="lbl">Bridge Pro</div><div class="val">${s.proPaired ? "✓ Paired" : "— Unpaired"}</div><div class="sub">${esc(s.proName)} ${esc(s.proHost)}</div></div>
         <div class="step"><div class="lbl">TV pairing</div><div class="val">${s.tvClients.length} client(s)</div><div class="sub">${esc(s.tvClients.join(", "))}</div></div>

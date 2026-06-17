@@ -31,6 +31,7 @@ func (f fakeSource) LightsV1() (map[string]any, bool) {
 }
 func (f fakeSource) UUIDForV1(v1id string) (string, bool) { return "uuid-" + v1id, true }
 func (f fakeSource) DrivenUUIDs() []string               { return f.driven }
+func (f fakeSource) Active() bool                        { return true }
 
 func TestBuildSnapshot_MapsLightsAndDriven(t *testing.T) {
 	s := BuildSnapshot(fakeSource{driven: []string{"uuid-1"}})
@@ -66,6 +67,7 @@ func (emptySource) LastActivity() time.Time               { return time.Time{} }
 func (emptySource) LightsV1() (map[string]any, bool)      { return nil, false }
 func (emptySource) UUIDForV1(string) (string, bool)       { return "", false }
 func (emptySource) DrivenUUIDs() []string                 { return nil }
+func (emptySource) Active() bool                          { return false }
 
 func TestBuildSnapshot_EmptyArraysNotNil(t *testing.T) {
 	s := BuildSnapshot(emptySource{})
@@ -83,6 +85,19 @@ func TestBuildSnapshot_EmptyArraysNotNil(t *testing.T) {
 	}
 	if !strings.Contains(string(b), `"lights":[]`) || !strings.Contains(string(b), `"tvClients":[]`) {
 		t.Fatalf("expected empty arrays in JSON, got %s", b)
+	}
+}
+
+// idleSource: Pro paired, TV paired, but the TV is not currently driving.
+type idleSource struct{ fakeSource }
+
+func (idleSource) ModeInfo() (string, bool, bool) { return "rest", false, false }
+func (idleSource) Active() bool                   { return false }
+
+func TestBuildSnapshot_IdleWhenTVNotDriving(t *testing.T) {
+	s := BuildSnapshot(idleSource{})
+	if s.Health != "idle" {
+		t.Fatalf("health = %q, want idle (TV paired but not driving)", s.Health)
 	}
 }
 

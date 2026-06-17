@@ -48,6 +48,9 @@ type StateSource interface {
 	LightsV1() (map[string]any, bool)
 	UUIDForV1(v1id string) (string, bool)
 	DrivenUUIDs() []string
+	// Active reports whether the TV is currently driving the lights (it has
+	// written/streamed within the idle window). False when the TV is off or idle.
+	Active() bool
 }
 
 func rfc3339(t time.Time) string {
@@ -90,6 +93,10 @@ func BuildSnapshot(src StateSource) Snapshot {
 		s.Health = "unpaired-pro"
 	case len(tv) == 0:
 		s.Health = "no-tv"
+	case !src.Active():
+		// TV is paired but not currently driving (off / Ambilight idle). Don't claim
+		// "Active" — relume is just standing by.
+		s.Health = "idle"
 	case mode == "entertainment" && dtlsUp && !fallback:
 		s.Health = "streaming-pro"
 	default:
