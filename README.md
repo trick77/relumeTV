@@ -4,9 +4,16 @@ A software bridge that connects a **Philips Ambilight TV** to a **Hue Bridge Pro
 relume presents itself to the TV as an old gen-2 bridge (BSB002) and proxies every request
 to the real Bridge Pro over HTTPS/CLIP v2.
 
-```
-Ambilight TV  ──mDNS/SSDP + HTTP──▶  relume  ──HTTPS/CLIP v2──▶  Hue Bridge Pro  ──Zigbee──▶  lights
-```
+![How relume sits between the Ambilight TV and the Hue Bridge Pro](docs/architecture.png)
+
+> **⚠️ Disclaimer — read this first**
+>
+> This is an experimental hobby project, built for fun and scratching my own itch.
+> It works on *my* machine, on *my* network, with *my* hardware — and that's all I
+> can vouch for. I can't help debug why it doesn't work for you, and I make no
+> promises that it ever will. Running an old gen-2 bridge and a new Bridge Pro
+> side by side is finicky by Philips' own design, so expect rough edges. Use it at
+> your own risk; no support, no warranty, no guarantees.
 
 How it works (identity, pairing, the two control modes): see [docs/DESIGN.md](docs/DESIGN.md).
 
