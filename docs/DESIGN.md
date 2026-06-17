@@ -108,6 +108,28 @@ A relume restart in the middle of a session orphans the TV's stream; the TV then
 light state and the lights go idle. Toggling Ambilight (not Ambilight+Hue) off and on on the TV
 re-runs the activation handshake. See [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
 
+## Web UI (optional)
+
+relume can serve an optional web UI — a guided setup assistant plus a live status dashboard.
+It is **off by default** and opt-in via `-ui-port <port>` (`0` disables it; recommended `33300`,
+which must differ from the TV-facing `-http-port`). Design notes:
+
+- **Embedded, no build step.** Static HTML/CSS/JS compiled into the binary via `go:embed`
+  (`internal/webui/assets`). No npm/Node/framework.
+- **Read-mostly.** The UI reads live state through a `webui.StateSource` adapter
+  (`cmd/relume/uisource.go`) — the TV- and Pro-facing control paths are never modified. The only
+  action is a test flash.
+- **State delivery.** `GET /api/state` returns a JSON snapshot; `GET /api/events` is a
+  Server-Sent Events stream pushing snapshot updates plus a live log tail. The log tail is
+  captured non-invasively by teeing the existing `slog` logger into the hub
+  (`webui.NewLogHandler`), so it mirrors exactly what goes to stderr.
+- **No secrets.** App keys, client keys and the cert fingerprint never appear in any snapshot
+  (asserted by a test).
+- **No authentication** — with `network_mode: host` the port is reachable on the LAN, so the UI
+  assumes a trusted network. A bind/serve failure is logged but never takes down the headless service.
+
+See the design spec at [superpowers/specs/2026-06-17-web-ui-design.md](superpowers/specs/2026-06-17-web-ui-design.md).
+
 ## Identity invariants
 
 The TV is picky about the emulated bridge identity:

@@ -22,6 +22,11 @@ services:
     # Config defaults to relume.json; the image's WORKDIR is /data, so it lands
     # in the named volume above.
     command: ["serve"]
+    # Optional web UI (off by default). Uncomment to enable the setup assistant +
+    # live dashboard on port 33300. With network_mode: host the port is reachable
+    # on the LAN as-is (no port mapping needed) and has NO authentication — only
+    # enable it on a trusted network.
+    # command: ["serve", "-ui-port", "33300"]
 
 volumes:
   relume-data:
