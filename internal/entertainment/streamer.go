@@ -155,6 +155,11 @@ func (s *ProStreamer) Start(remote string) {
 // the Pro area never stays active, then closes the DTLS connection. It cancels the
 // run goroutine and WAITS for it to exit before tearing down, so Start/Stop are
 // strictly serial — the old run can no longer race a new one over s.st.
+//
+// This seriality assumes the caller invokes Start and Stop sequentially from a
+// single goroutine — which the entertainment receiver does (OnStreamStart/OnStreamStop
+// fire from its one read loop). Concurrent Start/Stop calls are NOT supported: an
+// old Stop's teardown could disassemble the s.st of a just-started run.
 func (s *ProStreamer) Stop(remote string) {
 	s.mu.Lock()
 	cancel := s.cancel

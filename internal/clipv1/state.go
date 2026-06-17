@@ -135,12 +135,15 @@ type streamState struct {
 	// re-activation while the stream is healthy does not arm a watchdog that would
 	// then falsely fall back (no fresh OnStreamStart fires for an already-up stream).
 	streamUp bool
-	// fallback (sticky-ish) flips entertainment mode back to REST-follow when the TV
-	// confirmed stream activation but never opened the DTLS stream within
-	// fallbackTimeout. It is a safety net so entertainment mode never leaves the
-	// lights unfollowed on a TV/firmware that does not open the stream. A later
-	// successful stream-up clears it again (markStreamUp), so a recovered stream
-	// re-enables entertainment.
+	// fallback flips entertainment mode back to REST-follow when the TV confirmed
+	// stream activation but never opened the DTLS stream within fallbackTimeout. It
+	// is a safety net so entertainment mode never leaves the lights unfollowed on a
+	// TV/firmware that does not open the stream. markStreamUp clears it under the
+	// lock, but note: once fallback latches, confirmsEntertainment() reports false,
+	// so the TV stays on REST and stops opening DTLS streams — markStreamUp then does
+	// not fire again in normal operation and fallback effectively persists until
+	// restart. The clear exists for the one reachable case: a stream-up that races a
+	// just-firing watchdog ("stream up wins"), not a broad mid-session recovery.
 	fallback        bool
 	fallbackTimeout time.Duration
 	watchdog        *time.Timer
@@ -228,10 +231,11 @@ func (s *streamState) disarmWatchdog() {
 }
 
 // markStreamUp records that the TV opened its DTLS entertainment stream. Under the
-// lock it stops the watchdog, clears the sticky fallback (so a recovered stream
-// re-enables entertainment) and bumps the generation — so a watchdog callback that
-// began firing just before this call is superseded and cannot stickily fall back a
-// healthy TV (M1: "stream came up wins over a racing watchdog").
+// lock it stops the watchdog, clears fallback and bumps the generation — so a
+// watchdog callback that began firing just before this call is superseded and
+// cannot stickily fall back a healthy TV (M1: "stream came up wins over a racing
+// watchdog"). Clearing fallback matters for that race; once fallback has latched in
+// steady state the TV stays on REST and this no longer fires (see streamState.fallback).
 func (s *streamState) markStreamUp(log *slog.Logger) {
 	s.mu.Lock()
 	s.streamUp = true
