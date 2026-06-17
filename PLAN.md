@@ -85,7 +85,19 @@ The Bridge Pro breaks the Ambilight+Hue path in three ways:
     confirming, reports the group inactive → TV resumes PUTs). Guarded against false-fire
     on re-activation during a healthy stream. Dormant on the verified happy path. This is
     the safety net required before the default flip (see Next steps).
-  - Phase D ⏳ group persistence + activation lifecycle (after the items below).
+  - Phase D ✅ group persistence + activation lifecycle (unit-tested; real-TV
+    confirmation pending). The `relume` `entertainment_configuration` is now persisted
+    and reused instead of re-found each stream: `ProStreamer` keeps an in-memory
+    `cachedConfigID` (steady-state re-connects/backoff retries skip the list+match) and
+    persists the id to `relume.json` via a new top-level `Config.EntConfigID`
+    (`Load/SaveEntConfigID`) — top-level, not inside `BridgePro`, so `SetPro`'s
+    copy-on-write reconnect never clobbers it. Light-set changes under a live config are
+    detected (`configCoversServices`, order-independent service-rid set compare) and the
+    stale config is stopped+deleted (`bridgepro.DeleteEntertainmentConfig`, new CLIP v2
+    DELETE) then recreated — also caps config proliferation against the Pro's area limit.
+    Shutdown now releases the Pro stream synchronously (`stopEntertainment` →
+    `streamer.Stop` before `FlashRestart`) instead of racing the receiver's async
+    `OnStreamStop` against process exit, so the Pro area never leaks past exit.
 - **M5 — Packaging** ✅ done. Containerfile (static, multi-stage), `compose.yaml` (host networking),
   README, CI (test + release to ghcr.io). Image builds.
 
@@ -100,11 +112,21 @@ The Bridge Pro breaks the Ambilight+Hue path in three ways:
    after step 1 — the watchdog is the safety net that makes entertainment safe as the default.
    Includes: change the `-mode` default in `cmd/relume/main.go`, update the README/`docs/DESIGN.md`
    mode wording, and confirm a fresh `serve` (no `-mode`) lights the TV over DTLS.
-3. **Phase D — group persistence + activation lifecycle.** Persist/clean up the `relume`
-   `entertainment_configuration` instead of re-finding it each stream; handle the light-set
-   changing under a live config; tidy `StopStream` on shutdown so the Pro area never leaks.
-4. **Optional / lower priority:** colour accuracy check on the Pro path (v2 XY-vs-RGB semantics);
-   a `-entertainment-dtls-timeout` flag if 5s needs tuning on other TVs.
+3. ~~**Phase D — group persistence + activation lifecycle.**~~ ✅ done (see M4 Phase D
+   above). Real-TV confirmation still wanted: that a light added/removed on the Pro between
+   streams triggers exactly one stop+delete+recreate (not churn), and that the persisted
+   `entConfigId` is reused after a relume restart.
+4. **Optional / lower priority:**
+   - `-entertainment-dtls-timeout <dur>` ✅ added (default 5s; wired to the clipv1
+     watchdog via `SetDTLSFallbackTimeout`). Tune if another TV opens its DTLS stream
+     slower than the tested TV's ~1s.
+   - Colour accuracy on the Pro path: **decided — no code change.** The DTLS path forwards
+     the TV's HueStream frame verbatim (raw A/B/C 16-bit + the per-frame color-space byte
+     in the header; the streamer does no XY↔RGB conversion — that only happens on the REST
+     fallback in `ToHueV1State`), so the Pro receives exactly what the TV sent. The
+     `dtlsLoopback` test asserts the values pass through unchanged. Remaining step is a
+     **hardware-only** eyeball check that the Pro renders the TV's colours faithfully; no
+     code is expected to change.
 
 (M1 TV discovery/pairing coexistence with a powered-on Pro remains the separate open product
 problem — see Discovery finding below and `docs/TROUBLESHOOTING.md`.)

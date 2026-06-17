@@ -144,6 +144,16 @@ func New(cfg *config.Config, advIP string, httpPort int, log *slog.Logger) *Serv
 		dtlsFallbackTimeout: defaultDTLSFallbackTimeout}
 }
 
+// SetDTLSFallbackTimeout overrides how long relume waits for the TV's DTLS stream
+// after confirming activation before reverting to REST-follow (the
+// -entertainment-dtls-timeout flag). A non-positive value keeps the default. Call
+// before serving.
+func (s *Server) SetDTLSFallbackTimeout(d time.Duration) {
+	if d > 0 {
+		s.dtlsFallbackTimeout = d
+	}
+}
+
 // confirmsEntertainment reports whether relume should confirm the TV's stream
 // activation for real: in entertainment mode (unless it has fallen back to REST,
 // see dtlsFallback), or under the diagnostic probe.

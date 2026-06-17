@@ -53,6 +53,7 @@ To build locally instead: `docker build -f Containerfile -t relume:dev .`
 | `-advertise-ip` | auto | IP advertised via mDNS/SSDP; set it on a multi-homed host. |
 | `-bridge-ip` | — | Bridge Pro IP (skips cloud discovery). |
 | `-idle-off-timeout` | `30s` | When the TV stops driving the lights for this long, flash them and turn them off (the TV sends no off signal, it just goes silent). `0` disables. |
+| `-entertainment-dtls-timeout` | `5s` | Entertainment mode: how long to wait, after confirming the TV's stream activation, for the TV to open its DTLS stream before reverting to REST-follow. Raise it if a TV opens its stream slower. |
 | `-skip-tls-verify` | off | Skip Bridge Pro certificate pinning (fallback). |
 | `-debug` | off | SSDP/HTTP diagnostics + mDNS observer. |
 

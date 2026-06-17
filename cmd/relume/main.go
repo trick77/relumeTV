@@ -88,6 +88,7 @@ type serveOptions struct {
 	idleOffTimeout           time.Duration
 	controlledLightWindow    time.Duration
 	mode                     string
+	dtlsFallbackTimeout      time.Duration
 }
 
 func parseServeOptions(args []string) (serveOptions, error) {
@@ -110,6 +111,7 @@ func parseServeOptions(args []string) (serveOptions, error) {
 	idleOffTimeout := fs.Duration("idle-off-timeout", 30*time.Second, "when the TV stops sending light writes for this long, flash the lights green twice and turn them off (0 = disabled)")
 	controlledLightWindow := fs.Duration("controlled-light-window", time.Minute, "sliding window: a light counts as a current Ambilight light only if the TV drove it within this window; the restart/idle flash and idle-off touch only those (so config changes are forgotten after the window)")
 	mode := fs.String("mode", "rest", "control mode: 'rest' (default, proven REST-follow) or 'entertainment' (confirm the TV's stream activation and run the DTLS receiver on :2100)")
+	dtlsFallbackTimeout := fs.Duration("entertainment-dtls-timeout", 5*time.Second, "entertainment mode: how long to wait after confirming the TV's stream activation for the TV to open its DTLS stream on :2100 before reverting to REST-follow")
 	if err := fs.Parse(args); err != nil {
 		return serveOptions{}, err
 	}
@@ -132,6 +134,7 @@ func parseServeOptions(args []string) (serveOptions, error) {
 		idleOffTimeout:           *idleOffTimeout,
 		controlledLightWindow:    *controlledLightWindow,
 		mode:                     *mode,
+		dtlsFallbackTimeout:      *dtlsFallbackTimeout,
 	}, nil
 }
 
@@ -186,6 +189,7 @@ func runServe(args []string, log *slog.Logger) error {
 	clip.TVIP = opts.tvIP
 	clip.EntProbe = entProbe
 	clip.EntertainmentMode = entertainmentMode
+	clip.SetDTLSFallbackTimeout(opts.dtlsFallbackTimeout)
 	log.Info("control mode", "mode", opts.mode)
 	clip.IdentityProfile = opts.identityProfile
 	clip.DescriptionProfile = opts.descriptionProfile
@@ -254,6 +258,11 @@ func runServe(args []string, log *slog.Logger) error {
 	}
 	go clip.LogActivitySummary(ctx, activityWindow)
 
+	// entStreamer is hoisted to function scope so the shutdown path can release
+	// relume's own entertainment stream on the Pro synchronously (Phase D), rather
+	// than racing the receiver's async OnStreamStop against process exit.
+	var entStreamer *entertainment.ProStreamer
+
 	switch {
 	case entertainmentMode:
 		// Entertainment mode: run the real DTLS receiver on :2100. It decrypts the
@@ -272,6 +281,14 @@ func runServe(args []string, log *slog.Logger) error {
 			proClient := bridgepro.New(cfg.Pro)
 			clientKey, _ := hex.DecodeString(cfg.Pro.ClientKey)
 			streamer := entertainment.NewProStreamer(proClient, cfg.Pro.Host, cfg.Pro.AppKey, clientKey, clip.ForwardLight, log)
+			// Persist/reuse relume's own entertainment_configuration across restarts
+			// instead of re-finding it each stream (Phase D).
+			streamer.SetConfigStore(cfg.LoadEntConfigID, func(id string) {
+				if err := cfg.SaveEntConfigID(id); err != nil {
+					log.Warn("persisting relume entertainment config id", "err", err)
+				}
+			})
+			entStreamer = streamer
 			// The TV opening its DTLS stream cancels the activation-fallback watchdog
 			// (clip) and establishes the Pro stream (streamer).
 			recv.OnStreamStart = func(remote string) {
@@ -365,14 +382,27 @@ func runServe(args []string, log *slog.Logger) error {
 	case err := <-errc:
 		stop()
 		shutdownHTTP(httpSrv)
+		stopEntertainment(entStreamer)
 		return err
 	}
 	shutdownHTTP(httpSrv)
+	// Release relume's own entertainment stream on the Pro before flashing, so the
+	// Pro area is deactivated (StopStream uses the client's own timeout, not the
+	// cancelled ctx) and never leaks past process exit (Phase D).
+	stopEntertainment(entStreamer)
 	// Stop accepting TV writes first (above), then signal the restart on the lights.
 	if cfg.Pro != nil {
 		bridge.FlashRestart(bridgepro.New(cfg.Pro), log, controlled.Current())
 	}
 	return nil
+}
+
+// stopEntertainment tears down the Pro entertainment stream on shutdown (idempotent
+// and nil-safe — the streamer only exists in entertainment mode with a paired Pro).
+func stopEntertainment(s *entertainment.ProStreamer) {
+	if s != nil {
+		s.Stop("shutdown")
+	}
 }
 
 // newProvider builds the Bridge Pro light provider and wires it to feed the

@@ -33,6 +33,7 @@ type ProClient interface {
 	EntertainmentConfigs() ([]bridgepro.EntertainmentConfig, error)
 	CreateEntertainmentConfig(name string, members []bridgepro.ConfigMember) (string, error)
 	GetEntertainmentConfig(id string) (*bridgepro.EntertainmentConfigFull, error)
+	DeleteEntertainmentConfig(id string) error
 	StartStream(id string) error
 	StopStream(id string) error
 }
@@ -59,11 +60,26 @@ type ProStreamer struct {
 	// dial is the DTLS dialer seam (default dialPro); for tests.
 	dial func(host string, port int, identity string, psk []byte) (net.Conn, error)
 
+	// loadCfgID / saveCfgID persist the resolved relume config id across restarts
+	// (Phase D). Optional; nil keeps the streamer purely in-memory. Wired in main.go
+	// to config.LoadEntConfigID / SaveEntConfigID. saveCfgID("") clears a stale id.
+	loadCfgID func() string
+	saveCfgID func(string)
+
 	mu      sync.Mutex
 	cancel  context.CancelFunc
 	running bool
 
 	st state
+}
+
+// SetConfigStore wires optional persistence of the resolved relume config id (Phase
+// D), so the streamer reuses its entertainment_configuration across restarts instead
+// of re-finding it. load returns the persisted id (empty if none); save persists it
+// (an empty id clears it). Call before Start.
+func (s *ProStreamer) SetConfigStore(load func() string, save func(string)) {
+	s.loadCfgID = load
+	s.saveCfgID = save
 }
 
 // state is the runtime stream state, guarded by its own mutex so Push (hot path,
@@ -77,6 +93,11 @@ type state struct {
 	latest     map[uint8]huestream.Channel // Pro channel id → latest colour
 	seq        uint8
 	path       string // "dtls" | "rest"
+	// cachedConfigID is the relume config id resolved earlier this process, so repeat
+	// establish calls (stream re-connects, backoff retries) skip the list+match
+	// round-trips. Guarded by st.mu: a Stop does not join the run goroutine, so an
+	// in-flight ensureConfig from an old run can race a new one's establish.
+	cachedConfigID string
 }
 
 // NewProStreamer builds a streamer. clientKey is the Pro DTLS PSK (already
@@ -141,6 +162,12 @@ func (s *ProStreamer) Stop(remote string) {
 func (s *ProStreamer) Push(_ string, f *huestream.Frame) {
 	s.st.mu.Lock()
 	if s.st.path == "dtls" && s.st.conn != nil {
+		// Colour passes through verbatim on the DTLS path: the per-frame color space
+		// (XY or RGB lives in the HueStream header, not in the config) and the raw
+		// A/B/C 16-bit values are forwarded unchanged, so the Pro receives exactly
+		// what the TV sent. No XY↔RGB conversion happens here (that is only the REST
+		// fallback's job, in ToHueV1State). Real-hardware colour accuracy is a
+		// hardware-only check — see PLAN.md "Optional".
 		s.st.colorSpace = f.ColorSpace
 		for _, ch := range f.Channels {
 			if proCh, ok := s.st.remap[ch.ID]; ok {
@@ -305,6 +332,7 @@ func (s *ProStreamer) teardown() {
 	conn := s.st.conn
 	configID := s.st.configID
 	s.st.conn = nil
+	s.st.configID = ""
 	s.st.path = "rest"
 	s.st.mu.Unlock()
 
@@ -376,23 +404,86 @@ func (s *ProStreamer) ensureConfig() (id string, remap map[uint16]uint8, reused 
 	if len(members) == 0 {
 		return "", nil, false, 0, fmt.Errorf("no color-capable lights with an entertainment service")
 	}
+	// desired is the set of entertainment-service rids the config must cover — used to
+	// detect a light-set change under a reused config (Phase D).
+	desired := make(map[string]bool, len(members))
+	for _, m := range members {
+		desired[m.ServiceRID] = true
+	}
 
-	// Reuse an existing relume config if present, else create one.
+	// Fast path: a config id resolved earlier this process — reuse it without listing,
+	// as long as it still exists and covers the current light set.
+	if cached := s.cachedID(); cached != "" {
+		if full, gerr := s.pro.GetEntertainmentConfig(cached); gerr == nil && configCoversServices(full, desired) {
+			remap = remapFromConfig(full, svcToV1)
+			if len(remap) == 0 {
+				return "", nil, false, 0, fmt.Errorf("no channels mapped to TV light ids")
+			}
+			return cached, remap, true, len(remap), nil
+		}
+		s.setCachedID("") // gone or stale — fall through to the authoritative path
+	}
+
+	// Slow path: list the Pro's configs (authoritative — prevents duplicate creates)
+	// and pick the persisted id if still present, else a config named `relume`.
 	configs, err := s.pro.EntertainmentConfigs()
 	if err != nil {
 		return "", nil, false, 0, fmt.Errorf("entertainment configs: %w", err)
 	}
+	var persisted string
+	if s.loadCfgID != nil {
+		persisted = s.loadCfgID()
+	}
 	for _, c := range configs {
-		if c.Metadata.Name == configName {
-			id, reused = c.ID, true
+		if persisted != "" && c.ID == persisted {
+			id = c.ID
 			break
 		}
 	}
 	if id == "" {
-		id, err = s.pro.CreateEntertainmentConfig(configName, members)
-		if err != nil {
-			return "", nil, false, 0, fmt.Errorf("create config: %w", err)
+		for _, c := range configs {
+			if c.Metadata.Name == configName {
+				id = c.ID
+				break
+			}
 		}
+	}
+
+	// Validate the candidate covers the current light set; if it changed (or the
+	// config vanished), drop the stale config and recreate it.
+	if id != "" {
+		full, gerr := s.pro.GetEntertainmentConfig(id)
+		switch {
+		case gerr == nil && configCoversServices(full, desired):
+			remap = remapFromConfig(full, svcToV1)
+			if len(remap) == 0 {
+				return "", nil, false, 0, fmt.Errorf("no channels mapped to TV light ids")
+			}
+			s.setCachedID(id)
+			s.persistConfigID(id)
+			return id, remap, true, len(remap), nil
+		case gerr == nil:
+			// The color-light set changed under the config — stop (in case it is
+			// active) and delete it so it never lingers or hits the Pro's area limit.
+			s.log.Info("pro entertainment config stale (light set changed), recreating", "id", id)
+			_ = s.pro.StopStream(id)
+			if derr := s.pro.DeleteEntertainmentConfig(id); derr != nil {
+				s.log.Warn("pro entertainment delete stale config", "id", id, "err", derr)
+			}
+		default:
+			// The candidate is in the authoritative list yet GetEntertainmentConfig
+			// failed — a transient error, not a missing config. Do NOT recreate (that
+			// would mint a duplicate `relume` config); fail so run() retries via the
+			// REST fallback and re-lists on backoff.
+			return "", nil, false, 0, fmt.Errorf("get candidate config %s: %w", id, gerr)
+		}
+		id = ""
+	}
+
+	// Create a fresh config and persist its id for reuse next stream/restart.
+	id, err = s.pro.CreateEntertainmentConfig(configName, members)
+	if err != nil {
+		return "", nil, false, 0, fmt.Errorf("create config: %w", err)
 	}
 
 	// Read back the bridge-assigned channels (ground truth — do not assume 0..N-1).
@@ -400,7 +491,65 @@ func (s *ProStreamer) ensureConfig() (id string, remap map[uint16]uint8, reused 
 	if err != nil {
 		return "", nil, false, 0, fmt.Errorf("get config: %w", err)
 	}
-	remap = map[uint16]uint8{}
+	remap = remapFromConfig(full, svcToV1)
+	if len(remap) == 0 {
+		return "", nil, false, 0, fmt.Errorf("no channels mapped to TV light ids")
+	}
+	s.setCachedID(id)
+	s.persistConfigID(id)
+	return id, remap, false, len(remap), nil
+}
+
+// cachedID / setCachedID guard the in-process resolved config id under st.mu (a Stop
+// does not join the run goroutine, so an old run's in-flight ensureConfig can race a
+// new run's establish).
+func (s *ProStreamer) cachedID() string {
+	s.st.mu.Lock()
+	defer s.st.mu.Unlock()
+	return s.st.cachedConfigID
+}
+
+func (s *ProStreamer) setCachedID(id string) {
+	s.st.mu.Lock()
+	s.st.cachedConfigID = id
+	s.st.mu.Unlock()
+}
+
+// persistConfigID stores the resolved config id via the optional config store.
+func (s *ProStreamer) persistConfigID(id string) {
+	if s.saveCfgID != nil {
+		s.saveCfgID(id)
+	}
+}
+
+// configCoversServices reports whether full's channels reference exactly the desired
+// entertainment-service rids — the membership check that detects a light-set change
+// under a reused config. Compares sets (order-independent); empty-member channels
+// are skipped, as the bridge can return placeholder channels.
+func configCoversServices(full *bridgepro.EntertainmentConfigFull, desired map[string]bool) bool {
+	have := make(map[string]bool, len(desired))
+	for _, ch := range full.Channels {
+		for _, m := range ch.Members {
+			if m.Service.RID != "" {
+				have[m.Service.RID] = true
+			}
+		}
+	}
+	if len(have) != len(desired) {
+		return false
+	}
+	for rid := range desired {
+		if !have[rid] {
+			return false
+		}
+	}
+	return true
+}
+
+// remapFromConfig builds the TV-v1-id → Pro-channel-id map from the bridge's
+// read-back config (ground truth — the bridge assigns the channel ids).
+func remapFromConfig(full *bridgepro.EntertainmentConfigFull, svcToV1 map[string]uint16) map[uint16]uint8 {
+	remap := map[uint16]uint8{}
 	for _, ch := range full.Channels {
 		if len(ch.Members) == 0 {
 			continue
@@ -409,10 +558,7 @@ func (s *ProStreamer) ensureConfig() (id string, remap map[uint16]uint8, reused 
 			remap[v1] = uint8(ch.ChannelID)
 		}
 	}
-	if len(remap) == 0 {
-		return "", nil, false, 0, fmt.Errorf("no channels mapped to TV light ids")
-	}
-	return id, remap, reused, len(remap), nil
+	return remap
 }
 
 // position spreads members cosmetically along x, clamped to the Pro's valid
