@@ -1,4 +1,4 @@
-name: Cleanup GHCR
+name: Cleanup images
 
 # Prune old container images from GHCR, keeping the 10 most recent tagged
 # releases plus their multi-arch child manifests. Untagged orphans (old buildx
