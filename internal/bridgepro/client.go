@@ -257,3 +257,29 @@ func (c *Client) put(path string, payload any) error {
 	}
 	return nil
 }
+
+// del performs an authenticated CLIP v2 DELETE. Used to remove relume's own
+// entertainment_configuration when it no longer matches the current light set (so
+// stale configs do not pile up on the Pro and hit its area limit).
+func (c *Client) del(path string) error {
+	req, _ := http.NewRequest(http.MethodDelete, "https://"+c.host+path, nil)
+	req.Header.Set(appKeyHeader, c.appKey)
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("DELETE %s: %w", path, err)
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("DELETE %s: status %d: %s", path, resp.StatusCode, string(raw))
+	}
+	var out struct {
+		Errors []struct {
+			Description string `json:"description"`
+		} `json:"errors"`
+	}
+	if err := json.Unmarshal(raw, &out); err == nil && len(out.Errors) > 0 {
+		return fmt.Errorf("DELETE %s: %s", path, out.Errors[0].Description)
+	}
+	return nil
+}

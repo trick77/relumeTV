@@ -120,6 +120,30 @@ func TestStartStopStream_bodies(t *testing.T) {
 	}
 }
 
+func TestDeleteEntertainmentConfig_method(t *testing.T) {
+	// Given
+	var gotMethod, gotPath string
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+		if r.Header.Get(appKeyHeader) != "test-app-key" {
+			t.Errorf("missing app key header")
+		}
+		_, _ = io.WriteString(w, `{"errors":[],"data":[{"rid":"cfg-1","rtype":"entertainment_configuration"}]}`)
+	}))
+	defer srv.Close()
+
+	// When
+	err := testClient(srv).DeleteEntertainmentConfig("cfg-1")
+
+	// Then
+	if err != nil {
+		t.Fatalf("DeleteEntertainmentConfig: %v", err)
+	}
+	if gotMethod != http.MethodDelete || gotPath != "/clip/v2/resource/entertainment_configuration/cfg-1" {
+		t.Fatalf("req = %s %s", gotMethod, gotPath)
+	}
+}
+
 func TestGetEntertainmentConfig_channels(t *testing.T) {
 	// Given
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -56,6 +56,51 @@ func TestLoad_GeneratesAndPersistsIdentity(t *testing.T) {
 	}
 }
 
+func TestEntConfigID_RoundTripsAndClears(t *testing.T) {
+	// Given
+	path := filepath.Join(t.TempDir(), "relume.json")
+	c, _ := Load(path)
+
+	// When: save an id
+	if err := c.SaveEntConfigID("cfg-uuid"); err != nil {
+		t.Fatalf("SaveEntConfigID: %v", err)
+	}
+
+	// Then: it persists across a reload
+	reloaded, _ := Load(path)
+	if got := reloaded.LoadEntConfigID(); got != "cfg-uuid" {
+		t.Fatalf("LoadEntConfigID = %q, want cfg-uuid", got)
+	}
+
+	// And: clearing it persists too
+	if err := reloaded.SaveEntConfigID(""); err != nil {
+		t.Fatalf("SaveEntConfigID clear: %v", err)
+	}
+	again, _ := Load(path)
+	if got := again.LoadEntConfigID(); got != "" {
+		t.Fatalf("LoadEntConfigID after clear = %q, want empty", got)
+	}
+}
+
+func TestSetPro_DoesNotClobberEntConfigID(t *testing.T) {
+	// Given: a persisted ent config id
+	path := filepath.Join(t.TempDir(), "relume.json")
+	c, _ := Load(path)
+	if err := c.SaveEntConfigID("cfg-uuid"); err != nil {
+		t.Fatalf("SaveEntConfigID: %v", err)
+	}
+
+	// When: the Pro pairing is replaced (copy-on-write, as watchPro/reconnect do)
+	if err := c.SetPro(&BridgePro{Host: "10.0.0.5", AppKey: "k"}); err != nil {
+		t.Fatalf("SetPro: %v", err)
+	}
+
+	// Then: the ent config id survives (it is top-level, not inside BridgePro)
+	if got := c.LoadEntConfigID(); got != "cfg-uuid" {
+		t.Fatalf("LoadEntConfigID = %q, want cfg-uuid (clobbered by SetPro)", got)
+	}
+}
+
 func TestAddApiUser_Persists(t *testing.T) {
 	// Given
 	path := filepath.Join(t.TempDir(), "relume.json")

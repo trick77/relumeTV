@@ -110,6 +110,12 @@ type Config struct {
 	Identity Identity            `json:"identity"`
 	ApiUsers map[string]*ApiUser `json:"apiUsers"`
 	Pro      *BridgePro          `json:"bridgePro,omitempty"`
+	// EntConfigID is the id of relume's own entertainment_configuration on the Pro,
+	// persisted so the entertainment streamer can reuse it across restarts instead of
+	// re-finding (or recreating) it on each stream. Top-level rather than inside Pro
+	// so SetPro's copy-on-write reconnect never clobbers it. Access via
+	// LoadEntConfigID / SaveEntConfigID (mutex-guarded).
+	EntConfigID string `json:"entConfigId,omitempty"`
 
 	mu   sync.Mutex `json:"-"`
 	path string     `json:"-"`
@@ -219,6 +225,27 @@ func (c *Config) SetPro(p *BridgePro) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.Pro = p
+	return c.save()
+}
+
+// LoadEntConfigID returns the persisted relume entertainment_configuration id (empty
+// if none). The streamer uses it as the first candidate to reuse across restarts.
+func (c *Config) LoadEntConfigID() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.EntConfigID
+}
+
+// SaveEntConfigID persists the relume entertainment_configuration id (an empty id
+// clears it, e.g. when the streamer deleted a stale config). A no-op write when the
+// id is unchanged, so the streamer can call it freely without churning the file.
+func (c *Config) SaveEntConfigID(id string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.EntConfigID == id {
+		return nil
+	}
+	c.EntConfigID = id
 	return c.save()
 }
 

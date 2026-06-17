@@ -20,12 +20,16 @@ type stubPro struct {
 	services []bridgepro.EntertainmentService
 	configs  []bridgepro.EntertainmentConfig
 	full     *bridgepro.EntertainmentConfigFull
+	fullByID map[string]*bridgepro.EntertainmentConfigFull
 	created  string
 
 	mu        sync.Mutex
 	started   []string
 	stopped   []string
+	deleted   []string
+	createdN  int
 	createErr error
+	getErr    error
 	// startBlockedUntilStop simulates a leftover-active config: StartStream is
 	// rejected until StopStream has been called once.
 	startBlockedUntilStop bool
@@ -42,10 +46,25 @@ func (s *stubPro) CreateEntertainmentConfig(name string, _ []bridgepro.ConfigMem
 	if s.createErr != nil {
 		return "", s.createErr
 	}
+	s.mu.Lock()
+	s.createdN++
+	s.mu.Unlock()
 	return s.created, nil
 }
-func (s *stubPro) GetEntertainmentConfig(string) (*bridgepro.EntertainmentConfigFull, error) {
+func (s *stubPro) GetEntertainmentConfig(id string) (*bridgepro.EntertainmentConfigFull, error) {
+	if s.getErr != nil {
+		return nil, s.getErr
+	}
+	if f, ok := s.fullByID[id]; ok {
+		return f, nil
+	}
 	return s.full, nil
+}
+func (s *stubPro) DeleteEntertainmentConfig(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.deleted = append(s.deleted, id)
+	return nil
 }
 func (s *stubPro) StartStream(id string) error {
 	s.mu.Lock()
@@ -123,6 +142,147 @@ func TestProStreamer_ensureConfig_remapFromGroundTruth(t *testing.T) {
 	}
 	if got := remap[1]; got != 5 {
 		t.Fatalf("remap[1] = %d, want 5 (bridge-assigned channel id, not 0..N-1)", got)
+	}
+}
+
+// configFull builds an entertainment_configuration read-back with one channel per
+// given service rid (channel ids start at base), for the membership tests.
+func configFull(id string, base int, svcRIDs ...string) *bridgepro.EntertainmentConfigFull {
+	full := &bridgepro.EntertainmentConfigFull{ID: id}
+	for i, rid := range svcRIDs {
+		ch := bridgepro.EntChannel{ChannelID: base + i}
+		ch.Members = append(ch.Members, struct {
+			Service struct {
+				RID   string `json:"rid"`
+				RType string `json:"rtype"`
+			} `json:"service"`
+			Index int `json:"index"`
+		}{})
+		ch.Members[0].Service.RID = rid
+		full.Channels = append(full.Channels, ch)
+	}
+	return full
+}
+
+func TestProStreamer_ensureConfig_reusesMatchingConfig(t *testing.T) {
+	// Given: a relume config that already covers the current light set (svc-A).
+	pro := oneLightPro()
+	pro.configs = []bridgepro.EntertainmentConfig{{ID: testConfigID}}
+	pro.configs[0].Metadata.Name = configName
+
+	// When
+	id, _, reused, _, err := quietStreamer(pro, nil).ensureConfig()
+
+	// Then: reused as-is, nothing deleted or created.
+	if err != nil {
+		t.Fatalf("ensureConfig: %v", err)
+	}
+	if id != testConfigID || !reused {
+		t.Fatalf("id=%q reused=%v, want %q reused", id, reused, testConfigID)
+	}
+	if len(pro.deleted) != 0 || pro.createdN != 0 {
+		t.Fatalf("expected no delete/create: deleted=%v created=%d", pro.deleted, pro.createdN)
+	}
+}
+
+func TestProStreamer_ensureConfig_recreatesOnLightSetChange(t *testing.T) {
+	// Given: an existing relume config that covers a now-gone light (svc-OLD), while
+	// the current color light maps to svc-A — the set changed under the config.
+	pro := oneLightPro()
+	pro.configs = []bridgepro.EntertainmentConfig{{ID: "stale-1"}}
+	pro.configs[0].Metadata.Name = configName
+	pro.fullByID = map[string]*bridgepro.EntertainmentConfigFull{
+		"stale-1": configFull("stale-1", 9, "svc-OLD"),
+	}
+
+	// When
+	id, remap, reused, _, err := quietStreamer(pro, nil).ensureConfig()
+
+	// Then: the stale config is stopped+deleted and a fresh one created.
+	if err != nil {
+		t.Fatalf("ensureConfig: %v", err)
+	}
+	if reused || id != testConfigID {
+		t.Fatalf("id=%q reused=%v, want fresh %q", id, reused, testConfigID)
+	}
+	if len(pro.deleted) != 1 || pro.deleted[0] != "stale-1" {
+		t.Fatalf("expected stale-1 deleted, got %v", pro.deleted)
+	}
+	if pro.createdN != 1 {
+		t.Fatalf("expected 1 create, got %d", pro.createdN)
+	}
+	if remap[1] != 5 {
+		t.Fatalf("remap[1]=%d, want 5", remap[1])
+	}
+}
+
+func TestProStreamer_ensureConfig_cachesAcrossCalls(t *testing.T) {
+	// Given: a fresh streamer (no existing configs → first call creates).
+	pro := oneLightPro()
+	s := quietStreamer(pro, nil)
+
+	// When: two ensureConfig calls
+	if _, _, _, _, err := s.ensureConfig(); err != nil {
+		t.Fatalf("first ensureConfig: %v", err)
+	}
+	if _, _, reused, _, err := s.ensureConfig(); err != nil {
+		t.Fatalf("second ensureConfig: %v", err)
+	} else if !reused {
+		t.Fatalf("second call should reuse the cached config")
+	}
+
+	// Then: only one create — the second call took the in-memory fast path.
+	if pro.createdN != 1 {
+		t.Fatalf("expected exactly 1 create across two calls, got %d", pro.createdN)
+	}
+}
+
+func TestProStreamer_ensureConfig_reusesPersistedIDAndSaves(t *testing.T) {
+	// Given: a persisted id pointing at a config whose NAME is not `relume` (proves
+	// the id-based match, not the name fallback). It covers the current light set.
+	pro := oneLightPro()
+	pro.configs = []bridgepro.EntertainmentConfig{{ID: testConfigID}}
+	pro.configs[0].Metadata.Name = "someone-elses-name"
+
+	var saved string
+	s := quietStreamer(pro, nil)
+	s.SetConfigStore(func() string { return testConfigID }, func(id string) { saved = id })
+
+	// When
+	id, _, reused, _, err := s.ensureConfig()
+
+	// Then: reused via the persisted id and re-saved.
+	if err != nil {
+		t.Fatalf("ensureConfig: %v", err)
+	}
+	if id != testConfigID || !reused {
+		t.Fatalf("id=%q reused=%v, want reused %q", id, reused, testConfigID)
+	}
+	if saved != testConfigID {
+		t.Fatalf("saved=%q, want %q", saved, testConfigID)
+	}
+	if pro.createdN != 0 {
+		t.Fatalf("expected no create, got %d", pro.createdN)
+	}
+}
+
+func TestProStreamer_ensureConfig_transientGetDoesNotDuplicate(t *testing.T) {
+	// Given: a listed relume config (so it exists), but reading it back fails
+	// transiently — recreating would mint a duplicate.
+	pro := oneLightPro()
+	pro.configs = []bridgepro.EntertainmentConfig{{ID: testConfigID}}
+	pro.configs[0].Metadata.Name = configName
+	pro.getErr = fmt.Errorf("temporary network blip")
+
+	// When
+	_, _, _, _, err := quietStreamer(pro, nil).ensureConfig()
+
+	// Then: it fails (→ REST fallback + backoff re-list) instead of creating a duplicate.
+	if err == nil {
+		t.Fatal("expected an error, got nil")
+	}
+	if pro.createdN != 0 || len(pro.deleted) != 0 {
+		t.Fatalf("expected no create/delete on transient error: created=%d deleted=%v", pro.createdN, pro.deleted)
 	}
 }
 

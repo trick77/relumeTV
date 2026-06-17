@@ -122,3 +122,11 @@ func (c *Client) StartStream(id string) error {
 func (c *Client) StopStream(id string) error {
 	return c.put("/clip/v2/resource/entertainment_configuration/"+id, map[string]any{"action": "stop"})
 }
+
+// DeleteEntertainmentConfig removes an entertainment_configuration by id. relume
+// uses it to drop its own `relume` config when the color-light set changed under it
+// (so a stale config does not linger or count against the Pro's area limit). Stop
+// the stream first if it might be active — the Pro rejects deleting an active one.
+func (c *Client) DeleteEntertainmentConfig(id string) error {
+	return c.del("/clip/v2/resource/entertainment_configuration/" + id)
+}
