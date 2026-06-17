@@ -26,6 +26,7 @@ import (
 	"github.com/trick77/relume/internal/huestream"
 	"github.com/trick77/relume/internal/mdns"
 	"github.com/trick77/relume/internal/ssdp"
+	"github.com/trick77/relume/internal/webui"
 )
 
 // version is set at build time via -ldflags "-X main.version=..." (CI).
@@ -84,6 +85,7 @@ type serveOptions struct {
 	controlledLightWindow  time.Duration
 	mode                   string
 	dtlsFallbackTimeout    time.Duration
+	uiPort                 int
 }
 
 func parseServeOptions(args []string) (serveOptions, error) {
@@ -102,6 +104,7 @@ func parseServeOptions(args []string) (serveOptions, error) {
 	controlledLightWindow := fs.Duration("controlled-light-window", time.Minute, "sliding window: a light counts as a current Ambilight light only if the TV drove it within this window; the restart/idle flash and idle-off touch only those (so config changes are forgotten after the window)")
 	mode := fs.String("mode", "rest", "control mode: 'rest' (default, proven REST-follow) or 'entertainment' (confirm the TV's stream activation and run the DTLS receiver on :2100)")
 	dtlsFallbackTimeout := fs.Duration("entertainment-dtls-timeout", 5*time.Second, "entertainment mode: how long to wait after confirming the TV's stream activation for the TV to open its DTLS stream on :2100 before reverting to REST-follow")
+	uiPort := fs.Int("ui-port", 0, "optional web UI port; 0 disables the UI (default). Recommended: 33300. Must differ from -http-port (80)")
 	if err := fs.Parse(args); err != nil {
 		return serveOptions{}, err
 	}
@@ -120,6 +123,7 @@ func parseServeOptions(args []string) (serveOptions, error) {
 		controlledLightWindow:  *controlledLightWindow,
 		mode:                   *mode,
 		dtlsFallbackTimeout:    *dtlsFallbackTimeout,
+		uiPort:                 *uiPort,
 	}, nil
 }
 
@@ -127,6 +131,19 @@ func runServe(args []string, log *slog.Logger) error {
 	opts, err := parseServeOptions(args)
 	if err != nil {
 		return err
+	}
+
+	// Optional web UI: when enabled, tee every log record into a hub so the UI's
+	// live event tail mirrors stderr. When disabled, the logger is untouched and
+	// the whole UI subsystem stays dormant (no overhead, headless behaviour).
+	var uiHub *webui.Hub
+	if opts.uiPort != 0 {
+		if opts.uiPort == opts.httpPort {
+			return fmt.Errorf("-ui-port %d clashes with -http-port; choose another (e.g. 33300)", opts.uiPort)
+		}
+		uiHub = webui.NewHub(200)
+		base := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})
+		log = slog.New(webui.NewLogHandler(base, uiHub))
 	}
 
 	cfg, err := config.Load(opts.configPath)
@@ -225,6 +242,36 @@ func runServe(args []string, log *slog.Logger) error {
 		// Keep the already-paired Pro reachable across reboots / IP changes.
 		w := newProWatcher(cfg, clip, controlled, opts.bridgeIP, opts.skipTLS, log)
 		go w.run(ctx)
+	}
+
+	// Optional web UI (opt-in via -ui-port). Read-mostly: it reads live state via
+	// the uiSource adapter and exposes a single test-flash action. A bind/serve
+	// failure is logged but never takes down the headless service.
+	if opts.uiPort != 0 {
+		bridgeID := cfg.Identity.BridgeID()
+		src := &uiSource{
+			cfg:        cfg,
+			clip:       clip,
+			controlled: controlled,
+			advName:    "Philips Hue - " + bridgeID[len(bridgeID)-6:],
+			version:    version,
+			started:    time.Now(),
+		}
+		flash := func() error {
+			pro := cfg.GetPro()
+			if pro == nil {
+				return fmt.Errorf("bridge pro not paired")
+			}
+			bridge.FlashIdle(bridgepro.New(pro), log, controlled.Current())
+			return nil
+		}
+		ui := webui.NewServer(fmt.Sprintf(":%d", opts.uiPort), uiHub, src, flash, log)
+		go func() {
+			if err := ui.Run(ctx); err != nil {
+				log.Warn("web ui server stopped", "err", err)
+			}
+		}()
+		log.Info("web ui enabled", "addr", fmt.Sprintf(":%d", opts.uiPort))
 	}
 
 	// Summarize the high-frequency Ambilight light-state writes periodically

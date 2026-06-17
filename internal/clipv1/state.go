@@ -177,6 +177,14 @@ func (s *streamState) inFallback() bool {
 	return s.fallback
 }
 
+// isUp reports whether a TV DTLS stream is currently connected (read-only, for
+// the web UI).
+func (s *streamState) isUp() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.streamUp
+}
+
 // setActive records the activation (or deactivation) the TV requested so
 // GET /groups/1 reflects it. owner is set on activate, cleared on deactivate.
 func (s *streamState) setActive(active bool, owner string) {
@@ -301,6 +309,18 @@ func (p *pairingGate) shouldDefer() bool {
 	defer p.mu.Unlock()
 	if p.firstPairSeen.IsZero() {
 		p.firstPairSeen = time.Now()
+	}
+	return time.Since(p.firstPairSeen) < p.acceptDelay
+}
+
+// pending reports whether a pairing attempt has been seen and is still inside the
+// accept window — a read-only view for the web UI, with none of shouldDefer's
+// first-attempt-timestamp side effect.
+func (p *pairingGate) pending() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.firstPairSeen.IsZero() {
+		return false
 	}
 	return time.Since(p.firstPairSeen) < p.acceptDelay
 }

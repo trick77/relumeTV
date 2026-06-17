@@ -357,3 +357,23 @@ func TestProWatcherTick_storedDiscoveryIDNotFoundDoesNotReconnect(t *testing.T) 
 		t.Errorf("Pro host changed to %q — must stay 192.0.2.1 (no wrong-bridge retarget)", got)
 	}
 }
+
+func TestParseServeOptions_UIPortDefaultsDisabled(t *testing.T) {
+	opts, err := parseServeOptions(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opts.uiPort != 0 {
+		t.Fatalf("ui-port default = %d, want 0 (disabled)", opts.uiPort)
+	}
+}
+
+func TestParseServeOptions_UIPortSet(t *testing.T) {
+	opts, err := parseServeOptions([]string{"-ui-port", "33300"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opts.uiPort != 33300 {
+		t.Fatalf("ui-port = %d, want 33300", opts.uiPort)
+	}
+}
