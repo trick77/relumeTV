@@ -377,3 +377,42 @@ func TestParseServeOptions_UIPortSet(t *testing.T) {
 		t.Fatalf("ui-port = %d, want 33300", opts.uiPort)
 	}
 }
+
+func TestParseServeOptions_UIFlag(t *testing.T) {
+	off, err := parseServeOptions(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if off.ui {
+		t.Fatal("-ui should default to false")
+	}
+	on, err := parseServeOptions([]string{"-ui"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !on.ui {
+		t.Fatal("-ui should be true when set")
+	}
+}
+
+func TestUIPortFor(t *testing.T) {
+	cases := []struct {
+		name   string
+		ui     bool
+		uiPort int
+		want   int
+	}{
+		{"disabled by default", false, 0, 0},
+		{"-ui uses predefined port", true, 0, uiDefaultPort},
+		{"-ui-port overrides without -ui", false, 8080, 8080},
+		{"-ui-port wins over -ui", true, 8080, 8080},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := uiPortFor(serveOptions{ui: tc.ui, uiPort: tc.uiPort})
+			if got != tc.want {
+				t.Fatalf("uiPortFor(ui=%v,uiPort=%d) = %d, want %d", tc.ui, tc.uiPort, got, tc.want)
+			}
+		})
+	}
+}

@@ -23,10 +23,10 @@ services:
     # in the named volume above.
     command: ["serve"]
     # Optional web UI (off by default). Uncomment to enable the setup assistant +
-    # live dashboard on port 33300. With network_mode: host the port is reachable
-    # on the LAN as-is (no port mapping needed) and has NO authentication — only
-    # enable it on a trusted network.
-    # command: ["serve", "-ui-port", "33300"]
+    # live dashboard with -ui (serves on port 33100). With network_mode: host the
+    # port is reachable on the LAN as-is (no port mapping needed) and has NO
+    # authentication — only enable it on a trusted network.
+    # command: ["serve", "-ui"]
 
 volumes:
   relume-data:

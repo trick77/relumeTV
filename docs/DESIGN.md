@@ -111,8 +111,8 @@ re-runs the activation handshake. See [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
 ## Web UI (optional)
 
 relume can serve an optional web UI — a guided setup assistant plus a live status dashboard.
-It is **off by default** and opt-in via `-ui-port <port>` (`0` disables it; recommended `33300`,
-which must differ from the TV-facing `-http-port`). Design notes:
+It is **off by default** and opt-in via `-ui` (serves on the predefined port `33100`); `-ui-port`
+overrides that with a custom port and must differ from the TV-facing `-http-port`. Design notes:
 
 - **Embedded, no build step.** Static HTML/CSS/JS compiled into the binary via `go:embed`
   (`internal/webui/assets`). No npm/Node/framework.
