@@ -56,7 +56,7 @@ The Bridge Pro breaks the Ambilight+Hue path in three ways:
   → v1→v2 → Pro (207/errors handled). Group path is still a logged stub (completed with M4).
 - **mDNS discovery** ✅ implemented (active `_hue._tcp` announce) + `avahi-service` command.
   Final TV-detection test pending on Linux (see below).
-- **M4 — Entertainment** 🚧 in progress (opt-in `-mode entertainment`; REST stays default).
+- **M4 — Entertainment** 🚧 in progress (`-mode entertainment` is now the **default**; REST is the automatic fallback).
   - Phase A ✅ `internal/huestream` parser (+tests) + `internal/entertainment` DTLS-PSK receiver
     on :2100 (PSK = the TV's minted clientkey), decodes + logs frames. Verified: TV uses DTLS.
   - Phase B ✅ forward decoded frames to the Pro via the coalescing REST provider
@@ -108,10 +108,11 @@ The Bridge Pro breaks the Ambilight+Hue path in three ways:
    does the TV actually resume per-light PUTs? Ideally test a TV/situation that does NOT open
    the DTLS stream. If the TV does not revert, the documented reserve is an active stream-stop
    nudge (Ansatz 2 from the watchdog design).
-2. **Flip the default to `-mode entertainment`** (REST becomes the explicit fallback). Only
-   after step 1 — the watchdog is the safety net that makes entertainment safe as the default.
-   Includes: change the `-mode` default in `cmd/relume/main.go`, update the README/`docs/DESIGN.md`
-   mode wording, and confirm a fresh `serve` (no `-mode`) lights the TV over DTLS.
+2. ~~**Flip the default to `-mode entertainment`** (REST becomes the explicit fallback).~~ ✅ done.
+   The `-mode` default in `cmd/relume/main.go` is now `entertainment` (locked by a test); the
+   README/`docs/DESIGN.md` mode wording was updated (entertainment = default, REST = automatic
+   fallback). The watchdog (Phase C.1) + Pro-side fallback are the safety nets. A fresh `serve`
+   (no `-mode`) now runs the DTLS path.
 3. ~~**Phase D — group persistence + activation lifecycle.**~~ ✅ done (see M4 Phase D
    above). Real-TV confirmation still wanted: that a light added/removed on the Pro between
    streams triggers exactly one stop+delete+recreate (not churn), and that the persisted

@@ -27,7 +27,7 @@ everything to CLIP v2 against the Pro.
 | Base | Standalone Go proxy (diyHue is reference only, not a fork) |
 | Deployment | Docker with `network_mode: host` — multicast discovery needs the TV's L2 |
 | Lights | Proxied live from the Bridge Pro (no local light database) |
-| Control path | Two modes: REST-follow (default) and Entertainment/DTLS (opt-in) |
+| Control path | Two modes: Entertainment/DTLS (default) and REST-follow (automatic fallback) |
 | Bridge Pro setup | One-time pairing; the TLS certificate is pinned (`-skip-tls-verify` to override) |
 
 ## Components
@@ -64,9 +64,11 @@ everything to CLIP v2 against the Pro.
 
 ## Control modes
 
-Relume drives the lights in one of two modes (`-mode`):
+Relume drives the lights in one of two modes (`-mode`). Entertainment is the default; REST is the
+automatic fallback (the watchdog reverts to it when a TV confirms activation but never opens its
+DTLS stream, and the Pro-side path falls back to it on a DTLS/config failure).
 
-### REST-follow (`-mode rest`, default)
+### REST-follow (`-mode rest`, fallback)
 
 Relume gives the TV the generic stream-activation acknowledgement, so the TV stays on its
 fallback path: per-light v1 `PUT` writes. Relume translates each write to CLIP v2 and forwards
@@ -77,7 +79,7 @@ This is simple and proven, but it cannot sustain the full Ambilight frame rate: 
 v2 writes are rate-limited and the Pro's command queue overflows (`503 command queue is full`)
 under a real ~25 fps stream.
 
-### Entertainment / DTLS (`-mode entertainment`, opt-in)
+### Entertainment / DTLS (`-mode entertainment`, default)
 
 This is the low-latency path a real Hue entertainment app uses, and it removes the REST
 bottleneck:

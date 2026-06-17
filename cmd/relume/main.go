@@ -119,7 +119,7 @@ func parseServeOptions(args []string) (serveOptions, error) {
 	skipTLS := fs.Bool("skip-tls-verify", false, "skip TLS verification to the Bridge Pro (instead of cert pinning)")
 	idleOffTimeout := fs.Duration("idle-off-timeout", 30*time.Second, "when the TV stops sending light writes for this long, flash the lights green twice and turn them off (0 = disabled)")
 	controlledLightWindow := fs.Duration("controlled-light-window", time.Minute, "sliding window: a light counts as a current Ambilight light only if the TV drove it within this window; the restart/idle flash and idle-off touch only those (so config changes are forgotten after the window)")
-	mode := fs.String("mode", "rest", "control mode: 'rest' (default, proven REST-follow) or 'entertainment' (confirm the TV's stream activation and run the DTLS receiver on :2100)")
+	mode := fs.String("mode", "entertainment", "control mode: 'entertainment' (default, low-latency DTLS stream to the Pro; auto-falls back to REST if the TV never opens its stream) or 'rest' (per-light REST-follow)")
 	dtlsFallbackTimeout := fs.Duration("entertainment-dtls-timeout", 5*time.Second, "entertainment mode: how long to wait after confirming the TV's stream activation for the TV to open its DTLS stream on :2100 before reverting to REST-follow")
 	ui := fs.Bool("ui", false, "enable the optional web UI on the predefined port 33100 (off by default)")
 	uiPort := fs.Int("ui-port", 0, "override the web UI port (implies -ui; 0 = use -ui's default). Must differ from -http-port (80)")
@@ -198,9 +198,10 @@ func runServe(args []string, log *slog.Logger) error {
 		"tv_devicetypes", cfg.PairedDeviceTypes(),
 	)
 
-	// mode selects the control path. REST (default) keeps the proven REST-follow
-	// behavior; entertainment confirms the TV's stream activation and runs the DTLS
-	// receiver on :2100. Additive — REST stays untouched.
+	// mode selects the control path. Entertainment (default) confirms the TV's
+	// stream activation and runs the DTLS receiver on :2100, streaming to the Pro
+	// over DTLS; if the TV never opens its stream the watchdog reverts to REST.
+	// REST (explicit fallback) keeps the proven per-light REST-follow behavior.
 	switch opts.mode {
 	case "rest", "entertainment":
 	default:

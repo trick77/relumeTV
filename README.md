@@ -84,7 +84,7 @@ State (bridge identity, TV tokens, **Bridge Pro app key + client key**) lives in
 
 ### Flags (`serve`)
 
-- **`-mode`** &nbsp;·&nbsp; default `rest` — Control mode: `rest` (per-light REST-follow) or `entertainment` (low-latency DTLS stream to the Pro). See [docs/DESIGN.md](docs/DESIGN.md#control-modes).
+- **`-mode`** &nbsp;·&nbsp; default `entertainment` — Control mode: `entertainment` (low-latency DTLS stream to the Pro; auto-falls back to REST if the TV never opens its stream) or `rest` (per-light REST-follow). See [docs/DESIGN.md](docs/DESIGN.md#control-modes).
 - **`-http-port`** &nbsp;·&nbsp; default `80` — HTTP port the TV connects to. The TV hardcodes `:80` and ignores any other advertised port, so changing this will almost certainly break discovery/pairing — leave it at `80`.
 - **`-advertise-ip`** &nbsp;·&nbsp; default auto — IP advertised via mDNS/SSDP; set it on a multi-homed host.
 - **`-bridge-ip`** — Bridge Pro IP (skips cloud discovery).

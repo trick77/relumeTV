@@ -395,6 +395,16 @@ func TestParseServeOptions_UIFlag(t *testing.T) {
 	}
 }
 
+func TestParseServeOptions_DefaultModeIsEntertainment(t *testing.T) {
+	opts, err := parseServeOptions(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opts.mode != "entertainment" {
+		t.Fatalf("default mode = %q, want entertainment (REST is the explicit fallback)", opts.mode)
+	}
+}
+
 func TestUIPortFor(t *testing.T) {
 	cases := []struct {
 		name   string
