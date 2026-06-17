@@ -33,23 +33,3 @@ func TestServiceSpec_matchesHueBridgeAnnouncement(t *testing.T) {
 		t.Errorf("txt = %#v", spec.txt)
 	}
 }
-
-func TestServiceSpec_withAmbilightProfileUsesBridgeIDHost(t *testing.T) {
-	// Given
-	a := New(config.Identity{Serial: "2c4d54ea2832"}, "192.0.2.10", 80, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	a.IdentityProfile = "ambilight"
-
-	// When
-	spec := a.serviceSpec()
-
-	// Then
-	if spec.host != "2c4d54fffeea2832" {
-		t.Errorf("host = %q", spec.host)
-	}
-	if spec.instance != "Philips Hue - EA2832" {
-		t.Errorf("instance = %q", spec.instance)
-	}
-	if !reflect.DeepEqual(spec.txt, []string{"bridgeid=2C4D54FFFEEA2832", "modelid=BSB002"}) {
-		t.Errorf("txt = %#v", spec.txt)
-	}
-}

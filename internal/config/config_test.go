@@ -19,18 +19,6 @@ func TestIdentity_Derivations(t *testing.T) {
 	if got := id.UUID(); got != "2f402f80-da50-11e1-9b23-2c4d54ea2832" {
 		t.Errorf("UUID = %q", got)
 	}
-	if got := id.SerialForProfile(""); got != "2c4d54ea2832" {
-		t.Errorf("SerialForProfile default = %q", got)
-	}
-	if got := id.UUIDForProfile(""); got != "2f402f80-da50-11e1-9b23-2c4d54ea2832" {
-		t.Errorf("UUIDForProfile default = %q", got)
-	}
-	if got := id.SerialForProfile("ambilight"); got != "2c4d54fffeea2832" {
-		t.Errorf("SerialForProfile ambilight = %q", got)
-	}
-	if got := id.UUIDForProfile("ambilight"); got != "2f402f80-da50-11e1-9b23-2c4d54fffeea2832" {
-		t.Errorf("UUIDForProfile ambilight = %q", got)
-	}
 }
 
 func TestLoad_GeneratesAndPersistsIdentity(t *testing.T) {

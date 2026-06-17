@@ -70,25 +70,20 @@ func main() {
 }
 
 type serveOptions struct {
-	configPath               string
-	httpPort                 int
-	advertiseIP              string
-	debug                    bool
-	tvIP                     string
-	discoveryBurstDuration   time.Duration
-	discoveryBurstInterval   time.Duration
-	identityProfile          string
-	descriptionProfile       string
-	ssdpMediaServerAlias     bool
-	ssdpMediaServerBasicBody bool
-	ssdpDescriptorVariants   bool
-	disableSSDP              bool
-	bridgeIP                 string
-	skipTLS                  bool
-	idleOffTimeout           time.Duration
-	controlledLightWindow    time.Duration
-	mode                     string
-	dtlsFallbackTimeout      time.Duration
+	configPath             string
+	httpPort               int
+	advertiseIP            string
+	debug                  bool
+	tvIP                   string
+	discoveryBurstDuration time.Duration
+	discoveryBurstInterval time.Duration
+	disableSSDP            bool
+	bridgeIP               string
+	skipTLS                bool
+	idleOffTimeout         time.Duration
+	controlledLightWindow  time.Duration
+	mode                   string
+	dtlsFallbackTimeout    time.Duration
 }
 
 func parseServeOptions(args []string) (serveOptions, error) {
@@ -100,11 +95,6 @@ func parseServeOptions(args []string) (serveOptions, error) {
 	tvIP := fs.String("tv-ip", "", "TV IP to log all mDNS questions from in debug mode")
 	burstDuration := fs.Duration("discovery-burst-duration", 0, "send SSDP and mDNS discovery announcements at startup for this long")
 	burstInterval := fs.Duration("discovery-burst-interval", time.Second, "interval for discovery-burst announcements")
-	identityProfile := fs.String("identity-profile", "", "experimental identity profile: empty/default, ambilight, or hass")
-	descriptionProfile := fs.String("description-profile", "", "experimental description.xml profile: empty/default or ambilight-reference")
-	ssdpMediaServerAlias := fs.Bool("ssdp-media-server-alias", false, "also advertise/respond as UPnP MediaServer:1 for Philips TV discovery experiments")
-	ssdpMediaServerBasicBody := fs.Bool("ssdp-media-server-basic-body", false, "serve a Hue Basic descriptor body from the MediaServer alias URL")
-	ssdpDescriptorVariants := fs.Bool("ssdp-descriptor-variants", false, "also advertise query-scoped descriptor variants for Philips TV discovery experiments")
 	disableSSDP := fs.Bool("disable-ssdp", false, "do not run the SSDP responder (mDNS-only, like ha-hue-entertainment) — diagnostic")
 	bridgeIP := fs.String("bridge-ip", "", "Bridge Pro IP for auto-pairing (empty = cloud discovery)")
 	skipTLS := fs.Bool("skip-tls-verify", false, "skip TLS verification to the Bridge Pro (instead of cert pinning)")
@@ -116,25 +106,20 @@ func parseServeOptions(args []string) (serveOptions, error) {
 		return serveOptions{}, err
 	}
 	return serveOptions{
-		configPath:               *cfgPath,
-		httpPort:                 *httpPort,
-		advertiseIP:              *advIP,
-		debug:                    *debug,
-		tvIP:                     *tvIP,
-		discoveryBurstDuration:   *burstDuration,
-		discoveryBurstInterval:   *burstInterval,
-		identityProfile:          *identityProfile,
-		descriptionProfile:       *descriptionProfile,
-		ssdpMediaServerAlias:     *ssdpMediaServerAlias,
-		ssdpMediaServerBasicBody: *ssdpMediaServerBasicBody,
-		ssdpDescriptorVariants:   *ssdpDescriptorVariants,
-		disableSSDP:              *disableSSDP,
-		bridgeIP:                 *bridgeIP,
-		skipTLS:                  *skipTLS,
-		idleOffTimeout:           *idleOffTimeout,
-		controlledLightWindow:    *controlledLightWindow,
-		mode:                     *mode,
-		dtlsFallbackTimeout:      *dtlsFallbackTimeout,
+		configPath:             *cfgPath,
+		httpPort:               *httpPort,
+		advertiseIP:            *advIP,
+		debug:                  *debug,
+		tvIP:                   *tvIP,
+		discoveryBurstDuration: *burstDuration,
+		discoveryBurstInterval: *burstInterval,
+		disableSSDP:            *disableSSDP,
+		bridgeIP:               *bridgeIP,
+		skipTLS:                *skipTLS,
+		idleOffTimeout:         *idleOffTimeout,
+		controlledLightWindow:  *controlledLightWindow,
+		mode:                   *mode,
+		dtlsFallbackTimeout:    *dtlsFallbackTimeout,
 	}, nil
 }
 
@@ -178,23 +163,12 @@ func runServe(args []string, log *slog.Logger) error {
 	}
 	entertainmentMode := opts.mode == "entertainment"
 
-	// entProbe enables the passive entertainment diagnostic (RELUME_ENT_PROBE=1) in
-	// REST mode: confirm the TV's stream activation and observe whether it opens a
-	// DTLS stream on :2100 — without the -debug flood. Superseded by entertainment
-	// mode (which actually services the stream), so it is ignored there.
-	entProbe := os.Getenv("RELUME_ENT_PROBE") != "" && !entertainmentMode
-
 	clip := clipv1.New(cfg, ip, opts.httpPort, log)
 	clip.Debug = opts.debug
 	clip.TVIP = opts.tvIP
-	clip.EntProbe = entProbe
 	clip.EntertainmentMode = entertainmentMode
 	clip.SetDTLSFallbackTimeout(opts.dtlsFallbackTimeout)
 	log.Info("control mode", "mode", opts.mode)
-	clip.IdentityProfile = opts.identityProfile
-	clip.DescriptionProfile = opts.descriptionProfile
-	clip.MediaServerAlias = opts.ssdpMediaServerAlias
-	clip.MediaServerBasicBody = opts.ssdpMediaServerBasicBody
 
 	// controlled tracks the lights the TV is currently driving for Ambilight (a
 	// sliding window). The restart/idle flash and idle-off target only these — and
@@ -222,12 +196,8 @@ func runServe(args []string, log *slog.Logger) error {
 		responder.Debug = opts.debug
 		responder.BurstDuration = opts.discoveryBurstDuration
 		responder.BurstInterval = opts.discoveryBurstInterval
-		responder.IdentityProfile = opts.identityProfile
-		responder.MediaServerAlias = opts.ssdpMediaServerAlias
-		responder.DescriptorVariants = opts.ssdpDescriptorVariants
 	}
 	announcer := mdns.New(cfg.Identity, ip, opts.httpPort, log)
-	announcer.IdentityProfile = opts.identityProfile
 	announcer.BurstDuration = opts.discoveryBurstDuration
 	announcer.BurstInterval = opts.discoveryBurstInterval
 
@@ -250,10 +220,10 @@ func runServe(args []string, log *slog.Logger) error {
 	}
 
 	// Summarize the high-frequency Ambilight light-state writes periodically
-	// instead of logging every single request. The probe shortens the window to
-	// surface the update-rate (Hz) reading sooner during a diagnostic run.
+	// instead of logging every single request. Entertainment mode shortens the
+	// window to surface the update-rate (Hz) reading sooner.
 	activityWindow := 30 * time.Second
-	if entProbe || entertainmentMode {
+	if entertainmentMode {
 		activityWindow = 10 * time.Second
 	}
 	go clip.LogActivitySummary(ctx, activityWindow)
@@ -263,8 +233,7 @@ func runServe(args []string, log *slog.Logger) error {
 	// than racing the receiver's async OnStreamStop against process exit.
 	var entStreamer *entertainment.ProStreamer
 
-	switch {
-	case entertainmentMode:
+	if entertainmentMode {
 		// Entertainment mode: run the real DTLS receiver on :2100. It decrypts the
 		// TV's stream (PSK = the clientkey relume minted at pairing) and decodes the
 		// HueStream frames.
@@ -317,16 +286,6 @@ func runServe(args []string, log *slog.Logger) error {
 		go func() {
 			if err := recv.Run(ctx); err != nil && ctx.Err() == nil {
 				log.Warn("entertainment receiver", "err", err)
-			}
-		}()
-	case entProbe:
-		// Passive diagnostic (REST mode): observe whether the TV opens a DTLS stream
-		// on :2100 after activation. Probe-only; never sends.
-		probe := diag.NewEntertainmentProbe(ip, log)
-		log.Info("entertainment probe active (RELUME_ENT_PROBE): confirming stream activation + watching udp :2100")
-		go func() {
-			if err := probe.Run(ctx); err != nil && ctx.Err() == nil {
-				log.Warn("entertainment probe", "err", err)
 			}
 		}()
 	}

@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/trick77/relume/internal/config"
-	"github.com/trick77/relume/internal/upnp"
 )
 
 func mustGet(t *testing.T, url string) *http.Response {
@@ -227,208 +226,6 @@ func TestDescriptionXML_servesTextXMLContentType(t *testing.T) {
 	}
 }
 
-func TestDescriptionXML_aliasVariantServesTextXMLContentType(t *testing.T) {
-	// Given
-	s, ts := newTestServer(t)
-	s.MediaServerAlias = true
-
-	// When
-	resp := mustGet(t, ts.URL+"/description.xml?relume=ms1")
-	defer resp.Body.Close()
-	_, _ = io.ReadAll(resp.Body)
-
-	// Then
-	if got := resp.Header.Get("Content-Type"); got != "text/xml" {
-		t.Errorf("Content-Type = %q, expected text/xml", got)
-	}
-}
-
-func TestDescriptionXML_withHassProfileContainsHomeAssistantManufacturerFields(t *testing.T) {
-	// Given
-	s, ts := newTestServer(t)
-	s.IdentityProfile = "hass"
-
-	// When
-	resp := mustGet(t, ts.URL+"/description.xml")
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
-
-	// Then
-	xml := string(body)
-	for _, want := range []string{
-		"<manufacturer>Royal Philips Electronics</manufacturer>",
-		"<manufacturerURL>http://www.philips.com</manufacturerURL>",
-	} {
-		if !strings.Contains(xml, want) {
-			t.Errorf("description.xml does not contain %q:\n%s", want, xml)
-		}
-	}
-}
-
-func TestDescriptionXML_withAmbilightProfileKeepsSignifyManufacturerFields(t *testing.T) {
-	// Given
-	s, ts := newTestServer(t)
-	s.IdentityProfile = "ambilight"
-
-	// When
-	resp := mustGet(t, ts.URL+"/description.xml")
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
-
-	// Then
-	if got := resp.Header.Get("Server"); got != upnp.ServerHeaderAmbilight {
-		t.Errorf("Server header = %q, expected %q", got, upnp.ServerHeaderAmbilight)
-	}
-	if got := resp.Header.Get("Cache-Control"); got != "max-age=100" {
-		t.Errorf("Cache-Control = %q, expected max-age=100", got)
-	}
-	xml := string(body)
-	for _, want := range []string{
-		"<deviceType>urn:schemas-upnp-org:device:Basic:1</deviceType>",
-		"<manufacturer>Signify</manufacturer>",
-		"<manufacturerURL>http://www.meethue.com</manufacturerURL>",
-		"<modelName>Philips hue bridge 2015</modelName>",
-		"<modelNumber>BSB002</modelNumber>",
-	} {
-		if !strings.Contains(xml, want) {
-			t.Errorf("description.xml does not contain %q:\n%s", want, xml)
-		}
-	}
-}
-
-func TestDescriptionXML_withAmbilightReferenceDescriptionProfile(t *testing.T) {
-	// Given
-	s, ts := newTestServer(t)
-	s.IdentityProfile = "ambilight"
-	s.DescriptionProfile = "ambilight-reference"
-
-	// When
-	resp := mustGet(t, ts.URL+"/description.xml")
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
-
-	// Then
-	xml := string(body)
-	for _, want := range []string{
-		"<specVersion><major>1</major><minor>0</minor></specVersion>",
-		"<friendlyName>Ambilight Bridge (10.0.0.5)</friendlyName>",
-		"<manufacturer>Signify</manufacturer>",
-		"<modelNumber>BSB002</modelNumber>",
-	} {
-		if !strings.Contains(xml, want) {
-			t.Errorf("description.xml does not contain %q:\n%s", want, xml)
-		}
-	}
-}
-
-func TestDescriptionXML_withMediaServerAliasKeepsDefaultDeviceTypeForPlainPath(t *testing.T) {
-	// Given
-	s, ts := newTestServer(t)
-	s.IdentityProfile = "hass"
-	s.MediaServerAlias = true
-
-	// When
-	resp := mustGet(t, ts.URL+"/description.xml")
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
-
-	// Then
-	xml := string(body)
-	for _, want := range []string{
-		"<deviceType>urn:schemas-upnp-org:device:Basic:1</deviceType>",
-		"<manufacturer>Royal Philips Electronics</manufacturer>",
-		"<modelName>Philips hue bridge 2015</modelName>",
-		"<modelNumber>BSB002</modelNumber>",
-	} {
-		if !strings.Contains(xml, want) {
-			t.Errorf("description.xml does not contain %q:\n%s", want, xml)
-		}
-	}
-	if strings.Contains(xml, "<deviceType>urn:schemas-upnp-org:device:MediaServer:1</deviceType>") {
-		t.Errorf("plain description.xml contains MediaServer deviceType:\n%s", xml)
-	}
-}
-
-func TestDescriptionXML_withMediaServerAliasContainsMediaServerDeviceTypeForAliasQuery(t *testing.T) {
-	// Given
-	s, ts := newTestServer(t)
-	s.IdentityProfile = "hass"
-	s.MediaServerAlias = true
-
-	// When
-	resp := mustGet(t, ts.URL+"/description.xml?relume=ms1")
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
-
-	// Then
-	if got := resp.Header.Get("Cache-Control"); got != "max-age=1" {
-		t.Errorf("Cache-Control = %q, expected max-age=1", got)
-	}
-	xml := string(body)
-	for _, want := range []string{
-		"<deviceType>urn:schemas-upnp-org:device:MediaServer:1</deviceType>",
-		"<manufacturer>Royal Philips Electronics</manufacturer>",
-		"<modelName>Philips hue bridge 2015</modelName>",
-		"<modelNumber>BSB002</modelNumber>",
-	} {
-		if !strings.Contains(xml, want) {
-			t.Errorf("description.xml does not contain %q:\n%s", want, xml)
-		}
-	}
-	if strings.Contains(xml, "<deviceType>urn:schemas-upnp-org:device:Basic:1</deviceType>") {
-		t.Errorf("alias description.xml still contains Basic deviceType:\n%s", xml)
-	}
-}
-
-func TestDescriptionXML_withMediaServerBasicBodyKeepsBasicDeviceTypeForAliasQuery(t *testing.T) {
-	// Given
-	s, ts := newTestServer(t)
-	s.IdentityProfile = "ambilight"
-	s.MediaServerAlias = true
-	s.MediaServerBasicBody = true
-
-	// When
-	resp := mustGet(t, ts.URL+"/description.xml?relume=ms1")
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
-
-	// Then
-	if got := resp.Header.Get("Cache-Control"); got != "max-age=1" {
-		t.Errorf("Cache-Control = %q, expected max-age=1", got)
-	}
-	xml := string(body)
-	if !strings.Contains(xml, "<deviceType>urn:schemas-upnp-org:device:Basic:1</deviceType>") {
-		t.Errorf("alias description.xml does not contain Basic deviceType:\n%s", xml)
-	}
-	if strings.Contains(xml, "<deviceType>urn:schemas-upnp-org:device:MediaServer:1</deviceType>") {
-		t.Errorf("alias description.xml contains MediaServer deviceType:\n%s", xml)
-	}
-}
-
-func TestDescriptionXML_withBasicDescriptorVariantKeepsBasicDeviceType(t *testing.T) {
-	// Given
-	s, ts := newTestServer(t)
-	s.IdentityProfile = "hass"
-	s.MediaServerAlias = true
-
-	// When
-	resp := mustGet(t, ts.URL+"/description.xml?relume=basic1")
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
-
-	// Then
-	if got := resp.Header.Get("Cache-Control"); got != "max-age=1" {
-		t.Errorf("Cache-Control = %q, expected max-age=1", got)
-	}
-	xml := string(body)
-	if !strings.Contains(xml, "<deviceType>urn:schemas-upnp-org:device:Basic:1</deviceType>") {
-		t.Errorf("basic descriptor variant does not contain Basic deviceType:\n%s", xml)
-	}
-	if strings.Contains(xml, "<deviceType>urn:schemas-upnp-org:device:MediaServer:1</deviceType>") {
-		t.Errorf("basic descriptor variant contains MediaServer deviceType:\n%s", xml)
-	}
-}
-
 func TestShortConfig_unauthenticated(t *testing.T) {
 	// Given
 	_, ts := newTestServer(t)
@@ -448,29 +245,6 @@ func TestShortConfig_unauthenticated(t *testing.T) {
 	}
 	if cfg["name"] != "Relume" {
 		t.Errorf("name = %v, expected Relume", cfg["name"])
-	}
-}
-
-func TestConfigWithAmbilightProfileReturnsShortConfigForUnknownUser(t *testing.T) {
-	// Given
-	s, ts := newTestServer(t)
-	s.IdentityProfile = "ambilight"
-
-	// When
-	resp := mustGet(t, ts.URL+"/api/not-paired/config")
-	defer resp.Body.Close()
-	var cfg map[string]any
-
-	// Then
-	json.NewDecoder(resp.Body).Decode(&cfg)
-	if cfg["modelid"] != "BSB002" {
-		t.Errorf("modelid = %v", cfg["modelid"])
-	}
-	if cfg["datastoreversion"] != "126" {
-		t.Errorf("datastoreversion = %v", cfg["datastoreversion"])
-	}
-	if _, ok := cfg["error"]; ok {
-		t.Fatalf("unexpected error response: %v", cfg)
 	}
 }
 
@@ -728,10 +502,10 @@ func mustPut(t *testing.T, url, body string) *http.Response {
 	return resp
 }
 
-func TestStreamActivation_underProbe_confirmsAndReflectsOwner(t *testing.T) {
-	// Given: the entertainment probe is on and the TV is paired
+func TestStreamActivation_entertainmentMode_confirmsAndReflectsOwner(t *testing.T) {
+	// Given: entertainment mode is on and the TV is paired
 	s, ts := newTestServer(t)
-	s.EntProbe = true
+	s.EntertainmentMode = true
 	resp := mustPostUA(t, ts.URL+"/api", `{"devicetype":"Philips_TV#Ambilight","generateclientkey":true}`, tvUserAgent)
 	defer resp.Body.Close()
 	var paired []map[string]map[string]string
@@ -763,8 +537,8 @@ func TestStreamActivation_underProbe_confirmsAndReflectsOwner(t *testing.T) {
 	}
 }
 
-func TestStreamActivation_withoutProbe_keepsLegacyAck(t *testing.T) {
-	// Given: the probe is off (default)
+func TestStreamActivation_restMode_keepsLegacyAck(t *testing.T) {
+	// Given: REST mode (default, entertainment mode off)
 	s, ts := newTestServer(t)
 	resp := mustPostUA(t, ts.URL+"/api", `{"devicetype":"Philips_TV#Ambilight","generateclientkey":true}`, tvUserAgent)
 	defer resp.Body.Close()

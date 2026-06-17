@@ -12,23 +12,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"net"
 	"net/http"
-	"net/http/httptrace"
-	"os"
 	"time"
 
 	"github.com/trick77/relume/internal/config"
 )
 
 const appKeyHeader = "hue-application-key"
-
-// putTrace gates temporary latency instrumentation for the REST control path.
-// Enable by setting RELUME_PUT_TRACE=1; it logs per-PUT wall time and whether the
-// underlying TCP/TLS connection was reused — to tell connection churn apart from
-// genuine Bridge Pro round-trip latency. Remove once the Ambilight lag is diagnosed.
-var putTrace = os.Getenv("RELUME_PUT_TRACE") != ""
 
 // Client talks to a Hue Bridge Pro.
 type Client struct {
@@ -207,42 +198,12 @@ func (c *Client) put(path string, payload any) error {
 	req.Header.Set(appKeyHeader, c.appKey)
 	req.Header.Set("Content-Type", "application/json")
 
-	var (
-		traceStart time.Time
-		reused     bool
-		wasIdle    bool
-		tlsStart   time.Time
-		tlsDur     time.Duration
-	)
-	if putTrace {
-		ct := &httptrace.ClientTrace{
-			GotConn: func(info httptrace.GotConnInfo) {
-				reused, wasIdle = info.Reused, info.WasIdle
-			},
-			TLSHandshakeStart: func() { tlsStart = time.Now() },
-			TLSHandshakeDone:  func(tls.ConnectionState, error) { tlsDur = time.Since(tlsStart) },
-		}
-		req = req.WithContext(httptrace.WithClientTrace(req.Context(), ct))
-		traceStart = time.Now()
-	}
-
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		if putTrace {
-			slog.Info("bridgepro put trace", "path", path,
-				"total_ms", time.Since(traceStart).Milliseconds(),
-				"conn_reused", reused, "tls_handshake_ms", tlsDur.Milliseconds(), "err", err)
-		}
 		return fmt.Errorf("PUT %s: %w", path, err)
 	}
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(resp.Body)
-	if putTrace {
-		slog.Info("bridgepro put trace", "path", path,
-			"total_ms", time.Since(traceStart).Milliseconds(),
-			"conn_reused", reused, "conn_was_idle", wasIdle,
-			"tls_handshake_ms", tlsDur.Milliseconds(), "status", resp.StatusCode)
-	}
 
 	if resp.StatusCode >= 400 {
 		return fmt.Errorf("PUT %s: status %d: %s", path, resp.StatusCode, string(raw))

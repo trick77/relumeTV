@@ -18,11 +18,6 @@ func TestParseServeOptions_discoveryDiagnostics(t *testing.T) {
 		"-tv-ip", "192.0.2.30",
 		"-discovery-burst-duration", "90s",
 		"-discovery-burst-interval", "1s",
-		"-identity-profile", "ambilight",
-		"-description-profile", "ambilight-reference",
-		"-ssdp-media-server-alias",
-		"-ssdp-media-server-basic-body",
-		"-ssdp-descriptor-variants",
 	})
 
 	// Then
@@ -49,21 +44,6 @@ func TestParseServeOptions_discoveryDiagnostics(t *testing.T) {
 	}
 	if opts.discoveryBurstInterval != time.Second {
 		t.Errorf("discoveryBurstInterval = %s", opts.discoveryBurstInterval)
-	}
-	if opts.identityProfile != "ambilight" {
-		t.Errorf("identityProfile = %q", opts.identityProfile)
-	}
-	if opts.descriptionProfile != "ambilight-reference" {
-		t.Errorf("descriptionProfile = %q", opts.descriptionProfile)
-	}
-	if !opts.ssdpMediaServerAlias {
-		t.Fatal("ssdpMediaServerAlias = false")
-	}
-	if !opts.ssdpMediaServerBasicBody {
-		t.Fatal("ssdpMediaServerBasicBody = false")
-	}
-	if !opts.ssdpDescriptorVariants {
-		t.Fatal("ssdpDescriptorVariants = false")
 	}
 	if opts.disableSSDP {
 		t.Fatal("disableSSDP = true (not requested)")

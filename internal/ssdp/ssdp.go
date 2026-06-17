@@ -18,7 +18,6 @@ import (
 
 const (
 	multicastAddr = "239.255.255.250:1900"
-	mediaServerST = "urn:schemas-upnp-org:device:MediaServer:1"
 	notifyEvery   = 60 * time.Second
 )
 
@@ -36,16 +35,6 @@ type Responder struct {
 	BurstDuration time.Duration
 	// BurstInterval is the interval used during the diagnostic burst.
 	BurstInterval time.Duration
-	// IdentityProfile selects experimental wire-identity compatibility tweaks.
-	// Empty keeps the default; "ambilight" matches the Ambilight-specific
-	// OSS emulator; "hass" matches Home Assistant emulated-hue.
-	IdentityProfile string
-	// MediaServerAlias also advertises/responds as UPnP MediaServer:1. Some
-	// Philips Android TVs only emit MediaServer searches during Hue+Ambilight scan.
-	MediaServerAlias bool
-	// DescriptorVariants adds extra query-scoped LOCATION URLs under the
-	// MediaServer ST so one TV scan can reveal which descriptor body it fetches.
-	DescriptorVariants bool
 }
 
 // New creates a Responder. advIP is the IP advertised in the LOCATION header
@@ -140,7 +129,7 @@ func parseHeaders(msg string) map[string]string {
 }
 
 func (r *Responder) serverHeader() string {
-	return upnp.ServerHeader(r.IdentityProfile)
+	return upnp.ServerHeaderDefault
 }
 
 // interfaceForIP returns the network interface that carries the given IP.
@@ -181,7 +170,7 @@ func (r *Responder) handle(conn *net.UDPConn, src *net.UDPAddr, data []byte) {
 	}
 	h := parseHeaders(msg)
 	if r.Debug {
-		r.log.Info("ssdp: M-SEARCH answered", "to", src.String(), "st", h["ST"], "mediaServerAlias", r.MediaServerAlias)
+		r.log.Info("ssdp: M-SEARCH answered", "to", src.String(), "st", h["ST"])
 	}
 	// We answer broadly (without strict ST matching), as real bridges do — the
 	// TV filters by LOCATION/description.xml. An immediate reply is important
@@ -225,30 +214,22 @@ func (r *Responder) searchResponses() []string {
 }
 
 type ssdpVariant struct {
-	st       string
-	nt       string
-	usn      string
-	location string
+	st  string
+	nt  string
+	usn string
 }
 
 func (v ssdpVariant) maxAge() int {
-	if v.st == mediaServerST || v.nt == mediaServerST {
-		return 1
-	}
 	return 100
 }
 
-func (r *Responder) location(v ssdpVariant) string {
-	location := fmt.Sprintf("http://%s:%d/description.xml", r.advIP, r.httpPort)
-	if v.location != "" {
-		return location + "?relume=" + v.location
-	}
-	return location
+func (r *Responder) location(ssdpVariant) string {
+	return fmt.Sprintf("http://%s:%d/description.xml", r.advIP, r.httpPort)
 }
 
 func (r *Responder) ssdpVariants() []ssdpVariant {
-	uuid := r.id.UUIDForProfile(r.IdentityProfile)
-	variants := []ssdpVariant{
+	uuid := r.id.UUID()
+	return []ssdpVariant{
 		{st: "upnp:rootdevice", nt: "upnp:rootdevice", usn: "uuid:" + uuid + "::upnp:rootdevice"},
 		{st: "uuid:" + uuid, nt: "uuid:" + uuid, usn: "uuid:" + uuid},
 		{
@@ -257,25 +238,6 @@ func (r *Responder) ssdpVariants() []ssdpVariant {
 			usn: "uuid:" + uuid + "::urn:schemas-upnp-org:device:basic:1",
 		},
 	}
-	if r.MediaServerAlias {
-		variants = append(variants, ssdpVariant{
-			st:  mediaServerST,
-			nt:  mediaServerST,
-			usn: "uuid:" + uuid + "::" + mediaServerST,
-			// ms1 serves a MediaServer descriptor body for TVs that only scan DLNA STs.
-			location: "ms1",
-		})
-	}
-	if r.MediaServerAlias && r.DescriptorVariants {
-		variants = append(variants, ssdpVariant{
-			st:  mediaServerST,
-			nt:  mediaServerST,
-			usn: "uuid:" + uuid + "::" + mediaServerST,
-			// basic1 keeps the MediaServer SSDP trigger but serves a Hue Basic descriptor.
-			location: "basic1",
-		})
-	}
-	return variants
 }
 
 // notifyLoop periodically sends NOTIFY ssdp:alive to the multicast.

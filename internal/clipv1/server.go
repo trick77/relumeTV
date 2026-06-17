@@ -45,27 +45,9 @@ type Server struct {
 	// Debug enables verbose request logging (User-Agent + body) — helpful for
 	// analyzing the real behavior of unknown TVs.
 	Debug bool
-	// IdentityProfile selects experimental wire-identity compatibility tweaks.
-	// Empty keeps the default; "ambilight" matches the Ambilight-specific
-	// OSS emulator; "hass" matches Home Assistant emulated-hue.
-	IdentityProfile string
-	// DescriptionProfile selects experimental description.xml body formatting.
-	// Empty keeps the default; "ambilight-reference" matches the Ambilight OSS descriptor.
-	DescriptionProfile string
-	// MediaServerAlias makes /description.xml match the opt-in SSDP MediaServer:1 alias.
-	MediaServerAlias bool
-	// MediaServerBasicBody keeps the ms1 alias URL but serves a Hue Basic descriptor body.
-	MediaServerBasicBody bool
 	// TVIP is the TV's IP (from -tv-ip). Pairing is auto-accepted only for the TV,
 	// identified by this IP or by the Android/Dalvik Philips-TV User-Agent.
 	TVIP string
-
-	// EntProbe enables the entertainment diagnostic (RELUME_ENT_PROBE=1): the TV's
-	// stream-activation PUT is confirmed with the real v1 success shape and the
-	// Entertainment group reflects stream.active+owner, so the TV proceeds to open
-	// the DTLS stream instead of aborting — letting the udp :2100 probe observe
-	// whether it tries DTLS at all. Off keeps the legacy log-and-ack behavior.
-	EntProbe bool
 
 	// EntertainmentMode makes relume confirm the TV's stream activation for real
 	// (so the TV opens the DTLS entertainment stream, which the receiver services)
@@ -89,8 +71,8 @@ type Server struct {
 	// reading cannot be faked out by frames arriving on the group endpoint.
 	groupActionWrites uint64
 
-	// stream tracks the Entertainment group's stream state under EntProbe so GET
-	// /groups/1 reflects the activation the TV requested (active + owner).
+	// stream tracks the Entertainment group's stream state in entertainment mode so
+	// GET /groups/1 reflects the activation the TV requested (active + owner).
 	streamMu     sync.Mutex
 	streamActive bool
 	streamOwner  string
@@ -155,16 +137,16 @@ func (s *Server) SetDTLSFallbackTimeout(d time.Duration) {
 }
 
 // confirmsEntertainment reports whether relume should confirm the TV's stream
-// activation for real: in entertainment mode (unless it has fallen back to REST,
-// see dtlsFallback), or under the diagnostic probe.
+// activation for real: in entertainment mode, unless it has fallen back to REST
+// (see dtlsFallback).
 func (s *Server) confirmsEntertainment() bool {
-	return (s.EntertainmentMode || s.EntProbe) && !s.dtlsFallback.Load()
+	return s.EntertainmentMode && !s.dtlsFallback.Load()
 }
 
 // armDTLSWatchdog starts (or restarts) the fallback timer after relume confirms a
 // stream activation in entertainment mode. If the TV does not open its DTLS stream
-// (MarkDTLSStreamUp) before it fires, relume falls back to REST-follow. No-op under
-// the probe or once already fallen back.
+// (MarkDTLSStreamUp) before it fires, relume falls back to REST-follow. No-op when
+// not in entertainment mode or once already fallen back.
 func (s *Server) armDTLSWatchdog() {
 	if !s.EntertainmentMode || s.dtlsFallback.Load() || s.dtlsStreamUp.Load() {
 		return
@@ -530,16 +512,7 @@ func (s *Server) isTVRequest(r *http.Request) bool {
 }
 
 func (s *Server) handleDescription(w http.ResponseWriter, r *http.Request) {
-	relumeVariant := r.URL.Query().Get("relume")
-	// relume=ms1 normally changes the descriptor body to MediaServer. The
-	// MediaServerBasicBody experiment keeps that followed URL but serves Basic:1.
-	// Other relume query variants keep the Hue Basic body and short cache headers.
-	mediaServerAlias := s.MediaServerAlias && relumeVariant == "ms1" && !s.MediaServerBasicBody
-	xml, err := upnp.RenderWithOptions(s.cfg.Identity, s.advIP, s.httpPort, upnp.Options{
-		Profile:            s.IdentityProfile,
-		DescriptionProfile: s.DescriptionProfile,
-		MediaServerAlias:   mediaServerAlias,
-	})
+	xml, err := upnp.Render(s.cfg.Identity, s.advIP, s.httpPort)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -548,12 +521,8 @@ func (s *Server) handleDescription(w http.ResponseWriter, r *http.Request) {
 	// serve description.xml as text/xml. application/xml is suspected to make the
 	// Ambilight TV reject the descriptor and stop before POST /api.
 	w.Header().Set("Content-Type", "text/xml")
-	w.Header().Set("Server", upnp.ServerHeader(s.IdentityProfile))
-	if relumeVariant != "" {
-		w.Header().Set("Cache-Control", "max-age=1")
-	} else {
-		w.Header().Set("Cache-Control", "max-age=100")
-	}
+	w.Header().Set("Server", upnp.ServerHeaderDefault)
+	w.Header().Set("Cache-Control", "max-age=100")
 	io.WriteString(w, xml)
 }
 
@@ -637,10 +606,6 @@ func (s *Server) handleShortConfig(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
-	if s.IdentityProfile == "ambilight" && !s.cfg.HasApiUser(r.PathValue("user")) {
-		writeJSON(w, s.shortConfig())
-		return
-	}
 	if !s.authorized(w, r) {
 		return
 	}
@@ -650,13 +615,9 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 // shortConfig builds the config object; modelid MUST be BSB002.
 func (s *Server) shortConfig() map[string]any {
 	id := s.cfg.Identity
-	datastoreVersion := "131"
-	if s.IdentityProfile == "ambilight" {
-		datastoreVersion = "126"
-	}
 	return map[string]any{
 		"name":             "Relume",
-		"datastoreversion": datastoreVersion,
+		"datastoreversion": "131",
 		"swversion":        "1967054020",
 		"apiversion":       "1.67.0",
 		"mac":              id.MAC(),
@@ -771,9 +732,9 @@ func (s *Server) bridgeGroup(id string) map[string]any {
 		groupType = "LightGroup"
 		name = "Group 0"
 	}
-	// Default: inactive stream. Under the entertainment probe, reflect the
-	// activation the TV requested so it treats the stream as live and proceeds to
-	// open the DTLS connection (which the :2100 probe then observes).
+	// Default: inactive stream. In entertainment mode, reflect the activation the TV
+	// requested so it treats the stream as live and proceeds to open the DTLS
+	// connection (which the :2100 receiver then services).
 	var streamActive bool
 	var streamOwner any
 	if s.confirmsEntertainment() && id == "1" {
@@ -847,11 +808,11 @@ func (s *Server) handleGroupAction(w http.ResponseWriter, r *http.Request) {
 // (PUT /groups/{id} with {"stream":{"active":true}}) — the entry into the
 // entertainment path (M4).
 //
-// Under the entertainment probe, a stream-activation PUT is confirmed with the
-// real v1 success shape ([{"success":{"/groups/1/stream/active":true}}]) and the
-// group's stream state is updated, so the TV treats activation as accepted and
-// goes on to open the DTLS stream (which the :2100 probe observes). Without the
-// probe the legacy log-and-ack behavior is kept.
+// In entertainment mode, a stream-activation PUT is confirmed with the real v1
+// success shape ([{"success":{"/groups/1/stream/active":true}}]) and the group's
+// stream state is updated, so the TV treats activation as accepted and goes on to
+// open the DTLS stream (which the :2100 receiver services). In REST mode the legacy
+// log-and-ack behavior is kept.
 func (s *Server) handleGroupUpdate(w http.ResponseWriter, r *http.Request) {
 	if !s.authorized(w, r) {
 		return
