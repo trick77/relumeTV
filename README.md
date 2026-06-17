@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/relume.png" alt="relume" width="140">
+</p>
+
 # relume
 
 A software bridge that connects a **Philips Ambilight TV** to a **Hue Bridge Pro (BSB003)**.
