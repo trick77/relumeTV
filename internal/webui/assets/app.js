@@ -121,7 +121,7 @@ function renderDashboard(s) {
       <div class="top"><div class="brand">re<span>lume</span></div><div class="ver">v${esc(s.version)}</div>
         <div class="spacer"></div><div class="health"><span class="${healthDotClass(s.health)}"></span> ${esc(healthLabel(s.health))}</div></div>
       <div class="pipe">
-        <div class="step"><div class="lbl">Bridge Pro</div><div class="val">${s.proPaired ? "✓ Paired" : "— Unpaired"}</div><div class="sub">${esc(s.proName)} ${esc(s.proHost)}</div></div>
+        <div class="step"><div class="lbl">Bridge Pro</div><div class="val${s.proPaired ? " ok" : ""}">${s.proPaired ? "✓ Paired" : "— Unpaired"}</div><div class="sub">${esc(s.proName)} ${esc(s.proHost)}</div></div>
         <div class="step"><div class="lbl">TV pairing</div><div class="val">${s.tvClients.length} client(s)</div><div class="sub">${esc(s.tvClients.join(", "))}</div></div>
         <div class="step"><div class="lbl">Mode</div><div class="val">${esc(s.mode)}${s.fallback ? " (fallback)" : ""}</div><div class="sub">${esc(modeSub(s))}</div></div>
         <div class="step"><div class="lbl">Lights</div><div class="val">${s.lights.length}</div><div class="sub">${driven} driven by TV</div></div>

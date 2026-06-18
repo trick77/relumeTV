@@ -6,7 +6,7 @@
   --txt: #e8eaf0;
   --dim: #8b90a0;
   --faint: #5a5f6e;
-  --ok: #3ad29f;
+  --ok: #22c55e;
   --warn: #f0b429;
   --err: #ff5d6c;
   --idle: #4a4f5e;
@@ -18,7 +18,7 @@
 body {
   background:
     radial-gradient(900px 500px at 80% -10%, rgba(124, 140, 255, .10), transparent 60%),
-    radial-gradient(700px 400px at 0% 110%, rgba(58, 210, 159, .07), transparent 60%),
+    radial-gradient(700px 400px at 0% 110%, rgba(34, 197, 94, .07), transparent 60%),
     var(--bg);
   color: var(--txt);
   font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -59,6 +59,7 @@ body {
 }
 .pipe .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--faint); }
 .pipe .val { font-size: 15px; font-weight: 600; }
+.pipe .val.ok { color: var(--ok); }
 .pipe .sub { font-size: 12px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* dashboard grid */
@@ -119,8 +120,8 @@ body {
   font-weight: 700; font-size: 13px; flex-shrink: 0; border: 1px solid var(--line); background: var(--panel2); color: var(--dim);
 }
 .steps .line { flex: 1; width: 2px; background: var(--line); margin: 4px 0; }
-.steps .step.done .num { background: rgba(58, 210, 159, .15); border-color: rgba(58, 210, 159, .5); color: var(--ok); }
-.steps .step.done .line { background: rgba(58, 210, 159, .4); }
+.steps .step.done .num { background: rgba(34, 197, 94, .15); border-color: rgba(34, 197, 94, .5); color: var(--ok); }
+.steps .step.done .line { background: rgba(34, 197, 94, .4); }
 .steps .step.active .num { background: rgba(124, 140, 255, .18); border-color: var(--accent); color: var(--accent); box-shadow: 0 0 16px rgba(124, 140, 255, .35); }
 .steps .card { flex: 1; }
 .steps .step.active .card { border-color: rgba(124, 140, 255, .4); }
@@ -128,7 +129,7 @@ body {
 .steps .card h3 { font-size: 15px; font-weight: 650; margin-bottom: 3px; text-transform: none; letter-spacing: 0; color: var(--txt); }
 .steps .card .d { font-size: 12.5px; color: var(--dim); }
 .pill { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; padding: 3px 8px; border-radius: 6px; margin-left: auto; }
-.pill.ok { background: rgba(58, 210, 159, .15); color: var(--ok); }
+.pill.ok { background: rgba(34, 197, 94, .15); color: var(--ok); }
 .pill.wait { background: rgba(240, 180, 41, .12); color: var(--warn); }
 .action {
   margin-top: 13px; display: flex; align-items: center; gap: 12px; background: var(--panel2);
