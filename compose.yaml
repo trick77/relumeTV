@@ -15,17 +15,17 @@ services:
       # Named volume holds the persistent state (identity, TV tokens, Pro pairing).
       - relume-data:/data
     # Default port 80 (like a real gen-2 bridge). Under rootless Docker, ports
-    # <1024 need the host sysctl `net.ipv4.ip_unprivileged_port_start=80` — or
-    # switch to a high port (e.g. -http-port 8080), see README.
+    # <1024 need the host sysctl `net.ipv4.ip_unprivileged_port_start=80`, see README.
     # The Bridge Pro is paired automatically in the background on first run — just
     # TAP the Pro's physical link button. The TV pairs itself (auto-pair).
     # Config defaults to relume.json; the image's WORKDIR is /data, so it lands
     # in the named volume above.
     command: ["serve"]
-    # Optional web UI (off by default). Uncomment to enable the setup assistant +
-    # live dashboard with -ui (serves on port 33100). With network_mode: host the
-    # port is reachable on the LAN as-is (no port mapping needed) and has NO
-    # authentication — only enable it on a trusted network.
+    # Web UI (off by default). To start the setup assistant + live dashboard, use
+    # the line below INSTEAD of the plain `serve` above: the -ui flag serves the UI
+    # on port 33100. With network_mode: host the port is reachable on the LAN as-is
+    # (no port mapping needed) and has NO authentication — only enable it on a
+    # trusted network.
     # command: ["serve", "-ui"]
 
 volumes:

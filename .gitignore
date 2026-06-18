@@ -16,3 +16,9 @@ coverage.out
 
 # brainstorming visual companion
 .superpowers/
+
+# agent session data + worktrees
+.claude/
+
+# macOS
+.DS_Store
