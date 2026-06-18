@@ -87,6 +87,7 @@ type proWatcher struct {
 	cfg        *config.Config
 	clip       *clipv1.Server
 	controlled *bridge.ControlledSet
+	liveColors *liveColors
 	bridgeIP   string
 	skipTLS    bool
 	log        *slog.Logger
@@ -98,11 +99,12 @@ type proWatcher struct {
 }
 
 // newProWatcher constructs a proWatcher with the production seams wired in.
-func newProWatcher(cfg *config.Config, clip *clipv1.Server, controlled *bridge.ControlledSet, bridgeIP string, skipTLS bool, log *slog.Logger) *proWatcher {
+func newProWatcher(cfg *config.Config, clip *clipv1.Server, controlled *bridge.ControlledSet, live *liveColors, bridgeIP string, skipTLS bool, log *slog.Logger) *proWatcher {
 	w := &proWatcher{
 		cfg:        cfg,
 		clip:       clip,
 		controlled: controlled,
+		liveColors: live,
 		bridgeIP:   bridgeIP,
 		skipTLS:    skipTLS,
 		log:        log,
@@ -118,7 +120,7 @@ func newProWatcher(cfg *config.Config, clip *clipv1.Server, controlled *bridge.C
 	w.discover = bridgepro.Discover
 	w.fetchFingerprint = bridgepro.FetchLeafFingerprint
 	w.applyProvider = func(p *config.BridgePro) {
-		clip.SetLightProvider(newProvider(bridgepro.New(p), controlled, log))
+		clip.SetLightProvider(newProvider(bridgepro.New(p), controlled, live, log))
 	}
 	return w
 }

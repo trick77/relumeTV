@@ -87,7 +87,14 @@ function renderSetup(s) {
 }
 
 function renderDashboard(s) {
-  const lights = s.lights
+  // Show only the lamps the TV is actively driving. Fall back to all lamps
+  // while nothing is driven yet (cold start / TV idle before first stream).
+  // Note: driven is sticky — a lamp stays driven once seen this run (the backend
+  // never un-drives), so this is effectively "ever driven since start", retained
+  // across stream pauses. A shrunk entertainment area clears only on restart.
+  const drivenLights = s.lights.filter((l) => l.driven);
+  const shown = drivenLights.length > 0 ? drivenLights : s.lights;
+  const lights = shown
     .map((l) => {
       const col = l.on ? xyBriToRGB(l.x, l.y, l.bri) : "";
       return `<div class="lamp ${l.driven ? "driven" : ""} ${l.on ? "" : "off"}">
@@ -96,7 +103,7 @@ function renderDashboard(s) {
         <div class="st">${l.driven ? "driven by TV" : l.on ? "on" : "off"}</div></div>`;
     })
     .join("");
-  const driven = s.lights.filter((l) => l.driven).length;
+  const driven = drivenLights.length;
   const pending =
     !s.proPaired || s.pendingTV
       ? `<div class="card pending"><h3>⚠ Needs attention</h3>
@@ -117,13 +124,13 @@ function renderDashboard(s) {
       <div class="top"><div class="brand">re<span>lume</span></div><div class="ver">v${esc(s.version)}</div>
         <div class="spacer"></div><div class="health"><span class="${healthDotClass(s.health)}"></span> ${esc(healthLabel(s.health))}</div></div>
       <div class="pipe">
-        <div class="step"><div class="lbl">Bridge Pro</div><div class="val">${s.proPaired ? "✓ Paired" : "— Unpaired"}</div><div class="sub">${esc(s.proName)} ${esc(s.proHost)}</div></div>
+        <div class="step"><div class="lbl">Bridge Pro</div><div class="val${s.proPaired ? " ok" : ""}">${s.proPaired ? "✓ Paired" : "— Unpaired"}</div><div class="sub">${esc(s.proName)} ${esc(s.proHost)}</div></div>
         <div class="step"><div class="lbl">TV pairing</div><div class="val">${s.tvClients.length} client(s)</div><div class="sub">${esc(s.tvClients.join(", "))}</div></div>
         <div class="step"><div class="lbl">Mode</div><div class="val">${esc(s.mode)}${s.fallback ? " (fallback)" : ""}</div><div class="sub">${esc(modeSub(s))}</div></div>
         <div class="step"><div class="lbl">Lights</div><div class="val">${s.lights.length}</div><div class="sub">${driven} driven by TV</div></div>
       </div>
       <div class="grid">
-        <div class="card"><h3>Lights <span class="cnt">${s.lights.length} total · ${driven} driven</span></h3><div class="lights">${lights}</div></div>
+        <div class="card"><h3>Lights <span class="cnt">${shown.length} shown · ${driven} driven</span></h3><div class="lights">${lights}</div></div>
         <div class="side">${pending}
           <div class="card"><h3>Actions</h3><button class="btn primary" onclick="flash()">Test flash</button></div>
         </div>

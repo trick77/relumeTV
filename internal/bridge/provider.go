@@ -33,6 +33,12 @@ type LightProvider struct {
 	// currently driving, not the whole home. Wired by main.
 	OnControlled func(uuid string)
 
+	// OnColor, if set, is called with each forwarded light's v1 id and its v1 state
+	// ({on,bri,xy}) on every per-light forward, so the web UI can show the live
+	// streamed colour. Covers the REST-follow and REST-fallback paths; the DTLS
+	// passthrough is captured separately in the entertainment streamer. Wired by main.
+	OnColor func(v1id string, state map[string]any)
+
 	mu        sync.Mutex
 	cached    map[string]any
 	v1ToUUID  map[string]string
@@ -197,6 +203,9 @@ func (p *LightProvider) forward(v1id string, v1state map[string]any) error {
 	}
 	if p.OnControlled != nil {
 		p.OnControlled(uuid)
+	}
+	if p.OnColor != nil {
+		p.OnColor(v1id, v1state)
 	}
 	return p.client.SetLight(uuid, v2)
 }

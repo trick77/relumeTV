@@ -1,6 +1,10 @@
 package webui
 
-import "time"
+import (
+	"sort"
+	"strconv"
+	"time"
+)
 
 // LightView is one light as the UI renders it: name, on/off, brightness, CIE xy
 // colour, and whether the TV is currently driving it.
@@ -12,6 +16,17 @@ type LightView struct {
 	X      float64 `json:"x"`
 	Y      float64 `json:"y"`
 	Driven bool    `json:"driven"`
+}
+
+// LiveColor is the most recent colour the TV pushed for one light, captured where
+// relume actually sees the values flow TV→Pro (the REST forward and the DTLS
+// passthrough). The UI uses it to render the live swatch colour instead of the
+// Bridge Pro's REST light state, which the DTLS passthrough never updates.
+type LiveColor struct {
+	X   float64
+	Y   float64
+	Bri int
+	On  bool
 }
 
 // Snapshot is the complete UI-facing state. It is built solely from non-secret
@@ -48,6 +63,11 @@ type StateSource interface {
 	LightsV1() (map[string]any, bool)
 	UUIDForV1(v1id string) (string, bool)
 	DrivenUUIDs() []string
+	// LiveColors maps v1 light id → the latest colour the TV streamed for it.
+	// A light present here is being driven by the TV (the only point the DTLS
+	// passthrough exposes per-light state to the UI), so the snapshot both
+	// overrides the swatch colour and marks the light driven from this set.
+	LiveColors() map[string]LiveColor
 	// Active reports whether the TV is currently driving the lights (it has
 	// written/streamed within the idle window). False when the TV is off or idle.
 	Active() bool
@@ -120,6 +140,7 @@ func BuildSnapshot(src StateSource) Snapshot {
 		for _, u := range src.DrivenUUIDs() {
 			driven[u] = struct{}{}
 		}
+		live := src.LiveColors()
 		for id, raw := range lv1 {
 			m, _ := raw.(map[string]any)
 			st, _ := m["state"].(map[string]any)
@@ -142,8 +163,31 @@ func BuildSnapshot(src StateSource) Snapshot {
 					lv.Driven = true
 				}
 			}
+			// Live colour overrides the Pro's REST light state (stale during DTLS
+			// passthrough) and marks the light driven: a streamed colour is the only
+			// per-light signal the DTLS path surfaces to the UI. Only override the
+			// colour fields that are actually present, so an xy-less write (e.g. a bare
+			// on/off REST write) does not blank the swatch to black.
+			if lc, ok := live[id]; ok {
+				lv.On = lc.On
+				lv.Driven = true
+				if lc.Bri > 0 {
+					lv.Bri = lc.Bri
+				}
+				if lc.X != 0 || lc.Y != 0 {
+					lv.X = lc.X
+					lv.Y = lc.Y
+				}
+			}
 			s.Lights = append(s.Lights, lv)
 		}
+		// lv1 is a map, so iteration order is non-deterministic. Sort by the
+		// numeric v1 ID for a stable, predictable light order in the UI.
+		sort.Slice(s.Lights, func(i, j int) bool {
+			ai, _ := strconv.Atoi(s.Lights[i].ID)
+			aj, _ := strconv.Atoi(s.Lights[j].ID)
+			return ai < aj
+		})
 	}
 	return s
 }
