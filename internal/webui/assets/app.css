@@ -66,7 +66,8 @@ body {
 }
 .info:hover { color: var(--txt); border-color: var(--dim); }
 .pipe .val { font-size: 15px; font-weight: 600; }
-.pipe .val.ok { color: var(--ok); }
+.pipe .val .ok { color: var(--ok); }
+.pipe .val .up { color: var(--faint); font-weight: 500; font-size: 12px; margin-left: 6px; }
 .pipe .sub { font-size: 12px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* dashboard grid */
@@ -89,6 +90,7 @@ body {
 .lamp .st { font-size: 11px; color: var(--dim); }
 .lamp.driven { outline: 1px solid rgba(124, 140, 255, .35); }
 .lamp.driven .st { color: var(--accent); }
+.lamp .st .ok { color: var(--ok); }
 .lamp.off .nm, .lamp.off .st { opacity: .5; }
 
 /* dashboard side cards */
