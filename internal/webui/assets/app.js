@@ -69,6 +69,32 @@ function modeSub(s) {
   return "REST";
 }
 
+// cap upper-cases the first letter for display (e.g. the mode label), without
+// touching the underlying lower-case value relume uses internally.
+function cap(str) {
+  return str ? str.charAt(0).toUpperCase() + str.slice(1) : str;
+}
+
+// _startedAtMs holds relume's start time (ms epoch) so the uptime can tick every
+// second between snapshot pushes. fmtUptime renders a compact d/h/m/s string.
+let _startedAtMs = null;
+function fmtUptime(ms) {
+  if (!(ms >= 0)) return "";
+  const s = Math.floor(ms / 1000);
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  if (d > 0) return `${d}d ${h}h ${m}m`;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${sec}s`;
+  return `${sec}s`;
+}
+function tickUptime() {
+  const el = document.getElementById("uptime");
+  if (el && _startedAtMs) el.textContent = "↑ " + fmtUptime(Date.now() - _startedAtMs);
+}
+
 function renderSetup(s) {
   const proPill = s.proPaired ? `<span class="pill ok">done</span>` : `<span class="pill wait">waiting</span>`;
   const tvPill = s.tvClients.length ? `<span class="pill ok">done</span>` : `<span class="pill wait">waiting</span>`;
@@ -141,12 +167,14 @@ function renderDashboard(s) {
       : "";
   app.innerHTML = `
     <div class="wrap">
-      <div class="top"><div class="brand">re<span>lume</span></div><div class="ver">v${esc(s.version)}</div>
+      <div class="top"><div class="brand">re<span>lume</span></div><div class="ver">v${esc(s.version)}</div>${
+        s.startedAt ? `<div class="ver" id="uptime">↑ ${esc(fmtUptime(Date.now() - Date.parse(s.startedAt)))}</div>` : ""
+      }
         <div class="spacer"></div><div class="health"><span class="${healthDotClass(s.health)}"></span> ${esc(healthLabel(s.health))}</div></div>
       <div class="pipe">
         <div class="step"><div class="lbl">Bridge Pro</div><div class="val${s.proPaired ? " ok" : ""}">${s.proPaired ? "✓ Paired" : "— Unpaired"}</div><div class="sub">${esc(s.proName)} ${esc(s.proHost)}</div></div>
         <div class="step"><div class="lbl">TV pairing</div><div class="val">${s.tvClients.length} client(s)</div><div class="sub">${esc(s.tvClients.join(", "))}</div></div>
-        <div class="step"><div class="lbl">Mode</div><div class="val">${esc(currentMode(s))}${s.fallback ? " (fallback)" : ""}</div><div class="sub">${esc(modeSub(s))}</div></div>
+        <div class="step"><div class="lbl">Mode <span class="info" title="Entertainment: low-latency DTLS stream to the Bridge Pro (default). REST: per-light REST writes — the automatic fallback when the TV is not streaming entertainment.">i</span></div><div class="val">${esc(cap(currentMode(s)))}${s.fallback ? " (fallback)" : ""}</div><div class="sub">${esc(modeSub(s))}</div></div>
         <div class="step"><div class="lbl">Lights</div><div class="val">${s.lights.length}</div><div class="sub">${driven} driven by TV</div></div>
       </div>
       <div class="grid">
@@ -164,8 +192,10 @@ const logRow = (e) =>
   `<div class="logrow"><span class="ts">${esc((e.time || "").slice(11, 19))}</span><span class="tag">${esc(e.level)}</span><span class="msg">${esc(e.msg)}</span></div>`;
 
 function render(s) {
+  _startedAtMs = s.startedAt ? Date.parse(s.startedAt) : null;
   if (s.proPaired && s.tvClients.length > 0) renderDashboard(s);
   else renderSetup(s);
+  tickUptime();
   const logEl = document.getElementById("log");
   if (logEl) logEl.innerHTML = logLines.map(logRow).join("");
 }
@@ -189,6 +219,8 @@ async function boot() {
     const s = await (await fetch("/api/state")).json();
     render(s);
   } catch (_) {}
+  // Tick the uptime every second between snapshot pushes.
+  setInterval(tickUptime, 1000);
   const es = new EventSource("/api/events");
   es.onmessage = (msg) => {
     const f = JSON.parse(msg.data);
