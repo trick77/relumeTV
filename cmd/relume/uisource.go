@@ -6,6 +6,7 @@ import (
 	"github.com/trick77/relume/internal/bridge"
 	"github.com/trick77/relume/internal/clipv1"
 	"github.com/trick77/relume/internal/config"
+	"github.com/trick77/relume/internal/webui"
 )
 
 // uiSource adapts relume's live state to webui.StateSource. It is read-only and
@@ -14,6 +15,7 @@ type uiSource struct {
 	cfg        *config.Config
 	clip       *clipv1.Server
 	controlled *bridge.ControlledSet
+	liveColors *liveColors
 	advName    string
 	version    string
 	started    time.Time
@@ -42,6 +44,8 @@ func (u *uiSource) LastActivity() time.Time            { return u.clip.LastActiv
 func (u *uiSource) LightsV1() (map[string]any, bool)   { return u.clip.LightsV1Snapshot() }
 func (u *uiSource) UUIDForV1(id string) (string, bool) { return u.clip.UUIDForV1(id) }
 func (u *uiSource) DrivenUUIDs() []string              { return u.controlled.Current() }
+
+func (u *uiSource) LiveColors() map[string]webui.LiveColor { return u.liveColors.Snapshot() }
 
 func (u *uiSource) Active() bool {
 	last := u.clip.LastActivity()
