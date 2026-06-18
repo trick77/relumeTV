@@ -20,6 +20,8 @@ const esc = (s) =>
 function healthLabel(h) {
   return {
     "streaming-pro": "Active · streaming to Pro",
+    "entertainment-fallback": "Active · entertainment fallback → REST",
+    "entertainment-rest": "Active · REST (TV not streaming entertainment)",
     "following-rest": "Active · REST-follow",
     "idle": "Idle · TV not driving",
     "no-tv": "Waiting for TV pairing",
@@ -27,11 +29,24 @@ function healthLabel(h) {
   }[h] || h;
 }
 
-// healthDotClass colours the status dot: green only when actively driving.
+// healthDotClass colours the status dot: green when actively driving the lights,
+// amber for a degraded fallback or anything needing attention.
 function healthDotClass(h) {
-  if (h === "streaming-pro" || h === "following-rest") return "dot ok pulse";
+  if (h === "streaming-pro" || h === "following-rest" || h === "entertainment-rest") return "dot ok pulse";
+  if (h === "entertainment-fallback") return "dot pulse"; // amber: degraded (DTLS failed → REST)
   if (h === "idle") return "dot pulse"; // amber standby
   return "dot pulse"; // amber: needs attention (no-tv / unpaired-pro)
+}
+
+// modeSub describes the active forward path under the MODE label. It must never
+// read as a contradiction: in entertainment mode without a DTLS stream, say
+// explicitly whether that is a fallback (DTLS failed) or simply the TV not
+// streaming entertainment at all.
+function modeSub(s) {
+  if (s.dtlsStreamUp) return "DTLS stream up";
+  if (s.fallback) return "fallback to REST (DTLS unavailable)";
+  if (s.mode === "entertainment") return "REST · TV not streaming entertainment";
+  return "REST";
 }
 
 function renderSetup(s) {
@@ -104,7 +119,7 @@ function renderDashboard(s) {
       <div class="pipe">
         <div class="step"><div class="lbl">Bridge Pro</div><div class="val">${s.proPaired ? "✓ Paired" : "— Unpaired"}</div><div class="sub">${esc(s.proName)} ${esc(s.proHost)}</div></div>
         <div class="step"><div class="lbl">TV pairing</div><div class="val">${s.tvClients.length} client(s)</div><div class="sub">${esc(s.tvClients.join(", "))}</div></div>
-        <div class="step"><div class="lbl">Mode</div><div class="val">${esc(s.mode)}${s.fallback ? " (fallback)" : ""}</div><div class="sub">${s.dtlsStreamUp ? "DTLS stream up" : "REST"}</div></div>
+        <div class="step"><div class="lbl">Mode</div><div class="val">${esc(s.mode)}${s.fallback ? " (fallback)" : ""}</div><div class="sub">${esc(modeSub(s))}</div></div>
         <div class="step"><div class="lbl">Lights</div><div class="val">${s.lights.length}</div><div class="sub">${driven} driven by TV</div></div>
       </div>
       <div class="grid">

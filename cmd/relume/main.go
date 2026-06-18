@@ -193,7 +193,7 @@ func runServe(args []string, log *slog.Logger) error {
 	// re-pairing — POST /api then returns the stored user without the 5s delay.
 	log.Info("saved config",
 		"path", opts.configPath,
-		"pro", pro, // LogValue → name/id/host, or <none> when unpaired
+		"", pro, // LogValue inlines name/id/host (no "pro." prefix), or pro=<none> when unpaired
 		"tv_paired", len(cfg.PairedDeviceTypes()),
 		"tv_devicetypes", cfg.PairedDeviceTypes(),
 	)
@@ -232,7 +232,7 @@ func runServe(args []string, log *slog.Logger) error {
 	if pro != nil {
 		client := bridgepro.New(pro)
 		clip.SetLightProvider(newProvider(client, controlled, log))
-		log.Info("bridge pro paired", "pro", pro)
+		log.Info("hue bridge pro paired", "", pro)
 	}
 	var responder *ssdp.Responder
 	if opts.disableSSDP {
@@ -254,7 +254,7 @@ func runServe(args []string, log *slog.Logger) error {
 	// TV can discover/pair relume before the Pro is paired; relume just returns an
 	// empty light list until the Pro pairing completes, then hot-loads the lights.
 	if pro == nil {
-		log.Warn("no bridge pro paired yet – auto-pairing in background; TAP the Bridge Pro link button")
+		log.Warn("no hue bridge pro paired yet – auto-pairing in background; TAP the hue bridge pro link button")
 		go autoPairPro(ctx, cfg, clip, controlled, opts.bridgeIP, opts.skipTLS, log)
 	} else {
 		// No restart flash at startup: the controlled set is empty here (no TV write
@@ -462,7 +462,7 @@ func flashRestartBounded(client *bridgepro.Client, log *slog.Logger, ids []strin
 	select {
 	case <-done:
 	case <-time.After(max):
-		log.Warn("restart flash timed out (Bridge Pro unreachable?) — exiting anyway", "after", max.String())
+		log.Warn("restart flash timed out (hue bridge pro unreachable?) — exiting anyway", "after", max.String())
 	}
 }
 
@@ -549,10 +549,10 @@ func autoPairPro(ctx context.Context, cfg *config.Config, clip *clipv1.Server, c
 		h, id, derr := resolveProHost(bridgeIP, "", bridgepro.Discover, log)
 		if derr == nil && h != "" {
 			host, discoveryID = h, id
-			log.Info("bridge pro discovered", "host", host)
+			log.Info("hue bridge pro discovered", "host", host)
 			break
 		}
-		log.Warn("bridge pro not paired yet: not found via cloud discovery — power the Bridge Pro on, or pass -bridge-ip; retrying", "err", derr)
+		log.Warn("hue bridge pro not paired yet: not found via cloud discovery — power the hue bridge pro on, or pass -bridge-ip; retrying", "err", derr)
 		if !sleepCtx(ctx, 15*time.Second) {
 			return
 		}
@@ -564,18 +564,18 @@ func autoPairPro(ctx context.Context, cfg *config.Config, clip *clipv1.Server, c
 		if ferr == nil {
 			pro = p
 			if pro.CertSHA256 != "" {
-				log.Info("bridge pro certificate pinned", "sha256", pro.CertSHA256)
+				log.Info("hue bridge pro certificate pinned", "sha256", pro.CertSHA256)
 			}
 			break
 		}
-		log.Warn("bridge pro not paired yet: cannot reach it to pin its certificate — power the Bridge Pro on; retrying", "host", host, "err", ferr)
+		log.Warn("hue bridge pro not paired yet: cannot reach it to pin its certificate — power the hue bridge pro on; retrying", "host", host, "err", ferr)
 		if !sleepCtx(ctx, 15*time.Second) {
 			return
 		}
 	}
 
 	httpClient := bridgepro.HTTPClientFor(pro)
-	log.Info("waiting for the Bridge Pro link button — TAP it now", "host", host)
+	log.Info("waiting for the hue bridge pro link button — TAP it now", "host", host)
 	for attempts := 0; ; attempts++ {
 		res, perr := bridgepro.Pair(httpClient, host, "relume#"+hostname())
 		if perr == nil {
@@ -586,18 +586,18 @@ func autoPairPro(ctx context.Context, cfg *config.Config, clip *clipv1.Server, c
 			// so logs can reference it (not just the IP). See config.BridgePro.LogValue.
 			captureBridgeInfo(pro, client)
 			if serr := cfg.SetPro(pro); serr != nil {
-				log.Error("persisting bridge pro pairing", "err", serr)
+				log.Error("persisting hue bridge pro pairing", "err", serr)
 				return
 			}
 			clip.SetLightProvider(newProvider(client, controlled, log))
-			log.Info("bridge pro paired (auto)", "pro", pro)
+			log.Info("hue bridge pro paired (auto)", "", pro)
 			if lights, lerr := client.Lights(); lerr == nil {
-				log.Info("bridge pro lights available", "count", len(lights), "color", colorCapable(lights))
+				log.Info("hue bridge pro lights available", "count", len(lights), "color", colorCapable(lights))
 			}
 			return
 		}
 		if attempts%6 == 0 {
-			log.Info("still waiting for the Bridge Pro link button — TAP it", "host", host)
+			log.Info("still waiting for the hue bridge pro link button — TAP it", "host", host)
 		}
 		if !sleepCtx(ctx, 3*time.Second) {
 			return

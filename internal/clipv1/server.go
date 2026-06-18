@@ -119,7 +119,7 @@ func (s *Server) MarkDTLSStreamUp() {
 // MarkDTLSStreamDown records that the TV's DTLS stream closed. Wired to the
 // receiver's OnStreamStop so a later re-activation can arm the watchdog again.
 func (s *Server) MarkDTLSStreamDown() {
-	s.stream.markStreamDown()
+	s.stream.markStreamDown(s.log)
 }
 
 // SetLightProvider registers the source for the light list (Bridge Pro backend).
@@ -158,7 +158,7 @@ func (s *Server) lightsV1() map[string]any {
 	}
 	lights, err := lp.LightsV1()
 	if err != nil {
-		s.log.Warn("reading lights from bridge pro", "err", err)
+		s.log.Warn("reading lights from hue bridge pro", "err", err)
 		return map[string]any{}
 	}
 	return lights
@@ -536,7 +536,7 @@ func (s *Server) handleLight(w http.ResponseWriter, r *http.Request) {
 	}
 	lights, err := lp.LightsV1()
 	if err != nil {
-		s.log.Warn("reading lights from bridge pro", "err", err)
+		s.log.Warn("reading lights from hue bridge pro", "err", err)
 		writeError(w, 901, "/lights/"+id, "bridge pro error")
 		return
 	}
@@ -566,6 +566,10 @@ func (s *Server) handleSetLightState(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.recordWriteTime()
+	if s.EntertainmentMode && s.stream.noteRESTDriving() {
+		s.log.Info("entertainment mode: TV driving via per-light REST writes — no DTLS stream opened " +
+			"(not a fallback; the TV simply isn't streaming entertainment)")
+	}
 	// Optimistic: the provider queues the write and forwards it to the Bridge Pro
 	// asynchronously, so this returns immediately without blocking on the round-trip.
 	if err := lp.SetLightV1(id, state); err != nil {

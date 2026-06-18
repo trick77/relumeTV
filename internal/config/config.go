@@ -77,12 +77,13 @@ type BridgePro struct {
 	DiscoveryID string `json:"discoveryId,omitempty"`
 }
 
-// LogValue renders the Bridge Pro as a compact reference for structured logs:
-// its name and bridge id when known, always its host. Use as a single log attr,
-// e.g. log.Warn("...", "pro", cfg.Pro).
+// LogValue renders the Bridge Pro as inlined log attributes: its name and bridge
+// id when known, always its host. Attach under an EMPTY key so the fields appear
+// at top level without a redundant "pro." prefix (the upstream bridge is always a
+// Pro), e.g. log.Warn("...", "", cfg.Pro). Renders pro=<none> when unpaired.
 func (p *BridgePro) LogValue() slog.Value {
 	if p == nil {
-		return slog.StringValue("<none>")
+		return slog.GroupValue(slog.String("pro", "<none>"))
 	}
 	attrs := make([]slog.Attr, 0, 3)
 	if p.Name != "" {

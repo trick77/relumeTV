@@ -99,7 +99,19 @@ func BuildSnapshot(src StateSource) Snapshot {
 		s.Health = "idle"
 	case mode == "entertainment" && dtlsUp && !fallback:
 		s.Health = "streaming-pro"
+	case mode == "entertainment" && fallback:
+		// B: the TV activated a stream but relume could not drive the Pro over DTLS,
+		// so it reverted to REST-follow. A degraded state worth flagging distinctly.
+		s.Health = "entertainment-fallback"
+	case mode == "entertainment":
+		// C: entertainment mode is configured but the TV never opened a DTLS stream —
+		// it is driving via per-light REST writes. This is NOT a fallback (nothing
+		// failed); the TV simply isn't streaming entertainment. Kept distinct from
+		// "following-rest" so the UI doesn't read as a contradiction ("entertainment"
+		// next to "REST-follow") and doesn't imply a fallback that never happened.
+		s.Health = "entertainment-rest"
 	default:
+		// REST mode: REST-follow is the intended, configured path.
 		s.Health = "following-rest"
 	}
 

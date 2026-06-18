@@ -167,7 +167,7 @@ func (p *LightProvider) recordForwardErr(err error) {
 		p.errCount = 0
 		p.lastErrLog = now
 		p.errMu.Unlock()
-		p.log.Warn("forwarding lights to bridge pro failing", "failures", count, "last_err", err)
+		p.log.Warn("forwarding lights to hue bridge pro failing", "failures", count, "last_err", err)
 		return
 	}
 	p.errMu.Unlock()

@@ -49,10 +49,10 @@ func resolveProHost(bridgeIP, want string, discover func() ([]bridgepro.Discover
 	// Always log it (louder when several are present, since that is the case where
 	// blindly taking the first risks the wrong bridge on a multi-bridge LAN).
 	if len(bridges) > 1 {
-		log.Warn("bridge pro discovery: no stored discovery id, multiple bridges found — picking the first; pass -bridge-ip to disambiguate",
+		log.Warn("hue bridge pro discovery: no stored discovery id, multiple bridges found — picking the first; pass -bridge-ip to disambiguate",
 			"count", len(bridges), "picked", bridges[0].InternalIPAddress)
 	} else {
-		log.Info("bridge pro discovery: no stored discovery id — picking the only discovered bridge",
+		log.Info("hue bridge pro discovery: no stored discovery id — picking the only discovered bridge",
 			"picked", bridges[0].InternalIPAddress)
 	}
 	return bridges[0].InternalIPAddress, bridges[0].ID, nil
@@ -173,20 +173,20 @@ func (w *proWatcher) tick() (reconnected bool) {
 	// log and back off WITHOUT touching the pairing. Only a genuinely unreachable Pro
 	// (or any non-queue/non-domain error) proceeds to re-discover.
 	if errors.Is(err, bridgepro.ErrQueueFull) || errors.Is(err, bridgepro.ErrDomain) {
-		w.log.Warn("Hue Bridge Pro busy (command queue full) — not re-discovering; backing off", "pro", pro, "err", err)
+		w.log.Warn("hue bridge pro busy (command queue full) — not re-discovering; backing off", "", pro, "err", err)
 		return false
 	}
 
-	w.log.Warn("Hue Bridge Pro not reachable — is it turned off? "+
+	w.log.Warn("hue bridge pro not reachable — is it turned off? "+
 		"Turn it back on (or check its power/network cable); "+
-		"relume can't control the lights until it is back. Retrying.", "pro", pro, "err", err)
+		"relume can't control the lights until it is back. Retrying.", "", pro, "err", err)
 
 	host, discoveryID, derr := resolveProHost(w.bridgeIP, pro.DiscoveryID, w.discover, w.log)
 	if derr != nil || host == "" {
 		if pro.DiscoveryID != "" && w.bridgeIP == "" {
-			w.log.Warn("Hue Bridge Pro reconnect: stored bridge not found via discovery; will retry", "discoveryId", pro.DiscoveryID, "err", derr)
+			w.log.Warn("hue bridge pro reconnect: stored bridge not found via discovery; will retry", "discoveryId", pro.DiscoveryID, "err", derr)
 		} else {
-			w.log.Warn("Hue Bridge Pro reconnect: not found via discovery; will retry", "err", derr)
+			w.log.Warn("hue bridge pro reconnect: not found via discovery; will retry", "err", derr)
 		}
 		return false
 	}
@@ -195,7 +195,7 @@ func (w *proWatcher) tick() (reconnected bool) {
 	if !w.skipTLS && !pro.SkipTLSVerify {
 		fp, ferr := w.fetchFingerprint(host)
 		if ferr != nil {
-			w.log.Warn("Hue Bridge Pro reconnect: cert fetch failed; will retry", "host", host, "err", ferr)
+			w.log.Warn("hue bridge pro reconnect: cert fetch failed; will retry", "host", host, "err", ferr)
 			return false
 		}
 		certSHA = fp
@@ -208,14 +208,14 @@ func (w *proWatcher) tick() (reconnected bool) {
 		updated.DiscoveryID = discoveryID
 	}
 	if verr := w.healthCheck(updated); verr != nil {
-		w.log.Warn("Hue Bridge Pro reconnect: still unreachable", "host", host, "err", verr)
+		w.log.Warn("hue bridge pro reconnect: still unreachable", "host", host, "err", verr)
 		return false
 	}
 	if serr := w.cfg.SetPro(updated); serr != nil {
-		w.log.Error("persisting reconnected Hue Bridge Pro", "err", serr)
+		w.log.Error("persisting reconnected hue bridge pro", "err", serr)
 		return false
 	}
 	w.applyProvider(updated)
-	w.log.Info("Hue Bridge Pro reconnected", "pro", updated)
+	w.log.Info("hue bridge pro reconnected", "", updated)
 	return true
 }

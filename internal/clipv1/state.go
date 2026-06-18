@@ -152,6 +152,11 @@ type streamState struct {
 	// matches, so a stale callback (already firing when it was stopped or
 	// superseded) cannot leave a healthy TV stuck in fallback (M1).
 	gen uint64
+	// restNoticed gates the one-shot "TV is driving via REST without ever opening
+	// an entertainment stream" log (state C). It latches once such a write is seen
+	// and resets on any stream-state transition, so a steady REST session logs
+	// exactly once instead of per write.
+	restNoticed bool
 }
 
 func newStreamState(fallbackTimeout time.Duration) *streamState {
@@ -185,6 +190,22 @@ func (s *streamState) isUp() bool {
 	return s.streamUp
 }
 
+// noteRESTDriving reports whether the caller should emit the one-shot state-C
+// log: the TV is driving via a per-light REST write while no DTLS stream is up,
+// no stream activation is in flight (active), and relume is not in fallback —
+// i.e. the TV simply never opened an entertainment stream. Returns true exactly
+// once per REST-driving episode; resetNotice (called on any stream-state
+// transition) re-arms it for the next episode.
+func (s *streamState) noteRESTDriving() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.streamUp || s.fallback || s.active || s.restNoticed {
+		return false
+	}
+	s.restNoticed = true
+	return true
+}
+
 // setActive records the activation (or deactivation) the TV requested so
 // GET /groups/1 reflects it. owner is set on activate, cleared on deactivate.
 func (s *streamState) setActive(active bool, owner string) {
@@ -195,6 +216,7 @@ func (s *streamState) setActive(active bool, owner string) {
 	} else {
 		s.owner = ""
 	}
+	s.restNoticed = false
 	s.mu.Unlock()
 }
 
@@ -246,6 +268,7 @@ func (s *streamState) disarmWatchdog() {
 // steady state the TV stays on REST and this no longer fires (see streamState.fallback).
 func (s *streamState) markStreamUp(log *slog.Logger) {
 	s.mu.Lock()
+	was := s.streamUp
 	s.streamUp = true
 	if s.watchdog != nil {
 		s.watchdog.Stop()
@@ -253,16 +276,27 @@ func (s *streamState) markStreamUp(log *slog.Logger) {
 	}
 	s.fallback = false
 	s.gen++
+	s.restNoticed = false
 	s.mu.Unlock()
-	log.Info("entertainment: TV DTLS stream up — entertainment path active")
+	// Edge-triggered: log the path switch only on the actual REST→entertainment
+	// transition, not on a redundant stream-up for an already-up stream.
+	if !was {
+		log.Info("control path → entertainment: TV DTLS stream up, streaming to the hue bridge pro")
+	}
 }
 
 // markStreamDown records that the TV's DTLS stream closed, so a later re-activation
-// can arm the watchdog again.
-func (s *streamState) markStreamDown() {
+// can arm the watchdog again. Edge-triggered: logs the entertainment→REST switch
+// only when a stream that was actually up has now closed.
+func (s *streamState) markStreamDown(log *slog.Logger) {
 	s.mu.Lock()
+	was := s.streamUp
 	s.streamUp = false
+	s.restNoticed = false
 	s.mu.Unlock()
+	if was {
+		log.Info("control path → REST-follow: TV DTLS stream closed")
+	}
 }
 
 // watchdogFired is invoked when the fallback timer elapses. Under the lock it
@@ -280,9 +314,10 @@ func (s *streamState) watchdogFired(gen uint64, log *slog.Logger) {
 	s.fallback = true
 	s.active = false
 	s.owner = ""
+	s.restNoticed = false
 	timeout := s.fallbackTimeout
 	s.mu.Unlock()
-	log.Warn("entertainment: TV did NOT open the DTLS stream in time — FALLING BACK to REST-follow "+
+	log.Warn("control path → REST-follow (fallback): TV did NOT open the DTLS stream in time "+
 		"(re-acking activation as inactive so the TV resumes per-light PUTs)",
 		"timeout", timeout.String())
 }
