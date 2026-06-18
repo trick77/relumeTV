@@ -37,7 +37,7 @@ function healthLabel(h) {
     "following-rest": "Active · REST-follow",
     "idle": "Idle · TV not driving",
     "no-tv": "Waiting for TV pairing",
-    "unpaired-pro": "Bridge Pro not paired",
+    "unpaired-pro": "Hue Bridge Pro not paired",
   }[h] || h;
 }
 
@@ -105,11 +105,11 @@ function renderSetup(s) {
       <div class="steps">
         <div class="step ${s.proPaired ? "done" : "active"}">
           <div class="rail"><div class="num">${s.proPaired ? "✓" : "1"}</div><div class="line"></div></div>
-          <div class="card"><h3>Pair Bridge Pro ${proPill}</h3>
+          <div class="card"><h3>Pair Hue Bridge Pro ${proPill}</h3>
             <div class="d">${
               s.proPaired
                 ? `${esc(s.proName)} · ${esc(s.proHost)} · certificate pinned`
-                : "Briefly press the link button on the Bridge Pro."
+                : "Briefly press the link button on the Hue Bridge Pro."
             }</div></div>
         </div>
         <div class="step ${s.proPaired ? (s.tvClients.length ? "done" : "active") : "todo"}">
@@ -146,7 +146,7 @@ function renderDashboard(s) {
       return `<div class="lamp ${l.driven ? "driven" : ""} ${l.on ? "" : "off"}">
         <div class="swatch" style="${l.on ? `background:${col};box-shadow:0 0 20px ${col}` : ""}"></div>
         <div class="nm">${esc(l.name)}</div>
-        <div class="st">${l.on ? "on" : "off"}</div></div>`;
+        <div class="st">${l.on ? `<span class="ok">on</span>` : "off"}</div></div>`;
     })
     .join("");
   const driven = drivenLights.length;
@@ -155,7 +155,7 @@ function renderDashboard(s) {
       ? `<div class="card pending"><h3>⚠ Needs attention</h3>
           ${
             !s.proPaired
-              ? `<div class="pendrow"><div class="info"><b>Bridge Pro pairing</b><div>Press the link button on the Pro</div></div><span class="dot pulse"></span></div>`
+              ? `<div class="pendrow"><div class="info"><b>Hue Bridge Pro pairing</b><div>Press the link button on the Pro</div></div><span class="dot pulse"></span></div>`
               : ""
           }
           ${
@@ -167,14 +167,12 @@ function renderDashboard(s) {
       : "";
   app.innerHTML = `
     <div class="wrap">
-      <div class="top"><div class="brand">re<span>lume</span></div><div class="ver">v${esc(s.version)}</div>${
-        s.startedAt ? `<div class="ver" id="uptime">↑ ${esc(fmtUptime(Date.now() - Date.parse(s.startedAt)))}</div>` : ""
-      }
+      <div class="top"><div class="brand">re<span>lume</span></div><div class="ver">v${esc(s.version)}</div>
         <div class="spacer"></div><div class="health"><span class="${healthDotClass(s.health)}"></span> ${esc(healthLabel(s.health))}</div></div>
       <div class="pipe">
-        <div class="step"><div class="lbl">Bridge Pro</div><div class="val${s.proPaired ? " ok" : ""}">${s.proPaired ? "✓ Paired" : "— Unpaired"}</div><div class="sub">${esc(s.proName)} ${esc(s.proHost)}</div></div>
+        <div class="step"><div class="lbl">Hue Bridge Pro</div><div class="val">${s.proPaired ? `<span class="ok">✓</span> Paired` : "— Unpaired"}${s.startedAt ? ` <span class="up" id="uptime">↑ ${esc(fmtUptime(Date.now() - Date.parse(s.startedAt)))}</span>` : ""}</div><div class="sub">${esc(s.proName)} ${esc(s.proHost)}</div></div>
         <div class="step"><div class="lbl">TV pairing</div><div class="val">${s.tvClients.length} client(s)</div><div class="sub">${esc(s.tvClients.join(", "))}</div></div>
-        <div class="step"><div class="lbl">Mode <span class="info" title="Entertainment: low-latency DTLS stream to the Bridge Pro (default). REST: per-light REST writes — the automatic fallback when the TV is not streaming entertainment.">i</span></div><div class="val">${esc(cap(currentMode(s)))}${s.fallback ? " (fallback)" : ""}</div><div class="sub">${esc(modeSub(s))}</div></div>
+        <div class="step"><div class="lbl">Mode <span class="info" title="Entertainment: low-latency DTLS stream to the Hue Bridge Pro (default). REST: per-light REST writes — the automatic fallback when the TV is not streaming entertainment.">i</span></div><div class="val">${esc(cap(currentMode(s)))}${s.fallback ? " (fallback)" : ""}</div><div class="sub">${esc(modeSub(s))}</div></div>
         <div class="step"><div class="lbl">Lights</div><div class="val">${s.lights.length}</div><div class="sub">${driven} driven by TV</div></div>
       </div>
       <div class="grid">
