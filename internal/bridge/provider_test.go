@@ -41,6 +41,12 @@ func (f *fakeClient) seen() []int {
 	return append([]int(nil), f.mirek...)
 }
 
+func (f *fakeClient) calls() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.n
+}
+
 func newTestProvider(c proClient) *LightProvider {
 	p := &LightProvider{client: c, pending: map[string]map[string]any{}}
 	p.v1ToUUID = map[string]string{"1": "uuid-1", "2": "uuid-2"} // skip the Lights() resolution
@@ -69,6 +75,47 @@ func TestOnControlled_firesOnEveryForward(t *testing.T) {
 	defer mu.Unlock()
 	if len(got) != 3 || got[0] != "uuid-1" || got[1] != "uuid-1" || got[2] != "uuid-2" {
 		t.Fatalf("OnControlled calls = %v, want [uuid-1 uuid-1 uuid-2]", got)
+	}
+}
+
+func TestForward_emptyV2StateSkipsWriteAndControlled(t *testing.T) {
+	// Given: a provider that reports which UUIDs the TV drives
+	fc := &fakeClient{}
+	p := newTestProvider(fc)
+	var mu sync.Mutex
+	var controlled int
+	p.OnControlled = func(string) {
+		mu.Lock()
+		controlled++
+		mu.Unlock()
+	}
+
+	// When: a state that translates to an empty v2 body (e.g. a group action carrying
+	// only non-light-state keys like "scene", which StateV1ToV2 drops)
+	if err := p.forward("1", map[string]any{"scene": "abc"}); err != nil {
+		t.Fatalf("forward: %v", err)
+	}
+
+	// Then: nothing is written to the Pro and the light is NOT marked controlled
+	mu.Lock()
+	gotControlled := controlled
+	mu.Unlock()
+	if fc.calls() != 0 {
+		t.Errorf("SetLight calls = %d, want 0 for an empty-yielding state", fc.calls())
+	}
+	if gotControlled != 0 {
+		t.Errorf("OnControlled calls = %d, want 0 for an empty-yielding state", gotControlled)
+	}
+
+	// And: a real state still forwards and marks controlled
+	if err := p.forward("1", map[string]any{"ct": 200}); err != nil {
+		t.Fatalf("forward (real): %v", err)
+	}
+	mu.Lock()
+	gotControlled = controlled
+	mu.Unlock()
+	if fc.calls() != 1 || gotControlled != 1 {
+		t.Errorf("after real state: SetLight=%d controlled=%d, want 1/1", fc.calls(), gotControlled)
 	}
 }
 

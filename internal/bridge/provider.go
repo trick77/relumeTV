@@ -174,6 +174,17 @@ func (p *LightProvider) recordForwardErr(err error) {
 // forward translates a v1 state to v2 and writes it to the Bridge Pro, resolving
 // the v1→UUID mapping (loading the light list once if it is not built yet).
 func (p *LightProvider) forward(v1id string, v1state map[string]any) error {
+	// Translate first and skip a no-op write: a state that yields an empty v2 body
+	// (e.g. a group action carrying only non-light-state keys like "scene", which
+	// StateV1ToV2 drops) must not reach the Pro — and must NOT mark the light as
+	// controlled. Marking it would taint the controlled set (the restart/idle flash
+	// targets it) for a light that was never actually driven. The target TV does not
+	// send empty-yielding states on the per-light REST path, so this only ever fires
+	// for the group-action fan-out and is otherwise inert.
+	v2 := translate.StateV1ToV2(v1state)
+	if len(v2) == 0 {
+		return nil
+	}
 	uuid, ok := p.UUIDForV1(v1id)
 	if !ok {
 		// Mapping may not be built yet → load lights once and check again.
@@ -187,5 +198,5 @@ func (p *LightProvider) forward(v1id string, v1state map[string]any) error {
 	if p.OnControlled != nil {
 		p.OnControlled(uuid)
 	}
-	return p.client.SetLight(uuid, translate.StateV1ToV2(v1state))
+	return p.client.SetLight(uuid, v2)
 }
