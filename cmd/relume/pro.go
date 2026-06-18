@@ -74,15 +74,6 @@ func pinProShell(host, discoveryID string, skipTLS bool, fetchFingerprint func(h
 	return pro, nil
 }
 
-// captureBridgeInfo best-effort fills the Pro's name + bridge id while it is
-// reachable, so logs can reference it (not just the IP). Errors are ignored —
-// the fields are purely cosmetic. See config.BridgePro.LogValue.
-func captureBridgeInfo(pro *config.BridgePro, client *bridgepro.Client) {
-	if name, id, ierr := client.BridgeInfo(); ierr == nil {
-		pro.Name, pro.BridgeID = name, id
-	}
-}
-
 // proWatcher keeps the already-paired Bridge Pro reachable. It health-checks
 // periodically and, on a genuine unreachable failure, re-discovers the Pro's
 // current IP, re-pins its certificate and hot-swaps the light provider — all

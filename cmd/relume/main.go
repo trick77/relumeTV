@@ -574,34 +574,25 @@ func autoPairPro(ctx context.Context, cfg *config.Config, clip *clipv1.Server, c
 		}
 	}
 
-	httpClient := bridgepro.HTTPClientFor(pro)
 	log.Info("waiting for the Bridge Pro link button — TAP it now", "host", host)
-	for attempts := 0; ; attempts++ {
-		res, perr := bridgepro.Pair(httpClient, host, "relume#"+hostname())
-		if perr == nil {
-			pro.AppKey = res.AppKey
-			pro.ClientKey = res.ClientKey
-			client := bridgepro.New(pro)
-			// Best-effort: capture the Pro's name + bridge id while it is reachable,
-			// so logs can reference it (not just the IP). See config.BridgePro.LogValue.
-			captureBridgeInfo(pro, client)
-			if serr := cfg.SetPro(pro); serr != nil {
-				log.Error("persisting bridge pro pairing", "err", serr)
-				return
+	paired, perr := bridgepro.NewPairer("relume#"+hostname()).
+		WaitForLinkButton(ctx, pro, time.Time{}, func(attempt int) {
+			if attempt%6 == 0 {
+				log.Info("still waiting for the Bridge Pro link button — TAP it", "host", host)
 			}
-			clip.SetLightProvider(newProvider(client, controlled, log))
-			log.Info("bridge pro paired (auto)", "pro", pro)
-			if lights, lerr := client.Lights(); lerr == nil {
-				log.Info("bridge pro lights available", "count", len(lights), "color", colorCapable(lights))
-			}
-			return
-		}
-		if attempts%6 == 0 {
-			log.Info("still waiting for the Bridge Pro link button — TAP it", "host", host)
-		}
-		if !sleepCtx(ctx, 3*time.Second) {
-			return
-		}
+		})
+	if perr != nil {
+		return // ctx cancelled during the wait
+	}
+	if serr := cfg.SetPro(paired); serr != nil {
+		log.Error("persisting bridge pro pairing", "err", serr)
+		return
+	}
+	client := bridgepro.New(paired)
+	clip.SetLightProvider(newProvider(client, controlled, log))
+	log.Info("bridge pro paired (auto)", "pro", paired)
+	if lights, lerr := client.Lights(); lerr == nil {
+		log.Info("bridge pro lights available", "count", len(lights), "color", colorCapable(lights))
 	}
 }
 
@@ -714,35 +705,24 @@ func runSetup(args []string, log *slog.Logger) error {
 		log.Info("certificate pinned", "sha256", pro.CertSHA256)
 	}
 
-	httpClient := bridgepro.HTTPClientFor(pro)
 	fmt.Printf("\n>>> Now press the link button on the Hue Bridge Pro (%s) <<<\n\n", host)
 
-	deadline := time.Now().Add(*timeout)
-	var res *bridgepro.PairResult
-	for time.Now().Before(deadline) {
-		res, err = bridgepro.Pair(httpClient, host, "relume#"+hostname())
-		if err == nil {
-			break
-		}
-		time.Sleep(2 * time.Second)
-		fmt.Print(".")
-	}
+	pairer := bridgepro.NewPairer("relume#" + hostname())
+	pairer.Interval = 2 * time.Second
+	paired, perr := pairer.WaitForLinkButton(context.Background(), pro, time.Now().Add(*timeout),
+		func(int) { fmt.Print(".") })
 	fmt.Println()
-	if res == nil {
-		return fmt.Errorf("pairing failed (press the link button in time): %w", err)
+	if perr != nil {
+		return fmt.Errorf("pairing failed (press the link button in time): %w", perr)
 	}
 
-	pro.AppKey = res.AppKey
-	pro.ClientKey = res.ClientKey
-	// Best-effort: capture the Pro's name + bridge id for log references.
-	client := bridgepro.New(pro)
-	captureBridgeInfo(pro, client)
-	if err := cfg.SetPro(pro); err != nil {
+	if err := cfg.SetPro(paired); err != nil {
 		return err
 	}
 	fmt.Println("Pairing successful, app key saved.")
 
 	// List lights as confirmation.
+	client := bridgepro.New(paired)
 	lights, lerr := client.Lights()
 	if lerr != nil {
 		fmt.Printf("Note: lights could not be read: %v\n", lerr)
