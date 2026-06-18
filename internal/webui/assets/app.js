@@ -33,8 +33,7 @@ function healthLabel(h) {
   return {
     "streaming-pro": "Active · streaming to Pro",
     "entertainment-fallback": "Active · entertainment fallback → REST",
-    "entertainment-rest": "Active",
-    "following-rest": "Active · REST-follow",
+    "active-rest": "Active",
     "idle": "Idle · TV not driving",
     "no-tv": "Waiting for TV pairing",
     "unpaired-pro": "Hue Bridge Pro not paired",
@@ -44,7 +43,7 @@ function healthLabel(h) {
 // healthDotClass colours the status dot: green when actively driving the lights,
 // amber for a degraded fallback or anything needing attention.
 function healthDotClass(h) {
-  if (h === "streaming-pro" || h === "following-rest" || h === "entertainment-rest") return "dot ok pulse";
+  if (h === "streaming-pro" || h === "active-rest") return "dot ok pulse";
   if (h === "entertainment-fallback") return "dot pulse"; // amber: degraded (DTLS failed → REST)
   if (h === "idle") return "dot pulse"; // amber standby
   return "dot pulse"; // amber: needs attention (no-tv / unpaired-pro)

@@ -147,26 +147,27 @@ func (entertainmentRESTSource) ModeInfo() (string, bool, bool) {
 }
 
 // C: entertainment mode configured, the TV is driving, but it never opened a
-// DTLS stream (no fallback). Must NOT read as "following-rest" (which is the
-// configured REST-mode path) and must NOT imply a fallback that never happened.
+// DTLS stream (no fallback). Surfaced as the shared "active-rest" state and must
+// NOT imply a fallback that never happened.
 func TestBuildSnapshot_EntertainmentRESTWhenTVNotStreaming(t *testing.T) {
 	s := BuildSnapshot(entertainmentRESTSource{})
-	if s.Health != "entertainment-rest" {
-		t.Fatalf("health = %q, want entertainment-rest", s.Health)
+	if s.Health != "active-rest" {
+		t.Fatalf("health = %q, want active-rest", s.Health)
 	}
 	if s.Fallback {
 		t.Fatalf("expected fallback=false (no fallback occurred), got %+v", s)
 	}
 }
 
-// REST mode: REST-follow is the intended, configured path — not a degradation.
+// REST mode: REST is the intended, configured path — not a degradation. Shares the
+// "active-rest" health state with entertainment-configured-but-not-streaming.
 type restModeSource struct{ fakeSource }
 
 func (restModeSource) ModeInfo() (string, bool, bool) { return "rest", false, false }
 
-func TestBuildSnapshot_RESTModeIsFollowingRest(t *testing.T) {
+func TestBuildSnapshot_RESTModeIsActiveRest(t *testing.T) {
 	s := BuildSnapshot(restModeSource{})
-	if s.Health != "following-rest" {
-		t.Fatalf("health = %q, want following-rest", s.Health)
+	if s.Health != "active-rest" {
+		t.Fatalf("health = %q, want active-rest", s.Health)
 	}
 }
