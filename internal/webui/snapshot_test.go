@@ -8,8 +8,10 @@ import (
 )
 
 type fakeSource struct {
-	driven []string
-	live   map[string]LiveColor
+	driven   []string
+	live     map[string]LiveColor
+	coalesce int
+	fwdErrs  int
 }
 
 func (f fakeSource) Version() string      { return "1.4.2" }
@@ -36,6 +38,8 @@ func (f fakeSource) Active() bool                     { return true }
 func (f fakeSource) StreamFPS() int                   { return 25 }
 func (f fakeSource) ProSendFPS() int                  { return 50 }
 func (f fakeSource) ProWriteRate() int                { return 0 }
+func (f fakeSource) CoalesceRate() int                { return f.coalesce }
+func (f fakeSource) ForwardErrors() int               { return f.fwdErrs }
 
 func TestBuildSnapshot_MapsLightsAndDriven(t *testing.T) {
 	s := BuildSnapshot(fakeSource{driven: []string{"1"}})
@@ -97,6 +101,27 @@ func TestBuildSnapshot_DrivenV1IDMarksLight(t *testing.T) {
 	}
 }
 
+// Backpressure fields flow through to the snapshot: the coalesced drops/s rate and
+// the cumulative forward-error count the Backpressure card renders.
+func TestBuildSnapshot_BackpressureFieldsFlowThrough(t *testing.T) {
+	s := BuildSnapshot(fakeSource{driven: []string{"1"}, coalesce: 12, fwdErrs: 3})
+	if s.CoalesceRate != 12 {
+		t.Fatalf("coalesceRate = %d, want 12 (drops/s flows through)", s.CoalesceRate)
+	}
+	if s.ForwardErrors != 3 {
+		t.Fatalf("forwardErrors = %d, want 3 (cumulative count flows through)", s.ForwardErrors)
+	}
+	// forwardErrors must always serialize (no omitempty) so the card can distinguish
+	// "0 errors" from a missing field.
+	b, err := json.Marshal(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), `"forwardErrors":3`) {
+		t.Fatalf("expected forwardErrors in JSON, got %s", b)
+	}
+}
+
 // emptySource models a fresh, unpaired install: no provider, no TV clients.
 type emptySource struct{}
 
@@ -117,6 +142,8 @@ func (emptySource) Active() bool                     { return false }
 func (emptySource) StreamFPS() int                   { return 0 }
 func (emptySource) ProSendFPS() int                  { return 0 }
 func (emptySource) ProWriteRate() int                { return 0 }
+func (emptySource) CoalesceRate() int                { return 0 }
+func (emptySource) ForwardErrors() int               { return 0 }
 
 func TestBuildSnapshot_EmptyArraysNotNil(t *testing.T) {
 	s := BuildSnapshot(emptySource{})

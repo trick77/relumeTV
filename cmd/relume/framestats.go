@@ -3,8 +3,24 @@ package main
 import (
 	"math"
 	"sync"
+	"sync/atomic"
 	"time"
 )
+
+// proStats bundles relume's outgoing-to-Pro counters so they thread through the
+// provider constructors as one value instead of three parameters. writes and
+// coalesces are rolling per-second rates (successful REST writes and frames
+// dropped by the optimistic path); fwdErrs is a cumulative count of failed Pro
+// writes since start — a rate would mostly read 0 and hide that errors happened.
+type proStats struct {
+	writes    *frameStats
+	coalesces *frameStats
+	fwdErrs   *atomic.Uint64
+}
+
+func newProStats() *proStats {
+	return &proStats{writes: newFrameStats(), coalesces: newFrameStats(), fwdErrs: new(atomic.Uint64)}
+}
 
 // fpsWindow is the trailing window over which the live entertainment frame rate is
 // measured. Wide enough to smooth the ~25 Hz TV stream into a steady number, short

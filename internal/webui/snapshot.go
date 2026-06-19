@@ -58,6 +58,16 @@ type Snapshot struct {
 	// light, coalesced). The REST-path counterpart to ProSendFPS; non-zero only when
 	// driving the Pro over REST (fallback or plain REST-follow).
 	ProWriteRate int `json:"proWriteRate,omitempty"`
+	// CoalesceRate is the rate (per second) of frames the optimistic REST path
+	// dropped because the Bridge Pro could not keep up. This is healthy backpressure
+	// (the Pro spared a write it could not accept), NOT an error — the UI must not
+	// render it as a failure. Non-zero only on the REST path.
+	CoalesceRate int `json:"coalesceRate,omitempty"`
+	// ForwardErrors is the cumulative count of failed REST writes to the Pro since
+	// start (down Pro / 503 overflow) — the real failure signal, distinct from
+	// CoalesceRate. A count, not a rate: forward errors are rare, so a rate would
+	// mostly read 0 and hide that errors happened earlier.
+	ForwardErrors int `json:"forwardErrors"`
 }
 
 // StateSource exposes relume's live state to the snapshot builder without
@@ -93,6 +103,12 @@ type StateSource interface {
 	// ProWriteRate is relume's outgoing REST write rate to the Pro (writes/s). 0
 	// unless driving the Pro over REST.
 	ProWriteRate() int
+	// CoalesceRate is the rate (per second) of frames the optimistic REST path
+	// dropped because the Pro could not keep up — healthy backpressure, not an error.
+	CoalesceRate() int
+	// ForwardErrors is the cumulative count of failed REST writes to the Pro since
+	// start — the real failure signal (down Pro / 503 overflow).
+	ForwardErrors() int
 }
 
 func rfc3339(t time.Time) string {
@@ -114,24 +130,26 @@ func BuildSnapshot(src StateSource) Snapshot {
 	}
 
 	s := Snapshot{
-		Version:      src.Version(),
-		StartedAt:    rfc3339(src.StartedAt()),
-		ProPaired:    paired,
-		ProName:      name,
-		ProHost:      host,
-		ProBridgeID:  bridgeID,
-		CertPinned:   pinned,
-		TVClients:    tv,
-		Mode:         mode,
-		DTLSStreamUp: dtlsUp,
-		Fallback:     fallback,
-		BridgeName:   src.BridgeName(),
-		PendingTV:    src.PendingTVPairing(),
-		LastActivity: rfc3339(src.LastActivity()),
-		Lights:       []LightView{},
-		StreamFPS:    src.StreamFPS(),
-		ProSendFPS:   src.ProSendFPS(),
-		ProWriteRate: src.ProWriteRate(),
+		Version:       src.Version(),
+		StartedAt:     rfc3339(src.StartedAt()),
+		ProPaired:     paired,
+		ProName:       name,
+		ProHost:       host,
+		ProBridgeID:   bridgeID,
+		CertPinned:    pinned,
+		TVClients:     tv,
+		Mode:          mode,
+		DTLSStreamUp:  dtlsUp,
+		Fallback:      fallback,
+		BridgeName:    src.BridgeName(),
+		PendingTV:     src.PendingTVPairing(),
+		LastActivity:  rfc3339(src.LastActivity()),
+		Lights:        []LightView{},
+		StreamFPS:     src.StreamFPS(),
+		ProSendFPS:    src.ProSendFPS(),
+		ProWriteRate:  src.ProWriteRate(),
+		CoalesceRate:  src.CoalesceRate(),
+		ForwardErrors: src.ForwardErrors(),
 	}
 
 	switch {

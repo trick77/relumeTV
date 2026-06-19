@@ -96,6 +96,27 @@ function streamSub(s) {
   }
 }
 
+// backpressureVal shows how relume shields the Bridge Pro. coalesceRate (drops/s)
+// is HEALTHY — the optimistic path sparing the Pro a write it could not keep up
+// with — so it is never coloured as a fault. forwardErrors is the real failure
+// signal (down Pro / 503 overflow) and only appears, in amber, once it is non-zero.
+function backpressureVal(s) {
+  const n = s.coalesceRate || 0;
+  const drops = `<span class="ok">●</span> ${n} ${n === 1 ? "drop" : "drops"}/s`;
+  if (s.forwardErrors > 0) {
+    return `${drops} <span class="warn">● ${s.forwardErrors} err</span>`;
+  }
+  return drops;
+}
+
+// backpressureSub explains the Backpressure value: coalesced frames are spared
+// writes (good), forward errors are failed writes to the Pro (bad). The sub only
+// flags errors once they happen, otherwise it states the benign meaning.
+function backpressureSub(s) {
+  if (s.forwardErrors > 0) return `${s.forwardErrors} failed Pro writes`;
+  return "Frames spared the Pro";
+}
+
 // cap upper-cases the first letter for display (e.g. the mode label), without
 // touching the underlying lower-case value relume uses internally.
 function cap(str) {
@@ -125,6 +146,29 @@ function fmtUptime(ms) {
 function tickUptime() {
   const el = document.getElementById("uptime");
   if (el && _startedAtMs) el.textContent = "↑ " + fmtUptime(Date.now() - _startedAtMs);
+}
+
+// _lastActivityMs holds the time (ms epoch) of the most recent Ambilight write, so
+// the Liveness card can tick the elapsed time every second between snapshot pushes.
+// This also covers DTLS streaming: the backend marks activity per decoded frame, so
+// the card reads "live" throughout a stream, not just on the REST path.
+let _lastActivityMs = null;
+// fmtSince renders the elapsed time since the last write — "live" while it is fresh
+// (under fmtSinceLive ms), otherwise the largest spelled-out unit like fmtUptime.
+const fmtSinceLive = 2500;
+function fmtSince(ms) {
+  if (!(ms >= 0)) return "—";
+  if (ms < fmtSinceLive) return "live";
+  return fmtUptime(ms) + " ago";
+}
+function tickLiveness() {
+  const el = document.getElementById("liveness");
+  if (!el) return;
+  el.innerHTML = _lastActivityMs
+    ? (Date.now() - _lastActivityMs < fmtSinceLive
+        ? `<span class="ok">●</span> live`
+        : esc(fmtSince(Date.now() - _lastActivityMs)))
+    : "—";
 }
 
 function renderSetup(s) {
@@ -201,11 +245,15 @@ function renderDashboard(s) {
         <div class="spacer"></div><div class="health"><span class="${healthDotClass(s.health)}"></span> ${esc(healthLabel(s.health))}</div></div>
       <div class="pipe">
         <div class="step"><div class="lbl">Hue Bridge Pro</div><div class="val">${s.proPaired ? `<span class="ok">✓</span> Paired` : "— Unpaired"}</div><div class="sub">${esc(s.proHost)}${s.proBridgeId ? `<br>${esc(s.proBridgeId.toUpperCase())}` : ""}</div></div>
-        <div class="step"><div class="lbl">TV pairing</div><div class="val">${s.tvClients.length} client(s)</div><div class="sub">${esc(s.tvClients.join(", "))}</div></div>
+        <div class="step"><div class="lbl">TV pairing</div><div class="val">${s.tvClients.length} ${s.tvClients.length === 1 ? "client" : "clients"}</div><div class="sub">${esc(s.tvClients.join(", "))}</div></div>
         <div class="step"><div class="lbl">Mode <span class="info" tabindex="0" data-tip="Entertainment: low-latency DTLS stream to the Hue Bridge Pro (default). REST: per-light REST writes — the automatic fallback when the TV is not streaming entertainment.">i</span></div><div class="val">${esc(cap(currentMode(s)))}${s.fallback ? " (fallback)" : ""}</div><div class="sub">${esc(modeSub(s))}</div></div>
         <div class="step"><div class="lbl">Lights</div><div class="val">${driven}</div><div class="sub">Driven by TV</div></div>
         <div class="step"><div class="lbl">Stream</div><div class="val">${streamVal(s)}</div><div class="sub">${esc(streamSub(s))}</div></div>
         <div class="step"><div class="lbl">Uptime</div><div class="val" id="uptime">${s.startedAt ? esc("↑ " + fmtUptime(Date.now() - Date.parse(s.startedAt))) : "—"}</div><div class="sub">Running</div></div>
+      </div>
+      <div class="pipe row2">
+        <div class="step"><div class="lbl">Backpressure <span class="info" tabindex="0" data-tip="Drops/s: Ambilight frames relume coalesced away because the Bridge Pro could not keep up — healthy, it spares the Pro writes it cannot accept. Errors: failed writes to the Pro (unreachable / 503 overflow) — the real fault signal.">i</span></div><div class="val">${backpressureVal(s)}</div><div class="sub">${esc(backpressureSub(s))}</div></div>
+        <div class="step"><div class="lbl">Liveness</div><div class="val" id="liveness">—</div><div class="sub">Since last write</div></div>
       </div>
       <div class="grid">${pending}
         <div class="card"><h3>Lights <span class="cnt">${shown.length} shown · ${driven} driven</span></h3><div class="lights">${lights}</div></div>
@@ -220,9 +268,11 @@ const logRow = (e) =>
 
 function render(s) {
   _startedAtMs = s.startedAt ? Date.parse(s.startedAt) : null;
+  _lastActivityMs = s.lastActivity ? Date.parse(s.lastActivity) : null;
   if (s.proPaired && s.tvClients.length > 0) renderDashboard(s);
   else renderSetup(s);
   tickUptime();
+  tickLiveness();
   const logEl = document.getElementById("log");
   if (logEl) logEl.innerHTML = logLines.map(logRow).join("");
 }
@@ -286,8 +336,11 @@ async function boot() {
     const s = await (await fetch("/api/state")).json();
     render(s);
   } catch (_) {}
-  // Tick the uptime every second between snapshot pushes.
-  setInterval(tickUptime, 1000);
+  // Tick the uptime and liveness every second between snapshot pushes.
+  setInterval(() => {
+    tickUptime();
+    tickLiveness();
+  }, 1000);
   const es = new EventSource("/api/events");
   es.onmessage = (msg) => {
     const f = JSON.parse(msg.data);

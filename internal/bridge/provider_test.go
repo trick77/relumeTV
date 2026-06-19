@@ -1,12 +1,21 @@
 package bridge
 
 import (
+	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/trick77/relume/internal/bridgepro"
 )
+
+// downClient models an unreachable Bridge Pro: every write fails, so the provider's
+// forward-error path (and the OnForwardErr UI callback) is exercised.
+type downClient struct{}
+
+func (downClient) Lights() ([]bridgepro.Light, error)    { return nil, nil }
+func (downClient) SetLight(string, map[string]any) error { return errors.New("pro unreachable") }
 
 // fakeClient records the v2 bodies forwarded to the Bridge Pro. The first
 // SetLight call blocks on gate (if set), letting a test hold the drain goroutine
@@ -178,6 +187,53 @@ func TestSetLightV1_coalescesToLatestPerLight(t *testing.T) {
 	if len(got) != 2 || got[0] != 1 || got[1] != 5 {
 		t.Fatalf("forwarded mirek = %v, want [1 5] (intermediate frames coalesced)", got)
 	}
+}
+
+// OnCoalesce fires once per frame the optimistic path drops (a newer state for the
+// same light arriving before the Pro accepted the previous one) — the drops/s the
+// Backpressure card shows. Mirrors the coalescing test, but counts the callback.
+func TestSetLightV1_firesOnCoalesce(t *testing.T) {
+	// Given: the first forward is held in flight so writes pile up behind it
+	gate := make(chan struct{})
+	fc := &fakeClient{gate: gate}
+	p := newTestProvider(fc)
+	var coalesced atomic.Int64
+	p.OnCoalesce = func() { coalesced.Add(1) }
+
+	// When: the first write blocks the drain, then more states for the SAME light queue
+	p.SetLightV1("1", map[string]any{"ct": 1})
+	waitFor(t, func() bool {
+		fc.mu.Lock()
+		defer fc.mu.Unlock()
+		return fc.n == 1 // drain is now blocked inside the first SetLight
+	})
+	for _, v := range []int{2, 3, 4, 5} {
+		p.SetLightV1("1", map[string]any{"ct": v})
+	}
+
+	// Then: write 2 found the queue empty (drained), writes 3,4,5 each replaced a
+	// still-pending state → three coalesced drops.
+	if got := coalesced.Load(); got != 3 {
+		t.Fatalf("OnCoalesce fired %d times, want 3 (one per dropped frame)", got)
+	}
+	close(gate) // let the drain goroutine finish
+}
+
+// OnForwardErr fires once per failed REST write to the Pro — the cumulative error
+// count the Backpressure card shows (distinct from the healthy coalesce drops).
+func TestSetLightV1_firesOnForwardErr(t *testing.T) {
+	// Given: a provider whose every write to the Pro fails (Pro unreachable)
+	p := newTestProvider(downClient{})
+	var errs atomic.Int64
+	p.OnForwardErr = func() { errs.Add(1) }
+
+	// When: a write is queued and the async drain tries (and fails) to forward it
+	if err := p.SetLightV1("1", map[string]any{"ct": 200}); err != nil {
+		t.Fatalf("SetLightV1 returned error: %v", err)
+	}
+
+	// Then: OnForwardErr fires for the failed Pro write
+	waitFor(t, func() bool { return errs.Load() == 1 })
 }
 
 func waitFor(t *testing.T, cond func() bool) {

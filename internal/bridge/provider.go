@@ -45,6 +45,18 @@ type LightProvider struct {
 	// REST-path counterpart to the DTLS sendLoop's frame rate. Wired by main.
 	OnForward func()
 
+	// OnCoalesce, if set, is called once per frame DROPPED because a newer state for
+	// the same light arrived before the Bridge Pro accepted the previous one — the
+	// optimistic path sparing the Pro a write it could not keep up with. This is
+	// healthy backpressure, NOT an error. Fed to the web UI as a drops/s rate. Wired
+	// by main.
+	OnCoalesce func()
+
+	// OnForwardErr, if set, is called once per FAILED REST write to the Bridge Pro (a
+	// down/unreachable Pro, a 503 overflow). Unlike OnCoalesce this is the real error
+	// signal. Fed to the web UI as a cumulative count. Wired by main.
+	OnForwardErr func()
+
 	mu        sync.Mutex
 	cached    map[string]any
 	v1ToUUID  map[string]string
@@ -138,10 +150,12 @@ func (p *LightProvider) V1ForUUID(uuid string) (string, bool) {
 // surfaced to the TV (latency over error reporting). Always returns nil.
 func (p *LightProvider) SetLightV1(v1id string, v1state map[string]any) error {
 	p.ctrlMu.Lock()
+	var coalesced bool
 	if _, exists := p.pending[v1id]; exists {
 		// A previous frame for this light is still queued → it is dropped (coalesced)
 		// because the Bridge Pro has not drained it yet.
 		p.coalesced.Add(1)
+		coalesced = true
 	}
 	p.pending[v1id] = v1state
 	if !p.draining {
@@ -149,6 +163,11 @@ func (p *LightProvider) SetLightV1(v1id string, v1state map[string]any) error {
 		go p.drain()
 	}
 	p.ctrlMu.Unlock()
+	// Fire the UI callback outside the lock (like OnForward), so a slow consumer
+	// never stalls the TV's control path.
+	if coalesced && p.OnCoalesce != nil {
+		p.OnCoalesce()
+	}
 	return nil
 }
 
@@ -181,6 +200,9 @@ func (p *LightProvider) drain() {
 // suppressed failures — so a down Bridge Pro cannot flood the log.
 func (p *LightProvider) recordForwardErr(err error) {
 	p.forwardErr.Add(1)
+	if p.OnForwardErr != nil {
+		p.OnForwardErr()
+	}
 	if p.log == nil {
 		return
 	}

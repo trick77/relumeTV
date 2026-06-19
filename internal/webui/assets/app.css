@@ -59,6 +59,9 @@ body {
   display: flex; gap: 0; background: var(--panel); border: 1px solid var(--line);
   border-radius: 14px; padding: 18px 20px; margin-bottom: 22px; position: relative; overflow: hidden;
 }
+/* second metrics row: pull it up snug under the first pipe (which has a 22px
+   bottom margin) so the two read as one stacked status block. */
+.pipe.row2 { margin-top: -10px; }
 .pipe .step { flex: 1; display: flex; flex-direction: column; gap: 5px; position: relative; padding: 0 16px; }
 .pipe .step:not(:last-child)::after {
   content: ""; position: absolute; right: 0; top: 6px; bottom: 6px; width: 1px; background: var(--line);
