@@ -724,12 +724,12 @@ func (s *Server) handleCreateGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	body, _ := io.ReadAll(r.Body)
+	var g struct {
+		Type string `json:"type"`
+		Name string `json:"name"`
+	}
+	_ = json.Unmarshal(body, &g)
 	if s.confirmsEntertainment() {
-		var g struct {
-			Type string `json:"type"`
-			Name string `json:"name"`
-		}
-		_ = json.Unmarshal(body, &g)
 		s.log.Info("ENTERTAINMENT group create requested by TV",
 			"type", g.Type, "name", g.Name, "body", string(body))
 	} else {
@@ -737,10 +737,14 @@ func (s *Server) handleCreateGroup(w http.ResponseWriter, r *http.Request) {
 	}
 	// Honor the TV's group membership: the lights array is the subset of lights the TV
 	// put in its Ambilight zone. Remember it (and push it to the streamer) so relume
-	// only ever drives those — lights in other rooms stay untouched.
-	if ids, ok := parseGroupLights(body); ok {
-		s.setRequestedMembers(ids)
-		s.log.Info("entertainment group membership: TV requested light subset", "lights", ids)
+	// only ever drives those — lights in other rooms stay untouched. Gated on
+	// type==Entertainment: the TV may also post a LightGroup (entertainment stickiness,
+	// see TROUBLESHOOTING), which must not clobber the entertainment subset.
+	if g.Type == "Entertainment" {
+		if ids, ok := parseGroupLights(body); ok {
+			s.setRequestedMembers(ids)
+			s.log.Info("entertainment group membership: TV requested light subset", "lights", ids)
+		}
 	}
 	writeJSON(w, []map[string]any{{"success": map[string]any{"id": "1"}}})
 }
@@ -813,10 +817,13 @@ func (s *Server) handleGroupUpdate(w http.ResponseWriter, r *http.Request) {
 	// A group update may carry a changed light subset (TV adds/removes a lamp from
 	// its Ambilight zone via PUT /groups/{id} instead of recreating the group). Parse
 	// it the same way as create; a stream-activation body (no lights array) returns
-	// ok=false and never clears the known subset.
-	if ids, ok := parseGroupLights(body); ok {
-		s.setRequestedMembers(ids)
-		s.log.Info("entertainment group membership updated: TV changed light subset", "group", id, "lights", ids)
+	// ok=false and never clears the known subset. Gated on id=="1" (the entertainment
+	// group) so an update to any other group can't clobber the entertainment subset.
+	if id == "1" {
+		if ids, ok := parseGroupLights(body); ok {
+			s.setRequestedMembers(ids)
+			s.log.Info("entertainment group membership updated: TV changed light subset", "group", id, "lights", ids)
+		}
 	}
 
 	// Lazy fallback recovery: if a previous DTLS attempt latched the REST fallback
