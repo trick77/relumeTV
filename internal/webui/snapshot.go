@@ -47,6 +47,9 @@ type Snapshot struct {
 	LastActivity string      `json:"lastActivity"`
 	Lights       []LightView `json:"lights"`
 	Health       string      `json:"health"`
+	// StreamFPS is the live entertainment-stream frame rate (frames/s the TV is
+	// pushing over DTLS). Non-zero only while streaming to the Pro; 0 otherwise.
+	StreamFPS int `json:"streamFps"`
 }
 
 // StateSource exposes relume's live state to the snapshot builder without
@@ -71,6 +74,9 @@ type StateSource interface {
 	// Active reports whether the TV is currently driving the lights (it has
 	// written/streamed within the idle window). False when the TV is off or idle.
 	Active() bool
+	// StreamFPS is the live entertainment-stream frame rate (TV→relume over DTLS).
+	// 0 when no DTLS stream is running.
+	StreamFPS() int
 }
 
 func rfc3339(t time.Time) string {
@@ -106,6 +112,7 @@ func BuildSnapshot(src StateSource) Snapshot {
 		PendingTV:    src.PendingTVPairing(),
 		LastActivity: rfc3339(src.LastActivity()),
 		Lights:       []LightView{},
+		StreamFPS:    src.StreamFPS(),
 	}
 
 	switch {

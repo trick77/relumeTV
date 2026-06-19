@@ -34,6 +34,7 @@ func (f fakeSource) UUIDForV1(v1id string) (string, bool) { return "uuid-" + v1i
 func (f fakeSource) DrivenUUIDs() []string                { return f.driven }
 func (f fakeSource) LiveColors() map[string]LiveColor     { return f.live }
 func (f fakeSource) Active() bool                         { return true }
+func (f fakeSource) StreamFPS() int                       { return 50 }
 
 func TestBuildSnapshot_MapsLightsAndDriven(t *testing.T) {
 	s := BuildSnapshot(fakeSource{driven: []string{"uuid-1"}})
@@ -52,6 +53,9 @@ func TestBuildSnapshot_MapsLightsAndDriven(t *testing.T) {
 	}
 	if s.LastActivity != "" {
 		t.Fatalf("zero time should render empty, got %q", s.LastActivity)
+	}
+	if s.StreamFPS != 50 {
+		t.Fatalf("streamFps = %d, want 50 (live rate flows through to the snapshot)", s.StreamFPS)
 	}
 }
 
@@ -90,6 +94,7 @@ func (emptySource) UUIDForV1(string) (string, bool)       { return "", false }
 func (emptySource) DrivenUUIDs() []string                 { return nil }
 func (emptySource) LiveColors() map[string]LiveColor      { return nil }
 func (emptySource) Active() bool                          { return false }
+func (emptySource) StreamFPS() int                        { return 0 }
 
 func TestBuildSnapshot_EmptyArraysNotNil(t *testing.T) {
 	s := BuildSnapshot(emptySource{})

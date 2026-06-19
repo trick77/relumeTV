@@ -70,6 +70,27 @@ function modeSub(s) {
   return "REST";
 }
 
+// streamVal shows the live entertainment frame rate while the TV is streaming to the
+// Pro over DTLS (health "streaming-pro"). In every other state there is no DTLS stream
+// to the Pro to report, so it shows a dash — streamSub explains why.
+function streamVal(s) {
+  if (s.health === "streaming-pro") return `<span class="ok">●</span> ${s.streamFps || 0} fps`;
+  return "—";
+}
+
+// streamSub explains the stream state under the Stream label. Kept distinct from the
+// Mode card: this card is about the live DTLS stream to the Pro, not the configured path.
+function streamSub(s) {
+  switch (s.health) {
+    case "streaming-pro": return "DTLS → Pro";
+    case "entertainment-fallback": return "fallback to REST";
+    case "active-rest": return "REST path";
+    case "idle": return "TV not driving";
+    case "no-tv": return "no TV paired";
+    default: return "Pro not paired";
+  }
+}
+
 // cap upper-cases the first letter for display (e.g. the mode label), without
 // touching the underlying lower-case value relume uses internally.
 function cap(str) {
@@ -172,10 +193,12 @@ function renderDashboard(s) {
       <div class="top"><div class="brand">re<span>lume</span></div><div class="ver">v${esc(s.version)}</div>
         <div class="spacer"></div><div class="health"><span class="${healthDotClass(s.health)}"></span> ${esc(healthLabel(s.health))}</div></div>
       <div class="pipe">
-        <div class="step"><div class="lbl">Hue Bridge Pro</div><div class="val">${s.proPaired ? `<span class="ok">✓</span> Paired` : "— Unpaired"}${s.startedAt ? ` <span class="up" id="uptime">↑ ${esc(fmtUptime(Date.now() - Date.parse(s.startedAt)))}</span>` : ""}</div><div class="sub">${esc(s.proName)} ${esc(s.proHost)}</div></div>
+        <div class="step"><div class="lbl">Hue Bridge Pro</div><div class="val">${s.proPaired ? `<span class="ok">✓</span> Paired` : "— Unpaired"}</div><div class="sub">${esc(s.proName)} ${esc(s.proHost)}</div></div>
         <div class="step"><div class="lbl">TV pairing</div><div class="val">${s.tvClients.length} client(s)</div><div class="sub">${esc(s.tvClients.join(", "))}</div></div>
         <div class="step"><div class="lbl">Mode <span class="info" title="Entertainment: low-latency DTLS stream to the Hue Bridge Pro (default). REST: per-light REST writes — the automatic fallback when the TV is not streaming entertainment.">i</span></div><div class="val">${esc(cap(currentMode(s)))}${s.fallback ? " (fallback)" : ""}</div><div class="sub">${esc(modeSub(s))}</div></div>
         <div class="step"><div class="lbl">Lights</div><div class="val">${s.lights.length}</div><div class="sub">${driven} driven by TV</div></div>
+        <div class="step"><div class="lbl">Stream</div><div class="val">${streamVal(s)}</div><div class="sub">${esc(streamSub(s))}</div></div>
+        <div class="step"><div class="lbl">Uptime</div><div class="val" id="uptime">${s.startedAt ? esc("↑ " + fmtUptime(Date.now() - Date.parse(s.startedAt))) : "—"}</div><div class="sub">Running</div></div>
       </div>
       <div class="grid">
         <div class="card"><h3>Lights <span class="cnt">${shown.length} shown · ${driven} driven</span></h3><div class="lights">${lights}</div></div>

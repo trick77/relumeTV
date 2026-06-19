@@ -283,6 +283,11 @@ func runServe(args []string, log *slog.Logger) error {
 	// colour and mark driven lights even in pure DTLS mode. Harmless when no UI runs.
 	liveColors := newLiveColors()
 
+	// frameStats tracks the live entertainment frame rate (fed once per decoded TV
+	// frame below) so the web UI can show the stream's frames/s. Harmless when no UI
+	// runs or no DTLS stream is active (reports 0).
+	frameStats := newFrameStats()
+
 	if pro != nil {
 		client := bridgepro.New(pro)
 		clip.SetLightProvider(newProvider(client, controlled, liveColors, log))
@@ -337,6 +342,7 @@ func runServe(args []string, log *slog.Logger) error {
 			clip:         clip,
 			controlled:   controlled,
 			liveColors:   liveColors,
+			frameStats:   frameStats,
 			advName:      "Philips Hue - " + bridgeID[len(bridgeID)-6:],
 			version:      version,
 			started:      time.Now(),
@@ -374,8 +380,12 @@ func runServe(args []string, log *slog.Logger) error {
 		// HueStream frames.
 		recv := entertainment.NewReceiver(ip, cfg.PSKForUser, log)
 		// Count stream frames as activity so the idle-off monitor doesn't flash the
-		// lights off mid-stream (the TV streams via DTLS, not REST writes, here).
-		recv.OnActivity = clip.MarkActivity
+		// lights off mid-stream (the TV streams via DTLS, not REST writes, here), and
+		// record each frame's arrival so the UI can show the live frame rate.
+		recv.OnActivity = func() {
+			clip.MarkActivity()
+			frameStats.Mark()
+		}
 
 		if pro != nil {
 			// Phase C: relume opens its OWN entertainment stream to the Pro over DTLS

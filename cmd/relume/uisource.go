@@ -16,6 +16,7 @@ type uiSource struct {
 	clip       *clipv1.Server
 	controlled *bridge.ControlledSet
 	liveColors *liveColors
+	frameStats *frameStats
 	advName    string
 	version    string
 	started    time.Time
@@ -46,6 +47,8 @@ func (u *uiSource) UUIDForV1(id string) (string, bool) { return u.clip.UUIDForV1
 func (u *uiSource) DrivenUUIDs() []string              { return u.controlled.Current() }
 
 func (u *uiSource) LiveColors() map[string]webui.LiveColor { return u.liveColors.Snapshot() }
+
+func (u *uiSource) StreamFPS() int { return u.frameStats.FPS() }
 
 func (u *uiSource) Active() bool {
 	last := u.clip.LastActivity()
