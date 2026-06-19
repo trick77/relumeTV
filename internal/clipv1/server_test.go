@@ -1090,3 +1090,87 @@ func TestSetRequestedMembers_firesHookAndGatesAllowsMember(t *testing.T) {
 		t.Fatalf("AllowsMember(5) = true, want false (outside subset)")
 	}
 }
+
+// pairTV pairs the Ambilight TV and returns the issued username.
+func pairTV(t *testing.T, ts *httptest.Server) string {
+	t.Helper()
+	resp := mustPostUA(t, ts.URL+"/api", `{"devicetype":"Philips_TV#Ambilight","generateclientkey":true}`, tvUserAgent)
+	defer resp.Body.Close()
+	var paired []map[string]map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&paired); err != nil {
+		t.Fatalf("decode pairing: %v", err)
+	}
+	if len(paired) == 0 || paired[0]["success"] == nil {
+		t.Fatalf("pairing failed: %v", paired)
+	}
+	return paired[0]["success"]["username"]
+}
+
+// A LightGroup POST (entertainment stickiness — the TV re-creates its group as a
+// plain LightGroup, see TROUBLESHOOTING) must NOT replace the Entertainment subset.
+// This guards the type=="Entertainment" gate in handleCreateGroup.
+func TestCreateGroup_lightGroupPOSTDoesNotClobberEntertainmentSubset(t *testing.T) {
+	s, ts := newTestServer(t)
+	user := pairTV(t, ts)
+
+	// Given: the TV declared its Ambilight subset via an Entertainment group create.
+	mustPost(t, ts.URL+"/api/"+user+"/groups", `{"lights":["3","4"],"type":"Entertainment","class":"TV"}`).Body.Close()
+	if !s.AllowsMember(3) || s.AllowsMember(9) {
+		t.Fatalf("after Entertainment create: AllowsMember(3)=%v AllowsMember(9)=%v, want true/false",
+			s.AllowsMember(3), s.AllowsMember(9))
+	}
+
+	// When: a LightGroup naming a different light is posted.
+	mustPost(t, ts.URL+"/api/"+user+"/groups", `{"lights":["9"],"type":"LightGroup"}`).Body.Close()
+
+	// Then: the entertainment subset is untouched.
+	if !s.AllowsMember(3) || !s.AllowsMember(4) || s.AllowsMember(9) {
+		t.Fatalf("LightGroup create clobbered the subset: 3=%v 4=%v 9=%v, want true/true/false",
+			s.AllowsMember(3), s.AllowsMember(4), s.AllowsMember(9))
+	}
+}
+
+// A PUT to a group other than the entertainment group (id "1") must not change the
+// subset. This guards the id=="1" gate in handleGroupUpdate.
+func TestGroupUpdate_nonEntertainmentGroupDoesNotClobberSubset(t *testing.T) {
+	s, ts := newTestServer(t)
+	user := pairTV(t, ts)
+
+	// Given: a known entertainment subset.
+	mustPost(t, ts.URL+"/api/"+user+"/groups", `{"lights":["3","4"],"type":"Entertainment"}`).Body.Close()
+
+	// When: another group is updated with a different light set.
+	mustPut(t, ts.URL+"/api/"+user+"/groups/2", `{"lights":["9"]}`).Body.Close()
+
+	// Then: the entertainment subset is untouched.
+	if !s.AllowsMember(3) || !s.AllowsMember(4) || s.AllowsMember(9) {
+		t.Fatalf("PUT /groups/2 clobbered the subset: 3=%v 4=%v 9=%v, want true/true/false",
+			s.AllowsMember(3), s.AllowsMember(4), s.AllowsMember(9))
+	}
+}
+
+// A group action must fan out only to the TV's requested Ambilight subset — lights
+// in other rooms stay untouched. This guards the AllowsMember filter in
+// handleGroupAction (counterpart to TestGroupAction_fansOutToAllLights).
+func TestGroupAction_restrictedToRequestedSubset(t *testing.T) {
+	s, ts := newTestServer(t)
+	p := &fanoutProvider{lights: map[string]any{
+		"1": map[string]any{}, "2": map[string]any{}, "3": map[string]any{},
+	}}
+	s.SetLightProvider(p)
+	user := pairTV(t, ts)
+
+	// Given: the TV restricts its Ambilight zone to light 3 only.
+	s.setRequestedMembers([]uint16{3})
+
+	// When: the TV drives the group action.
+	mustPut(t, ts.URL+"/api/"+user+"/groups/1/action", `{"on":true,"bri":200}`).Body.Close()
+
+	// Then: only light 3 is forwarded, not the off-zone lights 1 and 2.
+	if len(p.got) != 1 {
+		t.Fatalf("forwarded to %d lights, want 1 (only the subset): %v", len(p.got), p.got)
+	}
+	if _, ok := p.got["3"]; !ok {
+		t.Fatalf("subset light 3 not forwarded: %v", p.got)
+	}
+}

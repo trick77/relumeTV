@@ -200,7 +200,7 @@ func parseGroupLights(body []byte) (v1ids []uint16, ok bool) {
 		return nil, false
 	}
 	for _, s := range g.Lights {
-		if n, err := strconv.Atoi(strings.TrimSpace(s)); err == nil && n >= 0 {
+		if n, err := strconv.Atoi(strings.TrimSpace(s)); err == nil && n >= 1 {
 			v1ids = append(v1ids, uint16(n))
 		}
 	}

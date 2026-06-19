@@ -181,6 +181,13 @@ func NewProStreamer(pro ProClient, host, appKey string, clientKey []byte, fallba
 // fallback forwards only their channels — so lights the TV did not put in its
 // Ambilight zone are never driven. An empty list is ignored so a later stream
 // activation that carries no lights array cannot clear an already-known subset.
+//
+// Note on timing: ensureConfig reads this once per stream start and the resulting
+// DTLS remap is then frozen for that stream, so a subset change arriving mid-stream
+// only takes effect on the next ensureConfig (stream restart). The clipv1 REST/DTLS-
+// receive paths (AllowsMember) honor it live; the DTLS forward path does not. This
+// is acceptable because the TV changes its Ambilight zone between sessions, not
+// mid-stream.
 func (s *ProStreamer) SetRequestedMembers(v1ids []uint16) {
 	if len(v1ids) == 0 {
 		return
