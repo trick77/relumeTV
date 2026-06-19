@@ -2,6 +2,7 @@ package main
 
 import (
 	"sync"
+	"time"
 
 	"github.com/trick77/relume/internal/webui"
 )
@@ -11,21 +12,35 @@ import (
 // the REST/fallback forward (bridge.LightProvider.OnColor) and the DTLS passthrough
 // (entertainment.ProStreamer.OnColor). The web UI reads it so each lamp swatch
 // shows the live streamed colour instead of the Bridge Pro's REST light state,
-// which the DTLS passthrough never updates. Presence of a light here also means the
-// TV is driving it — the only per-light signal the DTLS path surfaces to the UI.
+// which the DTLS passthrough never updates.
 //
-// It is in-memory only and never expires: after a stream stops, a light keeps its
-// last colour, consistent with the retained ControlledSet (we never flip a driven
-// light back to "not driven" just because the TV paused). Unlike ControlledSet it
-// only ever adds, so if the TV's entertainment area is reconfigured mid-session a
-// dropped light stays "driven" until restart — acceptable, restart clears it.
+// It also tracks WHEN each light was last seen, so it can answer which lights the
+// TV is driving RIGHT NOW: DrivenV1IDs returns only the lights touched within a
+// short freshness window. While the TV streams (DTLS ~50 Hz, or REST writes) the
+// window stays full; once the stream stops the set empties within the window — so
+// the UI count, the per-light "driven" marking and the manual flash all reflect
+// the live set, not a sticky "ever driven this run" set. The colour map itself is
+// kept sticky (never pruned) so the swatch retains the last colour after a stop.
 type liveColors struct {
-	mu sync.Mutex
-	m  map[string]webui.LiveColor
+	mu     sync.Mutex
+	m      map[string]webui.LiveColor
+	seen   map[string]time.Time
+	window time.Duration
+	now    func() time.Time // seam for tests; defaults to time.Now
 }
 
-func newLiveColors() *liveColors {
-	return &liveColors{m: map[string]webui.LiveColor{}}
+// drivenLightWindow is how recently the TV must have streamed/written a light for
+// it to count as currently driven. 2s comfortably spans DTLS frame gaps (~50 Hz)
+// and active REST write cadence, yet empties quickly once the TV stops.
+const drivenLightWindow = 2 * time.Second
+
+func newLiveColors(window time.Duration) *liveColors {
+	return &liveColors{
+		m:      map[string]webui.LiveColor{},
+		seen:   map[string]time.Time{},
+		window: window,
+		now:    time.Now,
+	}
 }
 
 // SetState records the colour from one v1 light state map ({on,bri,xy}). Used by
@@ -34,6 +49,7 @@ func (c *liveColors) SetState(v1id string, state map[string]any) {
 	lc := parseLiveColor(state)
 	c.mu.Lock()
 	c.m[v1id] = lc
+	c.seen[v1id] = c.now()
 	c.mu.Unlock()
 }
 
@@ -41,11 +57,31 @@ func (c *liveColors) SetState(v1id string, state map[string]any) {
 // passthrough, which decodes all channels of a frame at once on the hot ~50 Hz
 // path — one lock per frame instead of per channel.
 func (c *liveColors) SetStates(states map[string]map[string]any) {
+	now := c.now()
 	c.mu.Lock()
 	for v1id, state := range states {
 		c.m[v1id] = parseLiveColor(state)
+		c.seen[v1id] = now
 	}
 	c.mu.Unlock()
+}
+
+// DrivenV1IDs returns the v1 light ids the TV is driving right now: those seen
+// within the freshness window. Entries older than the window are pruned, so once
+// the TV stops streaming the set empties. The returned ids carry no order.
+func (c *liveColors) DrivenV1IDs() []string {
+	cutoff := c.now().Add(-c.window)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make([]string, 0, len(c.seen))
+	for id, t := range c.seen {
+		if t.Before(cutoff) {
+			delete(c.seen, id)
+			continue
+		}
+		out = append(out, id)
+	}
+	return out
 }
 
 // parseLiveColor turns a v1 light state map ({on,bri,xy}) — the shape produced by

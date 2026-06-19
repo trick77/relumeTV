@@ -113,6 +113,7 @@ body {
   font-size: 12px; font-weight: 600; padding: 8px 15px; border-radius: 8px; cursor: pointer;
 }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: #0a0b0f; }
+.btn:disabled { opacity: .4; cursor: not-allowed; }
 
 /* live log */
 .log { margin-top: 20px; }

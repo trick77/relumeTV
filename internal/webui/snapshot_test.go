@@ -30,14 +30,13 @@ func (f fakeSource) LightsV1() (map[string]any, bool) {
 		},
 	}, true
 }
-func (f fakeSource) UUIDForV1(v1id string) (string, bool) { return "uuid-" + v1id, true }
-func (f fakeSource) DrivenUUIDs() []string                { return f.driven }
-func (f fakeSource) LiveColors() map[string]LiveColor     { return f.live }
-func (f fakeSource) Active() bool                         { return true }
-func (f fakeSource) StreamFPS() int                       { return 50 }
+func (f fakeSource) DrivenV1IDs() []string            { return f.driven }
+func (f fakeSource) LiveColors() map[string]LiveColor { return f.live }
+func (f fakeSource) Active() bool                     { return true }
+func (f fakeSource) StreamFPS() int                   { return 50 }
 
 func TestBuildSnapshot_MapsLightsAndDriven(t *testing.T) {
-	s := BuildSnapshot(fakeSource{driven: []string{"uuid-1"}})
+	s := BuildSnapshot(fakeSource{driven: []string{"1"}})
 	if !s.ProPaired || s.ProName != "Living Room Pro" || !s.CertPinned {
 		t.Fatalf("pro fields = %+v", s)
 	}
@@ -59,22 +58,34 @@ func TestBuildSnapshot_MapsLightsAndDriven(t *testing.T) {
 	}
 }
 
-// In the default DTLS-passthrough mode the ControlledSet is never fed (Seen runs
-// only on the REST path), so DrivenUUIDs is empty. A light's presence in LiveColors
-// is then the only per-light signal: it must both override the swatch colour and
-// mark the light driven.
-func TestBuildSnapshot_LiveColorOverridesAndDrivesLight(t *testing.T) {
+// LiveColors overrides the swatch colour (the Pro's REST state is stale during DTLS
+// passthrough) but does NOT mark a light driven — that is DrivenV1IDs' job, a
+// windowed signal. A light with a retained colour but no longer in the driven
+// window must render its last colour yet not count as driven.
+func TestBuildSnapshot_LiveColorOverridesButDoesNotDrive(t *testing.T) {
 	src := fakeSource{
-		driven: nil, // pure DTLS: nothing in the ControlledSet
+		driven: nil, // not in the freshness window any more
 		live:   map[string]LiveColor{"1": {X: 0.1, Y: 0.2, Bri: 99, On: true}},
 	}
 	s := BuildSnapshot(src)
 	l := s.Lights[0]
-	if !l.Driven {
-		t.Fatalf("light should be driven from LiveColors presence, got %+v", l)
+	if l.Driven {
+		t.Fatalf("light must NOT be driven from LiveColors presence alone, got %+v", l)
 	}
 	if l.X != 0.1 || l.Y != 0.2 || l.Bri != 99 {
-		t.Fatalf("live colour should override Pro REST state, got %+v", l)
+		t.Fatalf("live colour should still override Pro REST state, got %+v", l)
+	}
+}
+
+// A light in the driven window is marked driven AND keeps its live colour.
+func TestBuildSnapshot_DrivenV1IDMarksLight(t *testing.T) {
+	src := fakeSource{
+		driven: []string{"1"},
+		live:   map[string]LiveColor{"1": {X: 0.1, Y: 0.2, Bri: 99, On: true}},
+	}
+	l := BuildSnapshot(src).Lights[0]
+	if !l.Driven || l.X != 0.1 || l.Bri != 99 {
+		t.Fatalf("light should be driven with live colour, got %+v", l)
 	}
 }
 
@@ -90,8 +101,7 @@ func (emptySource) BridgeName() string                    { return "Philips Hue 
 func (emptySource) PendingTVPairing() bool                { return false }
 func (emptySource) LastActivity() time.Time               { return time.Time{} }
 func (emptySource) LightsV1() (map[string]any, bool)      { return nil, false }
-func (emptySource) UUIDForV1(string) (string, bool)       { return "", false }
-func (emptySource) DrivenUUIDs() []string                 { return nil }
+func (emptySource) DrivenV1IDs() []string                 { return nil }
 func (emptySource) LiveColors() map[string]LiveColor      { return nil }
 func (emptySource) Active() bool                          { return false }
 func (emptySource) StreamFPS() int                        { return 0 }

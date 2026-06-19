@@ -64,12 +64,15 @@ type StateSource interface {
 	PendingTVPairing() bool
 	LastActivity() time.Time
 	LightsV1() (map[string]any, bool)
-	UUIDForV1(v1id string) (string, bool)
-	DrivenUUIDs() []string
-	// LiveColors maps v1 light id → the latest colour the TV streamed for it.
-	// A light present here is being driven by the TV (the only point the DTLS
-	// passthrough exposes per-light state to the UI), so the snapshot both
-	// overrides the swatch colour and marks the light driven from this set.
+	// DrivenV1IDs lists the v1 light ids the TV is driving right now (a freshness
+	// window, not a sticky set): the single source for the driven count, the
+	// per-light "driven" marking, and the manual flash target. Empties soon after
+	// the TV stops streaming.
+	DrivenV1IDs() []string
+	// LiveColors maps v1 light id → the latest colour the TV streamed for it. Used
+	// only to override the swatch colour (the Pro's REST light state is stale during
+	// DTLS passthrough); it does NOT decide "driven" — DrivenV1IDs does — so a light
+	// keeps its last colour after a stream stops without staying marked driven.
 	LiveColors() map[string]LiveColor
 	// Active reports whether the TV is currently driving the lights (it has
 	// written/streamed within the idle window). False when the TV is off or idle.
@@ -141,8 +144,8 @@ func BuildSnapshot(src StateSource) Snapshot {
 
 	if lv1, ok := src.LightsV1(); ok {
 		driven := map[string]struct{}{}
-		for _, u := range src.DrivenUUIDs() {
-			driven[u] = struct{}{}
+		for _, id := range src.DrivenV1IDs() {
+			driven[id] = struct{}{}
 		}
 		live := src.LiveColors()
 		for id, raw := range lv1 {
@@ -162,19 +165,17 @@ func BuildSnapshot(src StateSource) Snapshot {
 					lv.Y, _ = xy[1].(float64)
 				}
 			}
-			if uuid, ok := src.UUIDForV1(id); ok {
-				if _, d := driven[uuid]; d {
-					lv.Driven = true
-				}
+			if _, d := driven[id]; d {
+				lv.Driven = true
 			}
 			// Live colour overrides the Pro's REST light state (stale during DTLS
-			// passthrough) and marks the light driven: a streamed colour is the only
-			// per-light signal the DTLS path surfaces to the UI. Only override the
-			// colour fields that are actually present, so an xy-less write (e.g. a bare
-			// on/off REST write) does not blank the swatch to black.
+			// passthrough). This is purely a swatch-colour override and does NOT mark
+			// the light driven — that is DrivenV1IDs' job (a windowed signal), so a
+			// light keeps its last colour after a stop without staying "driven". Only
+			// override the colour fields actually present, so an xy-less write (e.g. a
+			// bare on/off REST write) does not blank the swatch to black.
 			if lc, ok := live[id]; ok {
 				lv.On = lc.On
-				lv.Driven = true
 				if lc.Bri > 0 {
 					lv.Bri = lc.Bri
 				}

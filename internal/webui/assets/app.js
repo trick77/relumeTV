@@ -118,7 +118,17 @@ function tickUptime() {
   if (el && _startedAtMs) el.textContent = "↑ " + fmtUptime(Date.now() - _startedAtMs);
 }
 
+// flashBtn renders the "Test flash" button. The flash only ever touches the lights
+// the TV is currently driving, so when none are driven there is nothing to flash —
+// the button is disabled rather than firing a silent no-op.
+function flashBtn(disabled) {
+  return `<button class="btn primary" onclick="flash()"${
+    disabled ? ` disabled title="No lights are currently driven by the TV"` : ""
+  }>Test flash</button>`;
+}
+
 function renderSetup(s) {
+  const driven = s.lights.filter((l) => l.driven).length;
   const proPill = s.proPaired ? `<span class="pill ok">done</span>` : `<span class="pill wait">waiting</span>`;
   const tvPill = s.tvClients.length ? `<span class="pill ok">done</span>` : `<span class="pill wait">waiting</span>`;
   app.innerHTML = `
@@ -149,7 +159,7 @@ function renderSetup(s) {
           <div class="rail"><div class="num">3</div></div>
           <div class="card"><h3>Check lights &amp; go</h3>
             <div class="d">${s.lights.length} lights loaded from the Pro.</div>
-            <div style="margin-top:12px"><button class="btn primary" onclick="flash()">Test flash</button></div></div>
+            <div style="margin-top:12px">${flashBtn(driven === 0)}</div></div>
         </div>
       </div>
     </div>`;
@@ -157,10 +167,9 @@ function renderSetup(s) {
 
 function renderDashboard(s) {
   // Show only the lamps the TV is actively driving. Fall back to all lamps
-  // while nothing is driven yet (cold start / TV idle before first stream).
-  // Note: driven is sticky — a lamp stays driven once seen this run (the backend
-  // never un-drives), so this is effectively "ever driven since start", retained
-  // across stream pauses. A shrunk entertainment area clears only on restart.
+  // while nothing is driven (cold start, or TV idle / not streaming). "driven" is
+  // a live, windowed signal from the backend: it reflects the lamps the TV is
+  // streaming RIGHT NOW and empties shortly after the stream stops.
   const drivenLights = s.lights.filter((l) => l.driven);
   const shown = drivenLights.length > 0 ? drivenLights : s.lights;
   const lights = shown
@@ -196,14 +205,14 @@ function renderDashboard(s) {
         <div class="step"><div class="lbl">Hue Bridge Pro</div><div class="val">${s.proPaired ? `<span class="ok">✓</span> Paired` : "— Unpaired"}</div><div class="sub">${esc(s.proName)} ${esc(s.proHost)}</div></div>
         <div class="step"><div class="lbl">TV pairing</div><div class="val">${s.tvClients.length} client(s)</div><div class="sub">${esc(s.tvClients.join(", "))}</div></div>
         <div class="step"><div class="lbl">Mode <span class="info" title="Entertainment: low-latency DTLS stream to the Hue Bridge Pro (default). REST: per-light REST writes — the automatic fallback when the TV is not streaming entertainment.">i</span></div><div class="val">${esc(cap(currentMode(s)))}${s.fallback ? " (fallback)" : ""}</div><div class="sub">${esc(modeSub(s))}</div></div>
-        <div class="step"><div class="lbl">Lights</div><div class="val">${s.lights.length}</div><div class="sub">${driven} Driven by TV</div></div>
+        <div class="step"><div class="lbl">Lights</div><div class="val">${driven} driven</div><div class="sub">${s.lights.length} total</div></div>
         <div class="step"><div class="lbl">Stream</div><div class="val">${streamVal(s)}</div><div class="sub">${esc(streamSub(s))}</div></div>
         <div class="step"><div class="lbl">Uptime</div><div class="val" id="uptime">${s.startedAt ? esc("↑ " + fmtUptime(Date.now() - Date.parse(s.startedAt))) : "—"}</div><div class="sub">Running</div></div>
       </div>
       <div class="grid">
         <div class="card"><h3>Lights <span class="cnt">${shown.length} shown · ${driven} driven</span></h3><div class="lights">${lights}</div></div>
         <div class="side">${pending}
-          <div class="card"><h3>Actions</h3><button class="btn primary" onclick="flash()">Test flash</button></div>
+          <div class="card"><h3>Actions</h3>${flashBtn(driven === 0)}</div>
         </div>
       </div>
       <div class="card log"><h3>Live events</h3><div id="log"></div></div>

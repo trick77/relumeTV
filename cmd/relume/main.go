@@ -281,7 +281,12 @@ func runServe(args []string, log *slog.Logger) error {
 	// liveColors records the latest colour the TV streamed per light (from both the
 	// REST forward and the DTLS passthrough), so the web UI can show the live swatch
 	// colour and mark driven lights even in pure DTLS mode. Harmless when no UI runs.
-	liveColors := newLiveColors()
+	// Its freshness window decides which lights count as driven RIGHT NOW: short
+	// enough to empty soon after the stream stops, long enough to stay full across
+	// frame jitter (DTLS streams ~50 Hz, REST writes a few Hz while content plays).
+	// Deliberately separate from the ControlledSet window (which the idle/restart
+	// flash relies on and must outlast the idle-off timeout).
+	liveColors := newLiveColors(drivenLightWindow)
 
 	// frameStats tracks the live entertainment frame rate (fed once per decoded TV
 	// frame below) so the web UI can show the stream's frames/s. Harmless when no UI
@@ -340,7 +345,6 @@ func runServe(args []string, log *slog.Logger) error {
 		src := &uiSource{
 			cfg:          cfg,
 			clip:         clip,
-			controlled:   controlled,
 			liveColors:   liveColors,
 			frameStats:   frameStats,
 			advName:      "Philips Hue - " + bridgeID[len(bridgeID)-6:],
@@ -353,7 +357,18 @@ func runServe(args []string, log *slog.Logger) error {
 			if pro == nil {
 				return fmt.Errorf("bridge pro not paired")
 			}
-			bridge.FlashIdle(bridgepro.New(pro), log, controlled.Current())
+			// Flash exactly the lights the TV is driving RIGHT NOW (the windowed
+			// liveColors set), not the sticky ControlledSet — so the manual flash
+			// matches the UI's driven count and works in pure DTLS mode (where the
+			// ControlledSet is never fed). Resolve the v1 ids to Pro UUIDs; an
+			// empty set makes FlashIdle a no-op (the UI also disables the button).
+			var uuids []string
+			for _, v1 := range liveColors.DrivenV1IDs() {
+				if uuid, ok := clip.UUIDForV1(v1); ok {
+					uuids = append(uuids, uuid)
+				}
+			}
+			bridge.FlashIdle(bridgepro.New(pro), log, uuids)
 			return nil
 		}
 		uiSrv := webui.NewServer(fmt.Sprintf(":%d", uiPort), uiHub, src, flash, log)
