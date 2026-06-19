@@ -560,3 +560,106 @@ func TestProStreamer_dtlsLoopback(t *testing.T) {
 		}
 	}
 }
+
+// TestSmoothToward_convergesMonotonically proves the per-tick smoothing eases a hard
+// jump toward the target without overshooting and reaches it exactly in finite steps —
+// the core property that turns a verbatim scene cut into a fast fade.
+func TestSmoothToward_convergesMonotonically(t *testing.T) {
+	cur := huestream.Channel{ID: 3, A: 0, B: 0, C: 0}
+	target := huestream.Channel{ID: 3, A: 0xFFFF, B: 0x8000, C: 0x4000}
+
+	prev := cur
+	reached := false
+	for i := 0; i < 200; i++ {
+		next := smoothToward(prev, target)
+		// Never overshoot: each component stays within [prev, target].
+		if next.A < prev.A || next.A > target.A ||
+			next.B < prev.B || next.B > target.B ||
+			next.C < prev.C || next.C > target.C {
+			t.Fatalf("step %d overshot: prev=%v next=%v target=%v", i, prev, next, target)
+		}
+		if next == target {
+			reached = true
+			break
+		}
+		// Must make progress on the largest component while still far away.
+		if next == prev {
+			t.Fatalf("step %d stalled before reaching target: %v (target %v)", i, next, target)
+		}
+		prev = next
+	}
+	if !reached {
+		t.Fatalf("did not reach target within 200 ticks, stuck at %v (target %v)", prev, target)
+	}
+	// First step toward 0xFFFF should land near alpha*0xFFFF, not jump verbatim.
+	first := smoothToward(huestream.Channel{ID: 3}, target)
+	if first.A > 0xC000 {
+		t.Fatalf("first step too aggressive (verbatim-ish): A=%d", first.A)
+	}
+}
+
+// TestSmoothToward_snapsWhenClose verifies a sub-threshold delta snaps to target
+// rather than rounding to a stall (integer EMA would otherwise never converge).
+func TestSmoothToward_snapsWhenClose(t *testing.T) {
+	cur := huestream.Channel{ID: 1, A: 1000, B: 65535, C: 0}
+	target := huestream.Channel{ID: 1, A: 1000 + snapColorDelta, B: 65535 - snapColorDelta, C: snapColorDelta}
+	got := smoothToward(cur, target)
+	if got != target {
+		t.Fatalf("within snap threshold should snap to target: got %v want %v", got, target)
+	}
+}
+
+// TestBuildFrameLocked_smoothsTowardLatest checks the send loop emits the smoothed
+// current, snapping a never-seen channel to its first value (no fade up from black)
+// and easing a subsequent jump.
+func TestBuildFrameLocked_smoothsTowardLatest(t *testing.T) {
+	s := &ProStreamer{}
+	s.st.colorSpace = huestream.ColorSpaceXY
+	s.st.configID = "cfg"
+	s.st.latest = map[uint8]huestream.Channel{
+		7: {ID: 7, A: 100, B: 200, C: 300},
+	}
+
+	// First frame: channel never seen → snap, emitted == latest.
+	f := s.buildFrameLocked()
+	if f == nil || len(f.Channels) != 1 {
+		t.Fatalf("want 1 channel, got %v", f)
+	}
+	if f.Channels[0] != (huestream.Channel{ID: 7, A: 100, B: 200, C: 300}) {
+		t.Fatalf("first frame should snap to latest, got %v", f.Channels[0])
+	}
+
+	// Hard jump on the target: next frame must ease, landing strictly between.
+	s.st.latest[7] = huestream.Channel{ID: 7, A: 50000, B: 200, C: 300}
+	f = s.buildFrameLocked()
+	got := f.Channels[0].A
+	if got <= 100 || got >= 50000 {
+		t.Fatalf("second frame A should ease between 100 and 50000, got %d", got)
+	}
+}
+
+// TestAccumSendJumps_smoothedStreamHasSmallerJumps proves the send-path stat the rig
+// uses for verification: a verbatim hard cut yields a large col jump, but the smoothed
+// stream's largest per-tick jump stays well below it.
+func TestAccumSendJumps_smoothedStreamHasSmallerJumps(t *testing.T) {
+	const inputJump = 50000 - 100 // the TV's verbatim A jump
+	s := &ProStreamer{}
+	s.st.colorSpace = huestream.ColorSpaceXY
+	s.st.latest = map[uint8]huestream.Channel{7: {ID: 7, A: 100, B: 200, C: 65535}}
+	first := s.buildFrameLocked() // snaps to start
+
+	s.st.latest[7] = huestream.Channel{ID: 7, A: 50000, B: 200, C: 65535} // hard cut
+	var briJump, colJump uint32
+	prev := first
+	for i := 0; i < 5; i++ { // a handful of 20 ms ticks following the cut
+		cur := s.buildFrameLocked()
+		accumSendJumps(prev, cur, &briJump, &colJump)
+		prev = cur
+	}
+	if colJump == 0 {
+		t.Fatal("expected some colour movement on the sent stream")
+	}
+	if colJump >= inputJump {
+		t.Fatalf("smoothed stream jump %d should be below verbatim input jump %d", colJump, inputJump)
+	}
+}
