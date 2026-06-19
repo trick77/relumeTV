@@ -18,7 +18,7 @@ func discardLog() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard,
 
 func TestServer_StateEndpoint(t *testing.T) {
 	hub := NewHub(8)
-	srv := NewServer(":0", hub, fakeSource{}, nil, discardLog())
+	srv := NewServer(":0", hub, fakeSource{}, discardLog())
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/state", nil)
 	srv.Handler().ServeHTTP(rec, req)
@@ -36,7 +36,7 @@ func TestServer_StateEndpoint(t *testing.T) {
 
 func TestServer_StateHasNoSecrets(t *testing.T) {
 	hub := NewHub(8)
-	srv := NewServer(":0", hub, fakeSource{}, nil, discardLog())
+	srv := NewServer(":0", hub, fakeSource{}, discardLog())
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/state", nil))
 	body := strings.ToLower(rec.Body.String())
@@ -44,62 +44,6 @@ func TestServer_StateHasNoSecrets(t *testing.T) {
 		if strings.Contains(body, banned) {
 			t.Fatalf("state leaked %q: %s", banned, rec.Body.String())
 		}
-	}
-}
-
-func TestServer_FlashNilReturns404(t *testing.T) {
-	srv := NewServer(":0", NewHub(8), fakeSource{}, nil, discardLog())
-	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/actions/flash", nil))
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("code = %d, want 404", rec.Code)
-	}
-}
-
-func TestServer_FlashInvokesCallback(t *testing.T) {
-	called := false
-	srv := NewServer(":0", NewHub(8), fakeSource{}, func() error { called = true; return nil }, discardLog())
-	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/actions/flash", nil))
-	if rec.Code != http.StatusNoContent || !called {
-		t.Fatalf("code=%d called=%v", rec.Code, called)
-	}
-}
-
-func TestServer_FlashAllowsNoOrigin(t *testing.T) {
-	// No Origin header (curl / direct LAN access — accepted by the threat model).
-	called := false
-	srv := NewServer(":0", NewHub(8), fakeSource{}, func() error { called = true; return nil }, discardLog())
-	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/actions/flash", nil))
-	if rec.Code != http.StatusNoContent || !called {
-		t.Fatalf("no-Origin POST should be allowed: code=%d called=%v", rec.Code, called)
-	}
-}
-
-func TestServer_FlashAllowsSameOrigin(t *testing.T) {
-	called := false
-	srv := NewServer(":0", NewHub(8), fakeSource{}, func() error { called = true; return nil }, discardLog())
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/actions/flash", nil)
-	req.Host = "192.168.1.5:33300"
-	req.Header.Set("Origin", "http://192.168.1.5:33300")
-	srv.Handler().ServeHTTP(rec, req)
-	if rec.Code != http.StatusNoContent || !called {
-		t.Fatalf("same-origin POST should be allowed: code=%d called=%v", rec.Code, called)
-	}
-}
-
-func TestServer_FlashRejectsCrossOrigin(t *testing.T) {
-	called := false
-	srv := NewServer(":0", NewHub(8), fakeSource{}, func() error { called = true; return nil }, discardLog())
-	rec := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/api/actions/flash", nil)
-	req.Host = "192.168.1.5:33300"
-	req.Header.Set("Origin", "http://evil.example.com")
-	srv.Handler().ServeHTTP(rec, req)
-	if rec.Code != http.StatusForbidden || called {
-		t.Fatalf("cross-origin POST should be rejected: code=%d called=%v", rec.Code, called)
 	}
 }
 
@@ -116,7 +60,7 @@ func (c countingSource) Version() string {
 
 func TestServer_SnapshotLoopIdleWithoutSubscribers(t *testing.T) {
 	var reads int32
-	srv := NewServer(":0", NewHub(8), countingSource{reads: &reads}, nil, discardLog())
+	srv := NewServer(":0", NewHub(8), countingSource{reads: &reads}, discardLog())
 	srv.snapInterval = 5 * time.Millisecond
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -129,49 +73,9 @@ func TestServer_SnapshotLoopIdleWithoutSubscribers(t *testing.T) {
 	}
 }
 
-func TestServer_FlashSingleFlight(t *testing.T) {
-	started := make(chan struct{})
-	release := make(chan struct{})
-	srv := NewServer(":0", NewHub(8), fakeSource{}, func() error {
-		close(started)
-		<-release
-		return nil
-	}, discardLog())
-	h := srv.Handler()
-
-	// First request acquires the guard and blocks inside flash().
-	rec1 := httptest.NewRecorder()
-	go h.ServeHTTP(rec1, httptest.NewRequest(http.MethodPost, "/api/actions/flash", nil))
-	<-started
-
-	// Second concurrent request must be rejected, not piled onto the Pro.
-	rec2 := httptest.NewRecorder()
-	h.ServeHTTP(rec2, httptest.NewRequest(http.MethodPost, "/api/actions/flash", nil))
-	if rec2.Code != http.StatusTooManyRequests {
-		t.Fatalf("concurrent flash: code=%d, want 429", rec2.Code)
-	}
-
-	// Let the first finish; a subsequent request is accepted again.
-	close(release)
-	deadline := time.After(time.Second)
-	for {
-		rec3 := httptest.NewRecorder()
-		srv2 := NewServer(":0", NewHub(8), fakeSource{}, func() error { return nil }, discardLog())
-		srv2.Handler().ServeHTTP(rec3, httptest.NewRequest(http.MethodPost, "/api/actions/flash", nil))
-		if rec3.Code == http.StatusNoContent {
-			break
-		}
-		select {
-		case <-deadline:
-			t.Fatal("flash never accepted again after the in-flight one finished")
-		default:
-		}
-	}
-}
-
 func TestServer_PeriodicSnapshotPublished(t *testing.T) {
 	hub := NewHub(8)
-	srv := NewServer(":0", hub, fakeSource{}, nil, discardLog())
+	srv := NewServer(":0", hub, fakeSource{}, discardLog())
 	srv.snapInterval = 10 * time.Millisecond
 
 	ch, cancel := hub.Subscribe()
@@ -196,7 +100,7 @@ func TestServer_PeriodicSnapshotPublished(t *testing.T) {
 
 func TestServer_SSEStreamsInitialSnapshot(t *testing.T) {
 	hub := NewHub(8)
-	srv := httptest.NewServer(NewServer(":0", hub, fakeSource{}, nil, discardLog()).Handler())
+	srv := httptest.NewServer(NewServer(":0", hub, fakeSource{}, discardLog()).Handler())
 	defer srv.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)

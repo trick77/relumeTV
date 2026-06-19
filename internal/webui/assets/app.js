@@ -127,17 +127,7 @@ function tickUptime() {
   if (el && _startedAtMs) el.textContent = "↑ " + fmtUptime(Date.now() - _startedAtMs);
 }
 
-// flashBtn renders the "Test flash" button. The flash only ever touches the lights
-// the TV is currently driving, so when none are driven there is nothing to flash —
-// the button is disabled rather than firing a silent no-op.
-function flashBtn(disabled) {
-  return `<button class="btn primary" onclick="flash()"${
-    disabled ? ` disabled title="No lights are currently driven by the TV"` : ""
-  }>Test flash</button>`;
-}
-
 function renderSetup(s) {
-  const driven = s.lights.filter((l) => l.driven).length;
   const proPill = s.proPaired ? `<span class="pill ok">done</span>` : `<span class="pill wait">waiting</span>`;
   const tvPill = s.tvClients.length ? `<span class="pill ok">done</span>` : `<span class="pill wait">waiting</span>`;
   app.innerHTML = `
@@ -167,8 +157,7 @@ function renderSetup(s) {
         <div class="step ${s.tvClients.length ? "active" : "todo"}">
           <div class="rail"><div class="num">3</div></div>
           <div class="card"><h3>Check lights &amp; go</h3>
-            <div class="d">${s.lights.length} lights loaded from the Pro.</div>
-            <div style="margin-top:12px">${flashBtn(driven === 0)}</div></div>
+            <div class="d">${s.lights.length} lights loaded from the Pro.</div></div>
         </div>
       </div>
     </div>`;
@@ -218,11 +207,8 @@ function renderDashboard(s) {
         <div class="step"><div class="lbl">Stream</div><div class="val">${streamVal(s)}</div><div class="sub">${esc(streamSub(s))}</div></div>
         <div class="step"><div class="lbl">Uptime</div><div class="val" id="uptime">${s.startedAt ? esc("↑ " + fmtUptime(Date.now() - Date.parse(s.startedAt))) : "—"}</div><div class="sub">Running</div></div>
       </div>
-      <div class="grid">
+      <div class="grid">${pending}
         <div class="card"><h3>Lights <span class="cnt">${shown.length} shown · ${driven} driven</span></h3><div class="lights">${lights}</div></div>
-        <div class="side">${pending}
-          <div class="card"><h3>Actions</h3>${flashBtn(driven === 0)}</div>
-        </div>
       </div>
       <div class="card log"><h3>Live events</h3><div id="log"></div></div>
     </div>`;
@@ -247,13 +233,6 @@ function pushLog(e) {
   const logEl = document.getElementById("log");
   if (logEl) logEl.innerHTML = logLines.map(logRow).join("");
 }
-
-async function flash() {
-  try {
-    await fetch("/api/actions/flash", { method: "POST" });
-  } catch (_) {}
-}
-window.flash = flash;
 
 // Tooltip for .info[data-tip] icons. The element lives on <body> (not inside the
 // .pipe, whose overflow:hidden would clip it) and is positioned under the icon.

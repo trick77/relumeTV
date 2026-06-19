@@ -336,9 +336,9 @@ func runServe(args []string, log *slog.Logger) error {
 		go w.run(ctx)
 	}
 
-	// Optional web UI (opt-in via -ui / -ui-port). Read-mostly: it reads live state
-	// via the uiSource adapter and exposes a single test-flash action. A bind/serve
-	// failure is logged but never takes down the headless service.
+	// Optional web UI (opt-in via -ui / -ui-port). Read-only: it reads live state
+	// via the uiSource adapter. A bind/serve failure is logged but never takes down
+	// the headless service.
 	if uiPort != 0 {
 		bridgeID := cfg.Identity.BridgeID()
 		src := &uiSource{
@@ -355,31 +355,7 @@ func runServe(args []string, log *slog.Logger) error {
 			version: version,
 			started: time.Now(),
 		}
-		flash := func() error {
-			pro := cfg.GetPro()
-			if pro == nil {
-				return fmt.Errorf("bridge pro not paired")
-			}
-			// Flash exactly the lights the TV is driving RIGHT NOW (the windowed
-			// liveColors set), not the sticky ControlledSet — so the manual flash
-			// matches the UI's driven count and works in pure DTLS mode (where the
-			// ControlledSet is never fed). Resolve the v1 ids to Pro UUIDs; an
-			// empty set makes FlashIdle a no-op (the UI also disables the button).
-			var uuids []string
-			for _, v1 := range liveColors.DrivenV1IDs() {
-				// Never flash a light outside the TV's current Ambilight zone, even if it
-				// is in the driven set (membership can have shrunk since it was driven).
-				if n, err := strconv.Atoi(v1); err == nil && !clip.AllowsMember(uint16(n)) {
-					continue
-				}
-				if uuid, ok := clip.UUIDForV1(v1); ok {
-					uuids = append(uuids, uuid)
-				}
-			}
-			bridge.FlashIdle(bridgepro.New(pro), log, uuids)
-			return nil
-		}
-		uiSrv := webui.NewServer(fmt.Sprintf(":%d", uiPort), uiHub, src, flash, log)
+		uiSrv := webui.NewServer(fmt.Sprintf(":%d", uiPort), uiHub, src, log)
 		go func() {
 			if err := uiSrv.Run(ctx); err != nil {
 				log.Warn("web ui server stopped", "err", err)

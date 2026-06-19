@@ -90,7 +90,7 @@ body {
 .pipe .sub { font-size: 12px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* dashboard grid */
-.grid { display: grid; grid-template-columns: 1fr 340px; gap: 20px; }
+.grid { display: flex; flex-direction: column; gap: 20px; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; }
 .card h3 {
   font-size: 12px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--dim);
@@ -112,21 +112,13 @@ body {
 .lamp .st .ok { color: var(--ok); }
 .lamp.off .nm, .lamp.off .st { opacity: .5; }
 
-/* dashboard side cards */
-.side { display: flex; flex-direction: column; gap: 20px; }
+/* dashboard pending card */
 .pending { border: 1px solid rgba(240, 180, 41, .35); background: linear-gradient(180deg, rgba(240, 180, 41, .06), transparent); }
 .pending h3 { color: var(--warn); }
 .pendrow { display: flex; align-items: center; gap: 11px; padding: 9px 0; }
 .pendrow .info { flex: 1; }
 .pendrow .info b { font-size: 13px; }
 .pendrow .info div { font-size: 11px; color: var(--dim); }
-
-.btn {
-  border: 1px solid var(--line); background: var(--panel2); color: var(--txt);
-  font-size: 12px; font-weight: 600; padding: 8px 15px; border-radius: 8px; cursor: pointer;
-}
-.btn.primary { background: var(--accent); border-color: var(--accent); color: #0a0b0f; }
-.btn:disabled { opacity: .4; cursor: not-allowed; }
 
 /* live log */
 .log { margin-top: 20px; }

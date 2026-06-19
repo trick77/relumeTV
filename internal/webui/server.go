@@ -7,7 +7,6 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
-	"sync/atomic"
 	"time"
 )
 
@@ -20,16 +19,14 @@ type Server struct {
 	addr         string
 	hub          *Hub
 	src          StateSource
-	flash        func() error
 	log          *slog.Logger
 	http         *http.Server
 	snapInterval time.Duration
-	flashing     atomic.Bool
 }
 
-// NewServer builds the UI server. flash may be nil, which disables the action.
-func NewServer(addr string, hub *Hub, src StateSource, flash func() error, log *slog.Logger) *Server {
-	return &Server{addr: addr, hub: hub, src: src, flash: flash, log: log, snapInterval: time.Second}
+// NewServer builds the UI server.
+func NewServer(addr string, hub *Hub, src StateSource, log *slog.Logger) *Server {
+	return &Server{addr: addr, hub: hub, src: src, log: log, snapInterval: time.Second}
 }
 
 // runSnapshotLoop periodically publishes a fresh snapshot to the hub so connected
@@ -64,7 +61,6 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/state", s.handleState)
 	mux.HandleFunc("GET /api/events", s.handleEvents)
-	mux.HandleFunc("POST /api/actions/flash", s.handleFlash)
 
 	sub, _ := fs.Sub(assetsFS, "assets")
 	mux.Handle("/", http.FileServer(http.FS(sub)))
@@ -74,45 +70,6 @@ func (s *Server) Handler() http.Handler {
 func (s *Server) handleState(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(BuildSnapshot(s.src))
-}
-
-func (s *Server) handleFlash(w http.ResponseWriter, r *http.Request) {
-	if s.flash == nil {
-		http.Error(w, "flash action unavailable", http.StatusNotFound)
-		return
-	}
-	// CSRF guard: reject a state-changing request whose Origin (always sent by
-	// browsers on cross-origin POSTs) does not match our own origin. A missing
-	// Origin (curl / direct LAN access) is allowed — that path is already part of
-	// the trusted-LAN threat model; this only closes the browser/DNS-rebinding hole.
-	if !sameOrigin(r) {
-		http.Error(w, "cross-origin request rejected", http.StatusForbidden)
-		return
-	}
-	// Single-flight: a flash runs synchronous Bridge Pro calls per light, so reject
-	// overlapping requests (impatient double-clicks) rather than piling concurrent
-	// flash sequences onto the queue-sensitive Pro.
-	if !s.flashing.CompareAndSwap(false, true) {
-		http.Error(w, "a flash is already in progress", http.StatusTooManyRequests)
-		return
-	}
-	defer s.flashing.Store(false)
-	if err := s.flash(); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
-// sameOrigin reports whether r is safe to treat as same-origin for a
-// state-changing request: either no Origin header (non-browser client) or an
-// Origin matching this server's own host. The UI is served over plain HTTP.
-func sameOrigin(r *http.Request) bool {
-	origin := r.Header.Get("Origin")
-	if origin == "" {
-		return true
-	}
-	return origin == "http://"+r.Host
 }
 
 func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {

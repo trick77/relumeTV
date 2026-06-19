@@ -73,9 +73,8 @@ type StateSource interface {
 	LastActivity() time.Time
 	LightsV1() (map[string]any, bool)
 	// DrivenV1IDs lists the v1 light ids the TV is driving right now (a freshness
-	// window, not a sticky set): the single source for the driven count, the
-	// per-light "driven" marking, and the manual flash target. Empties soon after
-	// the TV stops streaming.
+	// window, not a sticky set): the single source for the driven count and the
+	// per-light "driven" marking. Empties soon after the TV stops streaming.
 	DrivenV1IDs() []string
 	// LiveColors maps v1 light id → the latest colour the TV streamed for it. Used
 	// only to override the swatch colour (the Pro's REST light state is stale during
