@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math"
 	"net"
 	"sort"
 	"strconv"
@@ -24,6 +25,45 @@ const configName = "relume"
 // Pro. A continuous send keeps the Pro from auto-stopping the area when the TV's
 // content is momentarily static.
 const sendInterval = 20 * time.Millisecond // 50 Hz
+
+// smoothTau is the exponential-smoothing time constant on the DTLS send path. The TV
+// sends hard scene cuts (verified: bri/colour jumps of thousands of 16-bit units within
+// one ~40 ms frame, no black flashes or drops) which, forwarded verbatim, read as a
+// flicker. Each per-channel colour eases toward the latest TV frame with this time
+// constant so a cut reaches the lamps as a fast fade. Kept to ~one TV-frame interval so
+// the lag stays within the budget the DTLS path buys (M4) — tune here, it is the single knob.
+const smoothTau = 40 * time.Millisecond
+
+// snapColorDelta is the per-component distance (of 65535) within which current snaps to
+// target instead of easing. Two jobs: it terminates the geometric tail (with integer
+// rounding a sub-1 step would round to 0 and never converge) and skips streaming
+// imperceptible micro-steps once within ~0.4% of the target.
+const snapColorDelta = 256
+
+// smoothAlpha is the per-tick EMA weight derived from smoothTau and sendInterval:
+// alpha = 1 - exp(-dt/tau). Computed once so smoothTau stays the only thing to tune.
+var smoothAlpha = 1 - math.Exp(-float64(sendInterval)/float64(smoothTau))
+
+// smoothComponent eases one 16-bit colour component from cur toward tgt by smoothAlpha,
+// snapping to tgt once within snapColorDelta (see snapColorDelta).
+func smoothComponent(cur, tgt uint16) uint16 {
+	d := int(tgt) - int(cur)
+	if d <= snapColorDelta && d >= -snapColorDelta {
+		return tgt
+	}
+	return uint16(int(cur) + int(math.Round(smoothAlpha*float64(d))))
+}
+
+// smoothToward eases current toward target on all three colour components (A/B/C —
+// x/y/bri in XY, r/g/b in RGB), preserving target's channel ID. See smoothTau for why.
+func smoothToward(current, target huestream.Channel) huestream.Channel {
+	return huestream.Channel{
+		ID: target.ID,
+		A:  smoothComponent(current.A, target.A),
+		B:  smoothComponent(current.B, target.B),
+		C:  smoothComponent(current.C, target.C),
+	}
+}
 
 // ProClient is the subset of *bridgepro.Client the streamer needs (an interface so
 // the state machine can be unit-tested without a real Pro).
@@ -102,7 +142,8 @@ type state struct {
 	configID   string
 	colorSpace uint8
 	remap      map[uint16]uint8            // TV v1 light id → Pro channel id
-	latest     map[uint8]huestream.Channel // Pro channel id → latest colour
+	latest     map[uint8]huestream.Channel // Pro channel id → latest TV colour (smoothing target)
+	current    map[uint8]huestream.Channel // Pro channel id → eased colour actually streamed
 	seq        uint8
 	path       string // "dtls" | "rest"
 	// cachedConfigID is the relume config id resolved earlier this process, so repeat
@@ -295,6 +336,7 @@ func (s *ProStreamer) establish(ctx context.Context) error {
 	s.st.configID = configID
 	s.st.remap = remap
 	s.st.latest = map[uint8]huestream.Channel{}
+	s.st.current = map[uint8]huestream.Channel{}
 	s.st.path = "dtls"
 	s.st.mu.Unlock()
 	return nil
@@ -308,6 +350,11 @@ func (s *ProStreamer) sendLoop(ctx context.Context) {
 	rollup := time.NewTicker(5 * time.Second)
 	defer rollup.Stop()
 	var sent, prev uint64
+	// Per-window jump stats on the *sent* (smoothed) stream, mirroring the receiver's
+	// input-side stats (5c817bb). With smoothing on, these should sit well below the
+	// receiver's bri_max_jump/col_max_jump — that gap is the proof the easing works.
+	var lastSent *huestream.Frame
+	var briJump, colJump uint32
 
 	for {
 		select {
@@ -319,9 +366,11 @@ func (s *ProStreamer) sendLoop(ctx context.Context) {
 			seq := s.st.seq
 			s.st.mu.Unlock()
 			if sent != prev {
-				s.log.Info("hue bridge pro entertainment stream", "frames_5s", sent-prev, "channels", ch, "seq", seq)
+				s.log.Info("hue bridge pro entertainment stream", "frames_5s", sent-prev, "channels", ch, "seq", seq,
+					"bri_max_jump", briJump, "col_max_jump", colJump)
 				prev = sent
 			}
+			briJump, colJump = 0, 0
 		case <-t.C:
 			s.st.mu.Lock()
 			conn := s.st.conn
@@ -334,6 +383,8 @@ func (s *ProStreamer) sendLoop(ctx context.Context) {
 			if frame == nil {
 				continue // nothing to send yet
 			}
+			accumSendJumps(lastSent, frame, &briJump, &colJump)
+			lastSent = frame
 			if _, err := conn.Write(huestream.Encode(frame)); err != nil {
 				s.log.Warn("hue bridge pro DTLS send failed, dropping to REST fallback", "err", err)
 				s.teardown()
@@ -344,11 +395,39 @@ func (s *ProStreamer) sendLoop(ctx context.Context) {
 	}
 }
 
-// buildFrameLocked builds the current HueStream v2 frame from the latest colours.
-// Caller holds st.mu.
+// accumSendJumps raises *briJump/*colJump to the largest per-channel brightness and
+// colour jump between two consecutive sent frames, matching the receiver's input-side
+// measure so the two rollup lines are directly comparable. No-op on the first frame or
+// a channel-count change (e.g. just after a reconnect).
+func accumSendJumps(prev, cur *huestream.Frame, briJump, colJump *uint32) {
+	if prev == nil || len(prev.Channels) != len(cur.Channels) {
+		return
+	}
+	for i := range cur.Channels {
+		c, p := cur.Channels[i], prev.Channels[i]
+		if d := absDiff(brightness(cur.ColorSpace, c), brightness(prev.ColorSpace, p)); d > *briJump {
+			*briJump = d
+		}
+		cj := absDiff(uint32(c.A), uint32(p.A)) + absDiff(uint32(c.B), uint32(p.B))
+		if cur.ColorSpace != huestream.ColorSpaceXY {
+			cj += absDiff(uint32(c.C), uint32(p.C))
+		}
+		if cj > *colJump {
+			*colJump = cj
+		}
+	}
+}
+
+// buildFrameLocked builds the next HueStream v2 frame, easing each channel's streamed
+// colour (current) toward the latest TV colour (target) so hard cuts reach the lamps as
+// a fast fade rather than a verbatim jump (see smoothTau). A channel seen for the first
+// time snaps to its value (no fade up from black). Caller holds st.mu.
 func (s *ProStreamer) buildFrameLocked() *huestream.Frame {
 	if len(s.st.latest) == 0 {
 		return nil
+	}
+	if s.st.current == nil {
+		s.st.current = make(map[uint8]huestream.Channel, len(s.st.latest))
 	}
 	ids := make([]int, 0, len(s.st.latest))
 	for id := range s.st.latest {
@@ -357,7 +436,13 @@ func (s *ProStreamer) buildFrameLocked() *huestream.Frame {
 	sort.Ints(ids)
 	channels := make([]huestream.Channel, 0, len(ids))
 	for _, id := range ids {
-		channels = append(channels, s.st.latest[uint8(id)])
+		target := s.st.latest[uint8(id)]
+		next := target // first sight of a channel: snap, don't fade up from black
+		if cur, ok := s.st.current[uint8(id)]; ok {
+			next = smoothToward(cur, target)
+		}
+		s.st.current[uint8(id)] = next
+		channels = append(channels, next)
 	}
 	s.st.seq++
 	return &huestream.Frame{
