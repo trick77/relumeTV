@@ -70,7 +70,19 @@ body {
   font-size: 9px; font-weight: 700; font-style: italic; line-height: 1;
   color: var(--faint); cursor: help; text-transform: none; letter-spacing: 0;
 }
-.info:hover { color: var(--txt); border-color: var(--dim); }
+.info:hover, .info:focus { color: var(--txt); border-color: var(--dim); outline: none; }
+
+/* JS-positioned tooltip, appended to <body> so the .pipe's overflow:hidden never
+   clips it. Shown on hover/focus/click of an .info[data-tip] icon. */
+#tip {
+  position: fixed; z-index: 50; max-width: 260px;
+  background: var(--panel2); border: 1px solid var(--line); border-radius: 8px;
+  padding: 9px 11px; font-size: 11px; line-height: 1.45; color: var(--dim);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .45);
+  opacity: 0; transform: translateY(-3px); pointer-events: none;
+  transition: opacity .12s ease, transform .12s ease;
+}
+#tip.show { opacity: 1; transform: translateY(0); }
 .pipe .val { font-size: 15px; font-weight: 600; }
 .pipe .val .ok { color: var(--ok); }
 .pipe .val .up { color: var(--faint); font-weight: 500; font-size: 12px; margin-left: 6px; }

@@ -340,7 +340,10 @@ func runServe(args []string, log *slog.Logger) error {
 			clip:       clip,
 			liveColors: liveColors,
 			frameStats: frameStats,
-			advName:    "Philips Hue - " + bridgeID[len(bridgeID)-6:],
+			// UI-only display name for relume's own bridge. NOTE: the actual mDNS
+			// instance the TV discovers is still "Philips Hue - …" (internal/mdns),
+			// deliberately unchanged so discovery keeps working.
+			advName:    "Relume Bridge - " + bridgeID[len(bridgeID)-6:],
 			version:    version,
 			started:    time.Now(),
 		}

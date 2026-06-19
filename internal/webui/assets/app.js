@@ -204,7 +204,7 @@ function renderDashboard(s) {
       <div class="pipe">
         <div class="step"><div class="lbl">Hue Bridge Pro</div><div class="val">${s.proPaired ? `<span class="ok">✓</span> Paired` : "— Unpaired"}</div><div class="sub">${esc(s.proName)} ${esc(s.proHost)}</div></div>
         <div class="step"><div class="lbl">TV pairing</div><div class="val">${s.tvClients.length} client(s)</div><div class="sub">${esc(s.tvClients.join(", "))}</div></div>
-        <div class="step"><div class="lbl">Mode <span class="info" title="Entertainment: low-latency DTLS stream to the Hue Bridge Pro (default). REST: per-light REST writes — the automatic fallback when the TV is not streaming entertainment.">i</span></div><div class="val">${esc(cap(currentMode(s)))}${s.fallback ? " (fallback)" : ""}</div><div class="sub">${esc(modeSub(s))}</div></div>
+        <div class="step"><div class="lbl">Mode <span class="info" tabindex="0" data-tip="Entertainment: low-latency DTLS stream to the Hue Bridge Pro (default). REST: per-light REST writes — the automatic fallback when the TV is not streaming entertainment.">i</span></div><div class="val">${esc(cap(currentMode(s)))}${s.fallback ? " (fallback)" : ""}</div><div class="sub">${esc(modeSub(s))}</div></div>
         <div class="step"><div class="lbl">Lights</div><div class="val">${driven} driven</div><div class="sub">${s.lights.length} total</div></div>
         <div class="step"><div class="lbl">Stream</div><div class="val">${streamVal(s)}</div><div class="sub">${esc(streamSub(s))}</div></div>
         <div class="step"><div class="lbl">Uptime</div><div class="val" id="uptime">${s.startedAt ? esc("↑ " + fmtUptime(Date.now() - Date.parse(s.startedAt))) : "—"}</div><div class="sub">Running</div></div>
@@ -245,6 +245,53 @@ async function flash() {
   } catch (_) {}
 }
 window.flash = flash;
+
+// Tooltip for .info[data-tip] icons. The element lives on <body> (not inside the
+// .pipe, whose overflow:hidden would clip it) and is positioned under the icon.
+// Event delegation on document survives the full-innerHTML re-renders. Works on
+// hover/focus and toggles on click (touch).
+let _tipEl = null;
+function tipNode() {
+  if (!_tipEl) {
+    _tipEl = document.createElement("div");
+    _tipEl.id = "tip";
+    document.body.appendChild(_tipEl);
+  }
+  return _tipEl;
+}
+function showTip(icon) {
+  const tip = tipNode();
+  tip.textContent = icon.getAttribute("data-tip") || "";
+  const r = icon.getBoundingClientRect();
+  // Place below the icon, clamped to the viewport so it never runs off-screen.
+  tip.style.left = Math.min(r.left, window.innerWidth - 272) + "px";
+  tip.style.top = r.bottom + 8 + "px";
+  tip.classList.add("show");
+}
+function hideTip() {
+  if (_tipEl) _tipEl.classList.remove("show");
+}
+document.addEventListener("mouseover", (e) => {
+  const icon = e.target.closest?.(".info[data-tip]");
+  if (icon) showTip(icon);
+});
+document.addEventListener("mouseout", (e) => {
+  if (e.target.closest?.(".info[data-tip]")) hideTip();
+});
+document.addEventListener("focusin", (e) => {
+  const icon = e.target.closest?.(".info[data-tip]");
+  if (icon) showTip(icon);
+});
+document.addEventListener("focusout", hideTip);
+document.addEventListener("click", (e) => {
+  const icon = e.target.closest?.(".info[data-tip]");
+  if (!icon) {
+    hideTip();
+    return;
+  }
+  const tip = tipNode();
+  tip.classList.contains("show") ? hideTip() : showTip(icon);
+});
 
 async function boot() {
   try {
