@@ -41,7 +41,7 @@ body {
   background: var(--panel); border: 1px solid var(--line);
   padding: 7px 13px; border-radius: 20px; font-weight: 600; font-size: 13px;
 }
-.dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; background: var(--warn); }
+.dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; background: var(--warn); transition: background .3s ease, box-shadow .3s ease; }
 .dot.ok { background: var(--ok); box-shadow: 0 0 10px var(--ok); }
 .pulse { animation: pulse 1.6s ease-in-out infinite; }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
@@ -84,13 +84,15 @@ body {
 .lamp {
   background: var(--panel2); border: 1px solid var(--line); border-radius: 11px; padding: 13px;
   display: flex; flex-direction: column; gap: 9px; position: relative; overflow: hidden;
+  outline: 1px solid transparent; transition: outline-color .3s ease;
 }
-.swatch { height: 54px; border-radius: 8px; background: #1c1f28; }
+.swatch { height: 54px; border-radius: 8px; background: #1c1f28; transition: background .45s ease, box-shadow .45s ease; }
 .lamp .nm { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lamp .st { font-size: 11px; color: var(--dim); }
-.lamp.driven { outline: 1px solid rgba(124, 140, 255, .35); }
+.lamp.driven { outline-color: rgba(124, 140, 255, .35); }
 .lamp.driven .st { color: var(--accent); }
 .lamp .st .ok { color: var(--ok); }
+.lamp .nm, .lamp .st { transition: opacity .3s ease; }
 .lamp.off .nm, .lamp.off .st { opacity: .5; }
 
 /* dashboard side cards */
