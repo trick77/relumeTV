@@ -37,6 +37,7 @@ type Snapshot struct {
 	ProPaired    bool        `json:"proPaired"`
 	ProName      string      `json:"proName"`
 	ProHost      string      `json:"proHost"`
+	ProBridgeID  string      `json:"proBridgeId,omitempty"`
 	CertPinned   bool        `json:"certPinned"`
 	TVClients    []string    `json:"tvClients"`
 	Mode         string      `json:"mode"`
@@ -57,7 +58,7 @@ type Snapshot struct {
 type StateSource interface {
 	Version() string
 	StartedAt() time.Time
-	ProInfo() (paired bool, name, host string, certPinned bool)
+	ProInfo() (paired bool, name, host, bridgeID string, certPinned bool)
 	TVClients() []string
 	ModeInfo() (mode string, dtlsUp, fallback bool)
 	BridgeName() string
@@ -91,7 +92,7 @@ func rfc3339(t time.Time) string {
 
 // BuildSnapshot assembles a Snapshot from the source. It reads no secrets.
 func BuildSnapshot(src StateSource) Snapshot {
-	paired, name, host, pinned := src.ProInfo()
+	paired, name, host, bridgeID, pinned := src.ProInfo()
 	mode, dtlsUp, fallback := src.ModeInfo()
 	tv := src.TVClients()
 	// Always emit arrays, never null: the frontend reads .length on these, so a
@@ -106,6 +107,7 @@ func BuildSnapshot(src StateSource) Snapshot {
 		ProPaired:    paired,
 		ProName:      name,
 		ProHost:      host,
+		ProBridgeID:  bridgeID,
 		CertPinned:   pinned,
 		TVClients:    tv,
 		Mode:         mode,

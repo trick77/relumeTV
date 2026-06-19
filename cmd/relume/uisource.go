@@ -23,12 +23,12 @@ type uiSource struct {
 func (u *uiSource) Version() string      { return u.version }
 func (u *uiSource) StartedAt() time.Time { return u.started }
 
-func (u *uiSource) ProInfo() (bool, string, string, bool) {
+func (u *uiSource) ProInfo() (bool, string, string, string, bool) {
 	p := u.cfg.GetPro()
 	if p == nil {
-		return false, "", "", false
+		return false, "", "", "", false
 	}
-	return true, p.Name, p.Host, p.CertSHA256 != ""
+	return true, p.Name, p.Host, p.BridgeID, p.CertSHA256 != ""
 }
 
 func (u *uiSource) TVClients() []string                { return u.cfg.PairedDeviceTypes() }

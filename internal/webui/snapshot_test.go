@@ -14,8 +14,8 @@ type fakeSource struct {
 
 func (f fakeSource) Version() string      { return "1.4.2" }
 func (f fakeSource) StartedAt() time.Time { return time.Unix(1000, 0).UTC() }
-func (f fakeSource) ProInfo() (bool, string, string, bool) {
-	return true, "Living Room Pro", "192.168.178.40", true
+func (f fakeSource) ProInfo() (bool, string, string, string, bool) {
+	return true, "Living Room Pro", "192.168.178.40", "ECB5FAFFFE1A2B3C", true
 }
 func (f fakeSource) TVClients() []string            { return []string{"Ambilight#65OLED806"} }
 func (f fakeSource) ModeInfo() (string, bool, bool) { return "entertainment", true, false }
@@ -92,19 +92,21 @@ func TestBuildSnapshot_DrivenV1IDMarksLight(t *testing.T) {
 // emptySource models a fresh, unpaired install: no provider, no TV clients.
 type emptySource struct{}
 
-func (emptySource) Version() string                       { return "dev" }
-func (emptySource) StartedAt() time.Time                  { return time.Time{} }
-func (emptySource) ProInfo() (bool, string, string, bool) { return false, "", "", false }
-func (emptySource) TVClients() []string                   { return nil }
-func (emptySource) ModeInfo() (string, bool, bool)        { return "rest", false, false }
-func (emptySource) BridgeName() string                    { return "Philips Hue - ABCDEF" }
-func (emptySource) PendingTVPairing() bool                { return false }
-func (emptySource) LastActivity() time.Time               { return time.Time{} }
-func (emptySource) LightsV1() (map[string]any, bool)      { return nil, false }
-func (emptySource) DrivenV1IDs() []string                 { return nil }
-func (emptySource) LiveColors() map[string]LiveColor      { return nil }
-func (emptySource) Active() bool                          { return false }
-func (emptySource) StreamFPS() int                        { return 0 }
+func (emptySource) Version() string      { return "dev" }
+func (emptySource) StartedAt() time.Time { return time.Time{} }
+func (emptySource) ProInfo() (bool, string, string, string, bool) {
+	return false, "", "", "", false
+}
+func (emptySource) TVClients() []string              { return nil }
+func (emptySource) ModeInfo() (string, bool, bool)   { return "rest", false, false }
+func (emptySource) BridgeName() string               { return "Philips Hue - ABCDEF" }
+func (emptySource) PendingTVPairing() bool           { return false }
+func (emptySource) LastActivity() time.Time          { return time.Time{} }
+func (emptySource) LightsV1() (map[string]any, bool) { return nil, false }
+func (emptySource) DrivenV1IDs() []string            { return nil }
+func (emptySource) LiveColors() map[string]LiveColor { return nil }
+func (emptySource) Active() bool                     { return false }
+func (emptySource) StreamFPS() int                   { return 0 }
 
 func TestBuildSnapshot_EmptyArraysNotNil(t *testing.T) {
 	s := BuildSnapshot(emptySource{})
