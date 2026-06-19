@@ -40,7 +40,7 @@ body {
   color: transparent;
 }
 .brand span { color: inherit; }
-.ver { font-size: 11px; color: var(--faint); border: 1px solid var(--line); padding: 2px 7px; border-radius: 6px; }
+.ver { font-size: 11px; color: var(--faint); border: 1px solid var(--line); padding: 2px 7px; border-radius: 6px; position: relative; top: 2px; }
 .spacer { flex: 1; }
 .health {
   display: flex; align-items: center; gap: 8px;
@@ -56,12 +56,11 @@ body {
 
 /* dashboard setup pipeline (horizontal) */
 .pipe {
-  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); column-gap: 0; row-gap: 18px;
-  background: var(--panel); border: 1px solid var(--line);
+  display: flex; gap: 0; background: var(--panel); border: 1px solid var(--line);
   border-radius: 14px; padding: 18px 20px; margin-bottom: 22px; position: relative; overflow: hidden;
 }
-.pipe .step { display: flex; flex-direction: column; gap: 5px; position: relative; padding: 0 16px; }
-.pipe .step:not(:nth-child(4n)):not(:last-child)::after {
+.pipe .step { flex: 1; display: flex; flex-direction: column; gap: 5px; position: relative; padding: 0 16px; }
+.pipe .step:not(:last-child)::after {
   content: ""; position: absolute; right: 0; top: 6px; bottom: 6px; width: 1px; background: var(--line);
 }
 .pipe .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--faint); }
