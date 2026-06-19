@@ -12,6 +12,7 @@ type fakeSource struct {
 	live     map[string]LiveColor
 	coalesce int
 	fwdErrs  int
+	lastErr  time.Time
 }
 
 func (f fakeSource) Version() string      { return "1.4.2" }
@@ -40,6 +41,7 @@ func (f fakeSource) ProSendFPS() int                  { return 50 }
 func (f fakeSource) ProWriteRate() int                { return 0 }
 func (f fakeSource) CoalesceRate() int                { return f.coalesce }
 func (f fakeSource) ForwardErrors() int               { return f.fwdErrs }
+func (f fakeSource) LastForwardErr() time.Time        { return f.lastErr }
 
 func TestBuildSnapshot_MapsLightsAndDriven(t *testing.T) {
 	s := BuildSnapshot(fakeSource{driven: []string{"1"}})
@@ -104,12 +106,16 @@ func TestBuildSnapshot_DrivenV1IDMarksLight(t *testing.T) {
 // Backpressure fields flow through to the snapshot: the coalesced drops/s rate and
 // the cumulative forward-error count the Backpressure card renders.
 func TestBuildSnapshot_BackpressureFieldsFlowThrough(t *testing.T) {
-	s := BuildSnapshot(fakeSource{driven: []string{"1"}, coalesce: 12, fwdErrs: 3})
+	errAt := time.Unix(1700000000, 0)
+	s := BuildSnapshot(fakeSource{driven: []string{"1"}, coalesce: 12, fwdErrs: 3, lastErr: errAt})
 	if s.CoalesceRate != 12 {
 		t.Fatalf("coalesceRate = %d, want 12 (drops/s flows through)", s.CoalesceRate)
 	}
 	if s.ForwardErrors != 3 {
 		t.Fatalf("forwardErrors = %d, want 3 (cumulative count flows through)", s.ForwardErrors)
+	}
+	if s.LastForwardErr != errAt.UTC().Format(time.RFC3339) {
+		t.Fatalf("lastForwardErr = %q, want the RFC3339 error time (feeds the UI decay)", s.LastForwardErr)
 	}
 	// forwardErrors must always serialize (no omitempty) so the card can distinguish
 	// "0 errors" from a missing field.
@@ -119,6 +125,15 @@ func TestBuildSnapshot_BackpressureFieldsFlowThrough(t *testing.T) {
 	}
 	if !strings.Contains(string(b), `"forwardErrors":3`) {
 		t.Fatalf("expected forwardErrors in JSON, got %s", b)
+	}
+}
+
+// With no forward errors the timestamp stays empty (omitempty drops it), so the UI
+// never shows a decaying warning for a fault that never happened.
+func TestBuildSnapshot_NoForwardErrLeavesTimestampEmpty(t *testing.T) {
+	s := BuildSnapshot(fakeSource{driven: []string{"1"}})
+	if s.LastForwardErr != "" {
+		t.Fatalf("lastForwardErr = %q, want empty when no error occurred", s.LastForwardErr)
 	}
 }
 
@@ -144,6 +159,7 @@ func (emptySource) ProSendFPS() int                  { return 0 }
 func (emptySource) ProWriteRate() int                { return 0 }
 func (emptySource) CoalesceRate() int                { return 0 }
 func (emptySource) ForwardErrors() int               { return 0 }
+func (emptySource) LastForwardErr() time.Time        { return time.Time{} }
 
 func TestBuildSnapshot_EmptyArraysNotNil(t *testing.T) {
 	s := BuildSnapshot(emptySource{})

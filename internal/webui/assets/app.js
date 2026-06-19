@@ -96,24 +96,39 @@ function streamSub(s) {
   }
 }
 
+// forwardErrDecayMs is how long the amber "N err" warning stays after the most
+// recent failed Pro write. Once writes have been succeeding for this long, the
+// card decays back to the healthy state — a long-resolved fault must not leave a
+// permanent warning. The card re-renders on every snapshot push (~1s), so the
+// decay resolves within ~1s of the window expiring.
+const forwardErrDecayMs = 60000;
+
+// forwardErrActive reports whether the forward-error warning should still show:
+// there have been errors AND the last one is recent enough not to have decayed.
+function forwardErrActive(s) {
+  if (!(s.forwardErrors > 0) || !s.lastForwardErr) return false;
+  return Date.now() - Date.parse(s.lastForwardErr) < forwardErrDecayMs;
+}
+
 // backpressureVal shows how relume shields the Bridge Pro. coalesceRate (drops/s)
 // is HEALTHY — the optimistic path sparing the Pro a write it could not keep up
 // with — so it is never coloured as a fault. forwardErrors is the real failure
-// signal (down Pro / 503 overflow) and only appears, in amber, once it is non-zero.
+// signal (down Pro / 503 overflow); it appears in amber only while recent, then
+// decays away (see forwardErrActive).
 function backpressureVal(s) {
   const n = s.coalesceRate || 0;
   const drops = `<span class="ok">●</span> ${n} ${n === 1 ? "drop" : "drops"}/s`;
-  if (s.forwardErrors > 0) {
+  if (forwardErrActive(s)) {
     return `${drops} <span class="warn">● ${s.forwardErrors} err</span>`;
   }
   return drops;
 }
 
 // backpressureSub explains the Backpressure value: coalesced frames are spared
-// writes (good), forward errors are failed writes to the Pro (bad). The sub only
-// flags errors once they happen, otherwise it states the benign meaning.
+// writes (good), forward errors are failed writes to the Pro (bad). The sub flags
+// errors only while the warning is active, otherwise it states the benign meaning.
 function backpressureSub(s) {
-  if (s.forwardErrors > 0) return `${s.forwardErrors} failed Pro writes`;
+  if (forwardErrActive(s)) return `${s.forwardErrors} failed Pro writes`;
   return "Frames spared the Pro";
 }
 

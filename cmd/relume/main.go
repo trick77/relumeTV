@@ -590,7 +590,7 @@ func newProvider(client *bridgepro.Client, controlled *bridge.ControlledSet, liv
 	// Backpressure signals for the UI: coalesced (healthy drops/s the optimistic
 	// path spared the Pro) and forward errors (the real failure signal, cumulative).
 	p.OnCoalesce = stats.coalesces.Mark
-	p.OnForwardErr = func() { stats.fwdErrs.Add(1) }
+	p.OnForwardErr = stats.markForwardErr
 	return p
 }
 

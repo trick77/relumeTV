@@ -68,6 +68,11 @@ type Snapshot struct {
 	// CoalesceRate. A count, not a rate: forward errors are rare, so a rate would
 	// mostly read 0 and hide that errors happened earlier.
 	ForwardErrors int `json:"forwardErrors"`
+	// LastForwardErr is the RFC3339 time of the most recent failed Pro write (empty
+	// if none). The UI keys the amber "N err" warning off its age, decaying it back
+	// to the healthy state once writes have been succeeding again for a while — so a
+	// long-resolved fault does not leave a permanent warning.
+	LastForwardErr string `json:"lastForwardErr,omitempty"`
 }
 
 // StateSource exposes relume's live state to the snapshot builder without
@@ -109,6 +114,9 @@ type StateSource interface {
 	// ForwardErrors is the cumulative count of failed REST writes to the Pro since
 	// start — the real failure signal (down Pro / 503 overflow).
 	ForwardErrors() int
+	// LastForwardErr is the time of the most recent failed Pro write (zero if none),
+	// so the UI can decay the error warning once writes are succeeding again.
+	LastForwardErr() time.Time
 }
 
 func rfc3339(t time.Time) string {
@@ -130,26 +138,27 @@ func BuildSnapshot(src StateSource) Snapshot {
 	}
 
 	s := Snapshot{
-		Version:       src.Version(),
-		StartedAt:     rfc3339(src.StartedAt()),
-		ProPaired:     paired,
-		ProName:       name,
-		ProHost:       host,
-		ProBridgeID:   bridgeID,
-		CertPinned:    pinned,
-		TVClients:     tv,
-		Mode:          mode,
-		DTLSStreamUp:  dtlsUp,
-		Fallback:      fallback,
-		BridgeName:    src.BridgeName(),
-		PendingTV:     src.PendingTVPairing(),
-		LastActivity:  rfc3339(src.LastActivity()),
-		Lights:        []LightView{},
-		StreamFPS:     src.StreamFPS(),
-		ProSendFPS:    src.ProSendFPS(),
-		ProWriteRate:  src.ProWriteRate(),
-		CoalesceRate:  src.CoalesceRate(),
-		ForwardErrors: src.ForwardErrors(),
+		Version:        src.Version(),
+		StartedAt:      rfc3339(src.StartedAt()),
+		ProPaired:      paired,
+		ProName:        name,
+		ProHost:        host,
+		ProBridgeID:    bridgeID,
+		CertPinned:     pinned,
+		TVClients:      tv,
+		Mode:           mode,
+		DTLSStreamUp:   dtlsUp,
+		Fallback:       fallback,
+		BridgeName:     src.BridgeName(),
+		PendingTV:      src.PendingTVPairing(),
+		LastActivity:   rfc3339(src.LastActivity()),
+		Lights:         []LightView{},
+		StreamFPS:      src.StreamFPS(),
+		ProSendFPS:     src.ProSendFPS(),
+		ProWriteRate:   src.ProWriteRate(),
+		CoalesceRate:   src.CoalesceRate(),
+		ForwardErrors:  src.ForwardErrors(),
+		LastForwardErr: rfc3339(src.LastForwardErr()),
 	}
 
 	switch {

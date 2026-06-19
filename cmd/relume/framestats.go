@@ -12,14 +12,40 @@ import (
 // coalesces are rolling per-second rates (successful REST writes and frames
 // dropped by the optimistic path); fwdErrs is a cumulative count of failed Pro
 // writes since start — a rate would mostly read 0 and hide that errors happened.
+// lastErrUnix is the Unix time of the most recent failed write (0 = never), so the
+// UI can decay the error indicator once a fault is long resolved.
 type proStats struct {
-	writes    *frameStats
-	coalesces *frameStats
-	fwdErrs   *atomic.Uint64
+	writes      *frameStats
+	coalesces   *frameStats
+	fwdErrs     *atomic.Uint64
+	lastErrUnix *atomic.Int64
 }
 
 func newProStats() *proStats {
-	return &proStats{writes: newFrameStats(), coalesces: newFrameStats(), fwdErrs: new(atomic.Uint64)}
+	return &proStats{
+		writes:      newFrameStats(),
+		coalesces:   newFrameStats(),
+		fwdErrs:     new(atomic.Uint64),
+		lastErrUnix: new(atomic.Int64),
+	}
+}
+
+// markForwardErr records one failed write to the Pro: it bumps the cumulative
+// count and stamps the time, so the UI shows a "N err" warning that decays once
+// writes have been succeeding again for a while.
+func (s *proStats) markForwardErr() {
+	s.fwdErrs.Add(1)
+	s.lastErrUnix.Store(time.Now().Unix())
+}
+
+// LastForwardErr returns the time of the most recent failed Pro write, or the zero
+// time if none has happened.
+func (s *proStats) LastForwardErr() time.Time {
+	u := s.lastErrUnix.Load()
+	if u == 0 {
+		return time.Time{}
+	}
+	return time.Unix(u, 0)
 }
 
 // fpsWindow is the trailing window over which the live entertainment frame rate is
