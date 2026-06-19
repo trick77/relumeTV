@@ -33,7 +33,7 @@ body {
 /* top bar */
 .top { display: flex; align-items: center; gap: 14px; margin-bottom: 22px; }
 .brand {
-  font-size: 20px; font-weight: 700; letter-spacing: .5px;
+  font-size: 30px; font-weight: 700; letter-spacing: .5px;
   background-image: linear-gradient(105deg, #ffb000, #ff4d8d, #d23bff, #6a4dff, #00b3ff);
   -webkit-background-clip: text;
   background-clip: text;
