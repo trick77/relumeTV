@@ -59,6 +59,10 @@ func (u *uiSource) CoalesceRate() int { return u.proStats.coalesces.FPS() }
 // start — the real failure signal (down Pro / 503 overflow).
 func (u *uiSource) ForwardErrors() int { return int(u.proStats.fwdErrs.Load()) }
 
+// LastForwardErr is the time of the most recent failed REST write (zero if none),
+// letting the UI decay the error warning once writes have been succeeding again.
+func (u *uiSource) LastForwardErr() time.Time { return u.proStats.LastForwardErr() }
+
 // Active reports whether the TV is currently driving any light — tied to the same
 // 2s freshness window as the driven count, so the header "Active/Idle" state, the
 // Lights "driven" count and the flash button stay consistent (no window where the
