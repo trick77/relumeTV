@@ -14,6 +14,7 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -71,6 +72,20 @@ type Server struct {
 	// pairing defers auto-accepting the TV's first pairing, mirroring a real bridge
 	// waiting for the link-button tap.
 	pairing *pairingGate
+
+	// reqMembers is the TV's entertainment-group light subset (v1 ids) as parsed from
+	// its POST/PUT /groups body ({"lights":["3","4"],...}). nil means the TV has not
+	// declared a subset yet, in which case every light is allowed (defensive
+	// fallback). Source of truth for handleGroupAction; also pushed to the streamer
+	// via OnGroupMembers. Guarded by reqMu.
+	reqMu      sync.RWMutex
+	reqMembers map[uint16]bool
+
+	// OnGroupMembers, if set, is called with the TV's requested entertainment-group
+	// light subset (v1 ids) whenever the TV creates or updates its group with a
+	// non-empty lights array. Wired by main to ProStreamer.SetRequestedMembers so the
+	// Pro entertainment_configuration is restricted to exactly that subset.
+	OnGroupMembers func(v1ids []uint16)
 }
 
 // defaultPairAcceptDelay is how long relume defers auto-accepting the TV's first
@@ -170,6 +185,56 @@ func (s *Server) lightsV1() map[string]any {
 		return map[string]any{}
 	}
 	return lights
+}
+
+// parseGroupLights extracts the TV's light subset (v1 id strings) from a group
+// create/update body, e.g. {"lights":["3","4"],"type":"Entertainment","class":"TV"}.
+// Returns the parsed v1 ids and true only if a non-empty, parseable lights array was
+// present — a body without lights (e.g. a stream-activation PUT) returns ok=false so
+// it never clears an already-known subset.
+func parseGroupLights(body []byte) (v1ids []uint16, ok bool) {
+	var g struct {
+		Lights []string `json:"lights"`
+	}
+	if err := json.Unmarshal(body, &g); err != nil || len(g.Lights) == 0 {
+		return nil, false
+	}
+	for _, s := range g.Lights {
+		if n, err := strconv.Atoi(strings.TrimSpace(s)); err == nil && n >= 0 {
+			v1ids = append(v1ids, uint16(n))
+		}
+	}
+	if len(v1ids) == 0 {
+		return nil, false
+	}
+	return v1ids, true
+}
+
+// setRequestedMembers records the TV's entertainment-group light subset and pushes
+// it to the streamer (OnGroupMembers) so the Pro config is restricted to it.
+func (s *Server) setRequestedMembers(v1ids []uint16) {
+	m := make(map[uint16]bool, len(v1ids))
+	for _, id := range v1ids {
+		m[id] = true
+	}
+	s.reqMu.Lock()
+	s.reqMembers = m
+	s.reqMu.Unlock()
+	if s.OnGroupMembers != nil {
+		s.OnGroupMembers(v1ids)
+	}
+}
+
+// AllowsMember reports whether the v1 light id is in the TV's requested Ambilight
+// subset. With no subset declared yet (nil) every light is allowed — the defensive
+// fallback so the lights never all go dark before the TV has created its group.
+func (s *Server) AllowsMember(v1id uint16) bool {
+	s.reqMu.RLock()
+	defer s.reqMu.RUnlock()
+	if s.reqMembers == nil {
+		return true
+	}
+	return s.reqMembers[v1id]
 }
 
 // Handler returns the HTTP handler (routing) for the server.
@@ -659,16 +724,27 @@ func (s *Server) handleCreateGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	body, _ := io.ReadAll(r.Body)
+	var g struct {
+		Type string `json:"type"`
+		Name string `json:"name"`
+	}
+	_ = json.Unmarshal(body, &g)
 	if s.confirmsEntertainment() {
-		var g struct {
-			Type string `json:"type"`
-			Name string `json:"name"`
-		}
-		_ = json.Unmarshal(body, &g)
 		s.log.Info("ENTERTAINMENT group create requested by TV",
 			"type", g.Type, "name", g.Name, "body", string(body))
 	} else {
 		s.log.Info("group create (not yet persisted)", "body", string(body))
+	}
+	// Honor the TV's group membership: the lights array is the subset of lights the TV
+	// put in its Ambilight zone. Remember it (and push it to the streamer) so relume
+	// only ever drives those — lights in other rooms stay untouched. Gated on
+	// type==Entertainment: the TV may also post a LightGroup (entertainment stickiness,
+	// see TROUBLESHOOTING), which must not clobber the entertainment subset.
+	if g.Type == "Entertainment" {
+		if ids, ok := parseGroupLights(body); ok {
+			s.setRequestedMembers(ids)
+			s.log.Info("entertainment group membership: TV requested light subset", "lights", ids)
+		}
 	}
 	writeJSON(w, []map[string]any{{"success": map[string]any{"id": "1"}}})
 }
@@ -695,6 +771,12 @@ func (s *Server) handleGroupAction(w http.ResponseWriter, r *http.Request) {
 	forwarded := 0
 	if len(action) > 0 {
 		for v1id := range s.lightsV1() {
+			// Defense in depth: restrict the fan-out to the TV's requested Ambilight
+			// subset so a group action never reaches lights in other rooms. With no
+			// subset declared (AllowsMember true for all) this is the previous behaviour.
+			if n, err := strconv.Atoi(v1id); err == nil && !s.AllowsMember(uint16(n)) {
+				continue
+			}
 			s.ForwardLight(v1id, action)
 			forwarded++
 		}
@@ -731,6 +813,18 @@ func (s *Server) handleGroupUpdate(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	body, _ := io.ReadAll(r.Body)
 	s.log.Info("group update", "group", id, "body", string(body))
+
+	// A group update may carry a changed light subset (TV adds/removes a lamp from
+	// its Ambilight zone via PUT /groups/{id} instead of recreating the group). Parse
+	// it the same way as create; a stream-activation body (no lights array) returns
+	// ok=false and never clears the known subset. Gated on id=="1" (the entertainment
+	// group) so an update to any other group can't clobber the entertainment subset.
+	if id == "1" {
+		if ids, ok := parseGroupLights(body); ok {
+			s.setRequestedMembers(ids)
+			s.log.Info("entertainment group membership updated: TV changed light subset", "group", id, "lights", ids)
+		}
+	}
 
 	// Lazy fallback recovery: if a previous DTLS attempt latched the REST fallback
 	// and the cooldown has since elapsed, an activation request re-enables

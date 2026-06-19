@@ -419,6 +419,10 @@ func runServe(args []string, log *slog.Logger) error {
 			// Record each frame sent to the Pro over DTLS so the UI can show the live
 			// outgoing send rate (the 50 Hz counterpart to the TV's ~25 Hz input).
 			streamer.OnSend = proSendStats.Mark
+			// Honor the TV's group membership: when the TV declares which lights belong to
+			// its Ambilight zone (POST/PUT /groups), restrict the Pro config to that
+			// subset so lights in other rooms are never driven.
+			clip.OnGroupMembers = streamer.SetRequestedMembers
 			// Persist/reuse relume's own entertainment_configuration across restarts
 			// instead of re-finding it each stream (Phase D).
 			streamer.SetConfigStore(cfg.LoadEntConfigID, func(id string) {
@@ -447,6 +451,11 @@ func runServe(args []string, log *slog.Logger) error {
 			recv.OnStreamStop = func(string) { clip.MarkDTLSStreamDown() }
 			recv.OnFrame = func(_ string, f *huestream.Frame) {
 				for _, ch := range f.Channels {
+					// Honor the TV subset here too (defense in depth): ch.ID is the v1
+					// light id; skip channels outside the TV's requested Ambilight set.
+					if !clip.AllowsMember(ch.ID) {
+						continue
+					}
 					clip.ForwardLight(strconv.Itoa(int(ch.ID)), entertainment.ToHueV1State(f.ColorSpace, ch))
 				}
 			}

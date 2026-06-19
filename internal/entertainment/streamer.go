@@ -157,6 +157,11 @@ type state struct {
 	// run goroutine (only one run touches it at a time) — the guard also covers the
 	// Path/Push readers on other goroutines.
 	cachedConfigID string
+	// requested is the TV's entertainment-group light subset (v1 ids) as set by
+	// SetRequestedMembers from the clipv1 group create/update. nil means no subset is
+	// known yet, so ensureConfig (and Push's REST fallback) fall back to all
+	// color-capable lights — the defensive default so the lights never all go dark.
+	requested map[uint16]bool
 }
 
 // NewProStreamer builds a streamer. clientKey is the Pro DTLS PSK (already
@@ -168,6 +173,34 @@ func NewProStreamer(pro ProClient, host, appKey string, clientKey []byte, fallba
 		fallback: fallback, log: log,
 		dial: dialPro,
 	}
+}
+
+// SetRequestedMembers records the TV's entertainment-group light subset (v1 ids),
+// as parsed from the clipv1 group create/update body. ensureConfig then restricts
+// the Pro entertainment_configuration to exactly these lights, and Push's REST
+// fallback forwards only their channels — so lights the TV did not put in its
+// Ambilight zone are never driven. An empty list is ignored so a later stream
+// activation that carries no lights array cannot clear an already-known subset.
+func (s *ProStreamer) SetRequestedMembers(v1ids []uint16) {
+	if len(v1ids) == 0 {
+		return
+	}
+	m := make(map[uint16]bool, len(v1ids))
+	for _, id := range v1ids {
+		m[id] = true
+	}
+	s.st.mu.Lock()
+	s.st.requested = m
+	s.st.mu.Unlock()
+}
+
+// requestedMembers returns the current TV light subset (nil if none known). The map
+// is replaced wholesale by SetRequestedMembers and never mutated in place, so the
+// returned reference is safe to read without holding st.mu.
+func (s *ProStreamer) requestedMembers() map[uint16]bool {
+	s.st.mu.Lock()
+	defer s.st.mu.Unlock()
+	return s.st.requested
 }
 
 // Path reports the currently active forward path ("dtls", "rest" or "" when idle) —
@@ -269,11 +302,19 @@ func (s *ProStreamer) Push(_ string, f *huestream.Frame) {
 	}
 	s.st.mu.Unlock()
 
-	// REST fallback path.
+	// REST fallback path. Unlike the DTLS path (which is filtered for free by remap,
+	// built only over the config members), this iterates the raw frame channels, so
+	// the TV subset is applied explicitly here too — a light outside the requested
+	// Ambilight set is never forwarded. ch.ID is the TV v1 light id (same contract as
+	// remap, see above).
 	if s.fallback == nil {
 		return
 	}
+	requested := s.requestedMembers()
 	for _, ch := range f.Channels {
+		if requested != nil && !requested[ch.ID] {
+			continue
+		}
 		s.fallback(strconv.Itoa(int(ch.ID)), ToHueV1State(f.ColorSpace, ch))
 	}
 }
@@ -520,6 +561,12 @@ func (s *ProStreamer) ensureConfig() (id string, remap map[uint16]uint8, reused 
 		}
 	}
 
+	// Honor the TV's group membership: if the TV told relume which lights belong to
+	// its Ambilight zone (via POST/PUT /groups with a lights array), restrict the
+	// config to exactly that subset. nil → no subset known yet (cold start), so keep
+	// the legacy "all color lights" behaviour so nothing is ever accidentally dark.
+	requested := s.requestedMembers()
+
 	// Build the members (color lights that own an entertainment service) and the
 	// service-rid → TV-v1-id mapping used to interpret the bridge's channels.
 	var members []bridgepro.ConfigMember
@@ -535,6 +582,9 @@ func (s *ProStreamer) ensureConfig() (id string, remap map[uint16]uint8, reused 
 		v1, ok := uuidToV1[l.ID]
 		if !ok {
 			continue
+		}
+		if requested != nil && !requested[v1] {
+			continue // light is not in the TV's requested Ambilight subset
 		}
 		members = append(members, bridgepro.ConfigMember{ServiceRID: svc, X: position(len(members))})
 		svcToV1[svc] = v1

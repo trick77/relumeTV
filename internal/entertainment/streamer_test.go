@@ -48,13 +48,14 @@ type stubPro struct {
 	fullByID map[string]*bridgepro.EntertainmentConfigFull
 	created  string
 
-	mu        sync.Mutex
-	started   []string
-	stopped   []string
-	deleted   []string
-	createdN  int
-	createErr error
-	getErr    error
+	mu             sync.Mutex
+	started        []string
+	stopped        []string
+	deleted        []string
+	createdN       int
+	createdMembers []bridgepro.ConfigMember
+	createErr      error
+	getErr         error
 	// startBlockedUntilStop simulates a leftover-active config: StartStream is
 	// rejected until StopStream has been called once.
 	startBlockedUntilStop bool
@@ -67,12 +68,13 @@ func (s *stubPro) EntertainmentServices() ([]bridgepro.EntertainmentService, err
 func (s *stubPro) EntertainmentConfigs() ([]bridgepro.EntertainmentConfig, error) {
 	return s.configs, nil
 }
-func (s *stubPro) CreateEntertainmentConfig(name string, _ []bridgepro.ConfigMember) (string, error) {
+func (s *stubPro) CreateEntertainmentConfig(name string, members []bridgepro.ConfigMember) (string, error) {
 	if s.createErr != nil {
 		return "", s.createErr
 	}
 	s.mu.Lock()
 	s.createdN++
+	s.createdMembers = members
 	s.mu.Unlock()
 	return s.created, nil
 }
@@ -143,6 +145,111 @@ func oneLightPro() *stubPro {
 		services: []bridgepro.EntertainmentService{svc},
 		created:  testConfigID,
 		full:     full,
+	}
+}
+
+// twoLightPro returns a Pro with two color lights (v1 ids 1→svc-A, 2→svc-B, by the
+// slice order translate.LightsV1 assigns over). full is the read-back the stub
+// returns for any GetEntertainmentConfig (build it to cover the services the test
+// expects to end up in the config).
+func twoLightPro(full *bridgepro.EntertainmentConfigFull) *stubPro {
+	svcA := bridgepro.EntertainmentService{ID: "svc-A"}
+	svcA.Owner.RID = "dev-A"
+	svcB := bridgepro.EntertainmentService{ID: "svc-B"}
+	svcB.Owner.RID = "dev-B"
+	return &stubPro{
+		lights:   []bridgepro.Light{colorLight("uuid-A", "dev-A"), colorLight("uuid-B", "dev-B")},
+		services: []bridgepro.EntertainmentService{svcA, svcB},
+		created:  testConfigID,
+		full:     full,
+	}
+}
+
+// TestProStreamer_ensureConfig_honorsRequestedSubset: when the TV declared a light
+// subset, the created config contains only those members, not all color lights.
+func TestProStreamer_ensureConfig_honorsRequestedSubset(t *testing.T) {
+	// Given: two color lights, but the TV asked for only v1 id 1 (svc-A).
+	pro := twoLightPro(configFull(testConfigID, 5, "svc-A"))
+	s := quietStreamer(pro, nil)
+	s.SetRequestedMembers([]uint16{1})
+
+	// When
+	_, remap, _, channels, err := s.ensureConfig()
+
+	// Then
+	if err != nil {
+		t.Fatalf("ensureConfig: %v", err)
+	}
+	if len(pro.createdMembers) != 1 || pro.createdMembers[0].ServiceRID != "svc-A" {
+		t.Fatalf("createdMembers = %+v, want exactly [svc-A]", pro.createdMembers)
+	}
+	if channels != 1 {
+		t.Fatalf("channels = %d, want 1 (only the requested subset)", channels)
+	}
+	if _, ok := remap[2]; ok {
+		t.Fatalf("remap unexpectedly contains v1 id 2 (light outside the TV subset)")
+	}
+}
+
+// TestProStreamer_ensureConfig_noSubsetDrivesAllColorLights: with no subset declared
+// (cold start), ensureConfig keeps the legacy behaviour and drives every color light.
+func TestProStreamer_ensureConfig_noSubsetDrivesAllColorLights(t *testing.T) {
+	// Given: two color lights, no SetRequestedMembers call.
+	pro := twoLightPro(configFull(testConfigID, 5, "svc-A", "svc-B"))
+
+	// When
+	_, _, _, channels, err := quietStreamer(pro, nil).ensureConfig()
+
+	// Then
+	if err != nil {
+		t.Fatalf("ensureConfig: %v", err)
+	}
+	if len(pro.createdMembers) != 2 {
+		t.Fatalf("createdMembers = %+v, want both lights (no subset → fallback to all)", pro.createdMembers)
+	}
+	if channels != 2 {
+		t.Fatalf("channels = %d, want 2", channels)
+	}
+}
+
+// TestProStreamer_ensureConfig_recreatesAllLightsConfigOnSubsetShrink: a persisted
+// config covering ALL lights must be recreated (not reused) once the TV narrows to a
+// subset — otherwise the Pro would keep driving the lights outside the subset. This
+// guards the reuse path, where the member-loop filter alone would not apply.
+func TestProStreamer_ensureConfig_recreatesAllLightsConfigOnSubsetShrink(t *testing.T) {
+	// Given: an existing relume config over both lights, but the TV now wants only 1.
+	pro := twoLightPro(nil)
+	pro.configs = []bridgepro.EntertainmentConfig{{ID: testConfigID}}
+	pro.configs[0].Metadata.Name = configName
+	pro.created = "cfg-new"
+	pro.fullByID = map[string]*bridgepro.EntertainmentConfigFull{
+		testConfigID: configFull(testConfigID, 5, "svc-A", "svc-B"), // stale: all lights
+		"cfg-new":    configFull("cfg-new", 5, "svc-A"),             // recreated: subset
+	}
+	s := quietStreamer(pro, nil)
+	s.SetRequestedMembers([]uint16{1})
+
+	// When
+	id, _, reused, channels, err := s.ensureConfig()
+
+	// Then
+	if err != nil {
+		t.Fatalf("ensureConfig: %v", err)
+	}
+	if reused {
+		t.Fatalf("reused = true, want recreate (all-lights config does not cover the subset)")
+	}
+	if id != "cfg-new" || channels != 1 {
+		t.Fatalf("id=%q channels=%d, want id=cfg-new channels=1", id, channels)
+	}
+	var deletedStale bool
+	for _, d := range pro.deleted {
+		if d == testConfigID {
+			deletedStale = true
+		}
+	}
+	if !deletedStale {
+		t.Fatalf("stale all-lights config %s was not deleted (deleted=%v)", testConfigID, pro.deleted)
 	}
 }
 

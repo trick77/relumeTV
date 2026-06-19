@@ -1039,3 +1039,54 @@ func TestGroupsExposeMinimalEntertainmentGroup(t *testing.T) {
 		t.Fatalf("stream = %v", group["stream"])
 	}
 }
+
+func TestParseGroupLights_realTVCreateBody(t *testing.T) {
+	// The exact body the Ambilight TV sends (from the live log): a light subset plus
+	// type/class. relume must pull out the v1 ids and ignore the rest.
+	body := []byte(`{"lights":["3","4"],"type":"Entertainment", "class":"TV"}`)
+	ids, ok := parseGroupLights(body)
+	if !ok {
+		t.Fatalf("ok = false, want true for a body with a lights array")
+	}
+	if len(ids) != 2 || ids[0] != 3 || ids[1] != 4 {
+		t.Fatalf("ids = %v, want [3 4]", ids)
+	}
+}
+
+func TestParseGroupLights_noLightsArray_returnsNotOk(t *testing.T) {
+	// A stream-activation PUT carries no lights — it must NOT be read as a subset
+	// (which would clear an already-known one).
+	for _, body := range []string{
+		`{"stream":{"active":true}}`,
+		`{"type":"Entertainment"}`,
+		`{"lights":[]}`,
+		`not json`,
+	} {
+		if ids, ok := parseGroupLights([]byte(body)); ok {
+			t.Fatalf("body %q: ok=true ids=%v, want ok=false", body, ids)
+		}
+	}
+}
+
+func TestSetRequestedMembers_firesHookAndGatesAllowsMember(t *testing.T) {
+	s, _ := newTestServer(t)
+	var got []uint16
+	s.OnGroupMembers = func(v1ids []uint16) { got = v1ids }
+
+	// No subset yet → every light is allowed (defensive fallback).
+	if !s.AllowsMember(99) {
+		t.Fatalf("AllowsMember(99) = false before any subset, want true")
+	}
+
+	s.setRequestedMembers([]uint16{3, 4})
+
+	if len(got) != 2 || got[0] != 3 || got[1] != 4 {
+		t.Fatalf("OnGroupMembers got %v, want [3 4]", got)
+	}
+	if !s.AllowsMember(3) || !s.AllowsMember(4) {
+		t.Fatalf("AllowsMember(3/4) = false, want true (in subset)")
+	}
+	if s.AllowsMember(5) {
+		t.Fatalf("AllowsMember(5) = true, want false (outside subset)")
+	}
+}
