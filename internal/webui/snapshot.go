@@ -44,7 +44,6 @@ type Snapshot struct {
 	DTLSStreamUp bool        `json:"dtlsStreamUp"`
 	Fallback     bool        `json:"fallback"`
 	BridgeName   string      `json:"bridgeName"`
-	PendingTV    bool        `json:"pendingTV"`
 	LastActivity string      `json:"lastActivity"`
 	Lights       []LightView `json:"lights"`
 	Health       string      `json:"health"`
@@ -93,7 +92,6 @@ type StateSource interface {
 	TVClients() []string
 	ModeInfo() (mode string, dtlsUp, fallback bool)
 	BridgeName() string
-	PendingTVPairing() bool
 	LastActivity() time.Time
 	LightsV1() (map[string]any, bool)
 	// DrivenV1IDs lists the v1 light ids the TV is driving right now (a freshness
@@ -166,7 +164,6 @@ func BuildSnapshot(src StateSource) Snapshot {
 		DTLSStreamUp:   dtlsUp,
 		Fallback:       fallback,
 		BridgeName:     src.BridgeName(),
-		PendingTV:      src.PendingTVPairing(),
 		LastActivity:   rfc3339(src.LastActivity()),
 		Lights:         []LightView{},
 		StreamFPS:      src.StreamFPS(),

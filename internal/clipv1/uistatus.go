@@ -14,15 +14,6 @@ func (s *Server) UIStatus() (mode string, dtlsUp, fallback bool) {
 	return mode, dtlsUp, fallback
 }
 
-// PendingTVPairing reports whether a TV pairing attempt is currently inside its
-// auto-accept window and not yet paired (read-only, for the web UI).
-func (s *Server) PendingTVPairing() bool {
-	if len(s.cfg.PairedDeviceTypes()) > 0 {
-		return false
-	}
-	return s.pairing.pending()
-}
-
 // LightsV1Snapshot returns the v1 light map for the web UI, or ok=false when no
 // provider/Pro is wired yet or the read fails (read-only).
 func (s *Server) LightsV1Snapshot() (map[string]any, bool) {

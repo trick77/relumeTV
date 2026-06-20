@@ -23,7 +23,6 @@ func (f fakeSource) ProInfo() (bool, string, string, string, bool) {
 func (f fakeSource) TVClients() []string            { return []string{"Ambilight#65OLED806"} }
 func (f fakeSource) ModeInfo() (string, bool, bool) { return "entertainment", true, false }
 func (f fakeSource) BridgeName() string             { return "Philips Hue - 2C4D54" }
-func (f fakeSource) PendingTVPairing() bool         { return false }
 func (f fakeSource) LastActivity() time.Time        { return time.Time{} }
 func (f fakeSource) LightsV1() (map[string]any, bool) {
 	return map[string]any{
@@ -150,7 +149,6 @@ func (emptySource) ProInfo() (bool, string, string, string, bool) {
 func (emptySource) TVClients() []string              { return nil }
 func (emptySource) ModeInfo() (string, bool, bool)   { return "rest", false, false }
 func (emptySource) BridgeName() string               { return "Philips Hue - ABCDEF" }
-func (emptySource) PendingTVPairing() bool           { return false }
 func (emptySource) LastActivity() time.Time          { return time.Time{} }
 func (emptySource) LightsV1() (map[string]any, bool) { return nil, false }
 func (emptySource) DrivenV1IDs() []string            { return nil }

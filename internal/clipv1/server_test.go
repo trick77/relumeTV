@@ -59,7 +59,6 @@ func newTestServer(t *testing.T) (*Server, *httptest.Server) {
 		t.Fatalf("config: %v", err)
 	}
 	s := New(cfg, "10.0.0.5", 80, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	s.pairing.acceptDelay = 0 // tests pair immediately; the production delay is covered separately
 	ts := httptest.NewServer(s.Handler())
 	t.Cleanup(ts.Close)
 	return s, ts
@@ -140,36 +139,26 @@ func TestPairing_isIdempotentForSameDeviceType(t *testing.T) {
 	}
 }
 
-func TestPairing_isDelayedThenAccepted(t *testing.T) {
-	// Given: a short auto-pairing delay so the test stays fast
-	s, ts := newTestServer(t)
-	s.pairing.acceptDelay = 120 * time.Millisecond
+func TestPairing_acceptsFirstAttemptImmediately(t *testing.T) {
+	// Given: a fresh server (no prior pairing) — there is no artificial accept delay
+	_, ts := newTestServer(t)
 	body := `{"devicetype":"65OLED806/12","generateclientkey":true}`
 
-	// When: the TV makes its first pairing attempt within the delay window
+	// When: the TV makes its very first pairing attempt
 	r1 := mustPostUA(t, ts.URL+"/api", body, tvUserAgent)
 	var o1 []map[string]map[string]any
 	json.NewDecoder(r1.Body).Decode(&o1)
 	r1.Body.Close()
 
-	// Then: held off with the standard link-button error, like a real bridge
-	if len(o1) != 1 || o1[0]["error"] == nil {
-		t.Fatalf("expected 101 during the delay window, got %v", o1)
+	// Then: it is accepted on the first try (no 101 retry loop / request spam)
+	if len(o1) != 1 || o1[0]["success"] == nil {
+		t.Fatalf("expected success on the first attempt, got %v", o1)
 	}
-	if o1[0]["error"]["type"].(float64) != 101 {
-		t.Errorf("expected type 101, got %v", o1[0]["error"]["type"])
+	if o1[0]["error"] != nil {
+		t.Errorf("expected no error on the first attempt, got %v", o1[0]["error"])
 	}
-
-	// When: the TV keeps polling past the delay
-	time.Sleep(150 * time.Millisecond)
-	r2 := mustPostUA(t, ts.URL+"/api", body, tvUserAgent)
-	var o2 []map[string]map[string]any
-	json.NewDecoder(r2.Body).Decode(&o2)
-	r2.Body.Close()
-
-	// Then: pairing is accepted
-	if len(o2) != 1 || o2[0]["success"] == nil {
-		t.Fatalf("expected success after the delay, got %v", o2)
+	if u, _ := o1[0]["success"]["username"].(string); u == "" {
+		t.Errorf("expected a non-empty username, got %v", o1[0]["success"])
 	}
 }
 

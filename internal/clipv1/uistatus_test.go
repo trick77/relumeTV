@@ -4,7 +4,6 @@ import (
 	"io"
 	"log/slog"
 	"testing"
-	"time"
 
 	"github.com/trick77/relume/internal/config"
 )
@@ -29,24 +28,6 @@ func TestUIStatus_EntertainmentStreamUp(t *testing.T) {
 	mode, dtlsUp, fallback := s.UIStatus()
 	if mode != "entertainment" || !dtlsUp || fallback {
 		t.Fatalf("got mode=%q dtlsUp=%v fallback=%v", mode, dtlsUp, fallback)
-	}
-}
-
-func TestPendingTVPairing_WindowOpen(t *testing.T) {
-	s := newUIServer()
-	s.pairing.mu.Lock()
-	s.pairing.acceptDelay = time.Minute
-	s.pairing.firstPairSeen = time.Now()
-	s.pairing.mu.Unlock()
-	if !s.PendingTVPairing() {
-		t.Fatal("expected pending pairing within the accept window")
-	}
-}
-
-func TestPendingTVPairing_NoneWhenUnseen(t *testing.T) {
-	s := newUIServer()
-	if s.PendingTVPairing() {
-		t.Fatal("expected no pending pairing before any attempt")
 	}
 }
 

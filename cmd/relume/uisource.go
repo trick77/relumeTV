@@ -38,7 +38,6 @@ func (u *uiSource) ProInfo() (bool, string, string, string, bool) {
 func (u *uiSource) TVClients() []string              { return u.cfg.PairedDeviceTypes() }
 func (u *uiSource) ModeInfo() (string, bool, bool)   { return u.clip.UIStatus() }
 func (u *uiSource) BridgeName() string               { return u.advName }
-func (u *uiSource) PendingTVPairing() bool           { return u.clip.PendingTVPairing() }
 func (u *uiSource) LastActivity() time.Time          { return u.clip.LastActivity() }
 func (u *uiSource) LightsV1() (map[string]any, bool) { return u.clip.LightsV1Snapshot() }
 

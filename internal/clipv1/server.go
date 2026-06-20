@@ -69,10 +69,6 @@ type Server struct {
 	// the fallback watchdog) behind a single lock.
 	stream *streamState
 
-	// pairing defers auto-accepting the TV's first pairing, mirroring a real bridge
-	// waiting for the link-button tap.
-	pairing *pairingGate
-
 	// reqMembers is the TV's entertainment-group light subset (v1 ids) as parsed from
 	// its POST/PUT /groups body ({"lights":["3","4"],...}). nil means the TV has not
 	// declared a subset yet, in which case every light is allowed (defensive
@@ -88,15 +84,6 @@ type Server struct {
 	OnGroupMembers func(v1ids []uint16)
 }
 
-// defaultPairAcceptDelay is how long relume defers auto-accepting the TV's first
-// pairing. This is purely cosmetic — to make pairing feel natural: a real Hue
-// bridge only pairs after you physically tap its link button, so accepting
-// instantly would feel "off". relume always auto-accepts; the delay just mimics
-// that short, expected wait. It stays well inside the TV's ~30s POST /api polling
-// window. Only the FIRST pairing of a devicetype is delayed; an already-paired TV
-// is served instantly from the idempotent path.
-const defaultPairAcceptDelay = 5 * time.Second
-
 // defaultDTLSFallbackTimeout is how long relume waits, after confirming the TV's
 // stream activation, for the TV to open its DTLS stream before falling back to
 // REST-follow. The tested TV opens it ~1s after confirmation, so 5s is ample margin.
@@ -106,8 +93,7 @@ const defaultDTLSFallbackTimeout = 5 * time.Second
 func New(cfg *config.Config, advIP string, httpPort int, log *slog.Logger) *Server {
 	return &Server{cfg: cfg, advIP: advIP, httpPort: httpPort, log: log,
 		activity: newActivityTracker(log),
-		stream:   newStreamState(defaultDTLSFallbackTimeout),
-		pairing:  newPairingGate(defaultPairAcceptDelay)}
+		stream:   newStreamState(defaultDTLSFallbackTimeout)}
 }
 
 // SetDTLSFallbackTimeout overrides how long relume waits for the TV's DTLS stream
@@ -507,15 +493,10 @@ func (s *Server) handlePairing(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Hold off the first auto-pairing for pairAcceptDelay — purely so it feels
-	// natural, like pairing with a real bridge after a link-button tap (relume
-	// auto-accepts regardless; this is cosmetic, not a requirement). The TV polls
-	// POST /api and keeps trying (it waits up to ~30s), so returning the standard
-	// 101 until the window elapses just delays acceptance without aborting the TV.
-	if s.pairing.shouldDefer() {
-		writeError(w, 101, "", "link button not pressed")
-		return
-	}
+	// Accept the TV's first pairing immediately. relume always auto-accepts, so there
+	// is no link-button wait to emulate; returning 101 here only makes the TV retry
+	// POST /api in a tight loop until it succeeds (it polls for ~30s), which is pure
+	// request spam for no benefit.
 
 	username, err := randomHex(16) // 32 characters
 	if err != nil {

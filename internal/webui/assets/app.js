@@ -258,21 +258,11 @@ function renderDashboard(s) {
     })
     .join("");
   const driven = drivenLights.length;
-  const pending =
-    !s.proPaired || s.pendingTV
-      ? `<div class="card pending"><h3>⚠ Needs attention</h3>
-          ${
-            !s.proPaired
-              ? `<div class="pendrow"><div class="info"><b>Hue Bridge Pro pairing</b><div>Press the link button on the Hue Bridge Pro</div></div><span class="dot pulse"></span></div>`
-              : ""
-          }
-          ${
-            s.pendingTV
-              ? `<div class="pendrow"><div class="info"><b>TV is pairing…</b><div>Auto-accepting</div></div><span class="dot pulse"></span></div>`
-              : ""
-          }
+  const pending = !s.proPaired
+    ? `<div class="card pending"><h3>⚠ Needs attention</h3>
+          <div class="pendrow"><div class="info"><b>Hue Bridge Pro pairing</b><div>Press the link button on the Hue Bridge Pro</div></div><span class="dot pulse"></span></div>
         </div>`
-      : "";
+    : "";
   app.innerHTML = `
     <div class="wrap">
       <div class="top"><div class="brand">re<span>lume</span></div><div class="ver">v${esc(s.version)}</div>
