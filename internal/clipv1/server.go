@@ -542,6 +542,16 @@ func (s *Server) handlePairing(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, []map[string]any{{"success": success}})
 }
 
+// bridgeIDSuffix is the last 6 characters of the 16-hex bridge id — the short, stable
+// identifier Hue uses in its mDNS instance name ("Philips Hue - XXXXXX"). Returns the
+// whole id if it is somehow shorter than 6.
+func bridgeIDSuffix(bridgeID string) string {
+	if len(bridgeID) <= 6 {
+		return bridgeID
+	}
+	return bridgeID[len(bridgeID)-6:]
+}
+
 // handleShortConfig returns the unauthenticated short config (identity check).
 func (s *Server) handleShortConfig(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, s.shortConfig())
@@ -558,7 +568,10 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 func (s *Server) shortConfig() map[string]any {
 	id := s.cfg.Identity
 	return map[string]any{
-		"name":             "relumeTV",
+		// TV-visible bridge name. Append the bridge-id suffix (the canonical Hue
+		// identifier, matching the "Philips Hue - XXXXXX" mDNS instance) so the bridge
+		// is distinguishable in the TV's Ambilight+Hue picker instead of a bare "relumeTV".
+		"name":             "relumeTV - " + bridgeIDSuffix(id.BridgeID()),
 		"datastoreversion": "131",
 		"swversion":        "1967054020",
 		"apiversion":       "1.67.0",
