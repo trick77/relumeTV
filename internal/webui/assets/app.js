@@ -61,7 +61,7 @@ function modeSub(s) {
   if (s.dtlsStreamUp) return "DTLS stream up";
   if (s.fallback) return "DTLS unavailable";
   if (s.mode === "entertainment") return "TV not streaming entertainment";
-  return "Per-light writes to the Pro";
+  return "Per-light writes to the Hue Bridge Pro";
 }
 
 // streamVal shows the live entertainment frame rate while the TV is streaming to the
@@ -96,6 +96,16 @@ function streamSub(s) {
   }
 }
 
+// jitterDisplay shows how much relume's easing cut the stream's brightness jitter —
+// the reduction of the smoothed sent max jump vs the TV input max jump over the last
+// window. A longdash when there is no value: not streaming to the Hue Bridge Pro over
+// DTLS (smoothing only applies there), or nothing jumped to smooth.
+function jitterDisplay(s) {
+  if (!s.dtlsStreamUp || !s.jitterInBri) return "—";
+  const pct = Math.max(0, Math.round(100 * (1 - (s.jitterSentBri || 0) / s.jitterInBri)));
+  return pct > 0 ? `−${pct}%` : "0%";
+}
+
 // forwardErrDecayMs is how long the amber "N err" warning stays after the most
 // recent failed Pro write. Once writes have been succeeding for this long, the
 // card decays back to the healthy state — a long-resolved fault must not leave a
@@ -128,7 +138,7 @@ function backpressureVal(s) {
 // writes (good), forward errors are failed writes to the Pro (bad). The sub flags
 // errors only while the warning is active, otherwise it states the benign meaning.
 function backpressureSub(s) {
-  if (forwardErrActive(s)) return `${s.forwardErrors} failed Pro writes`;
+  if (forwardErrActive(s)) return `${s.forwardErrors} failed Hue Bridge Pro writes`;
   return "Avoided extra writes";
 }
 
@@ -223,7 +233,7 @@ function renderSetup(s) {
         <div class="step ${s.tvClients.length ? "active" : "todo"}">
           <div class="rail"><div class="num">3</div></div>
           <div class="card"><h3>Check lights &amp; go</h3>
-            <div class="d">${s.lights.length} lights loaded from the Pro.</div></div>
+            <div class="d">${s.lights.length} lights loaded from the Hue Bridge Pro.</div></div>
         </div>
       </div>
     </div>`;
@@ -251,7 +261,7 @@ function renderDashboard(s) {
       ? `<div class="card pending"><h3>⚠ Needs attention</h3>
           ${
             !s.proPaired
-              ? `<div class="pendrow"><div class="info"><b>Hue Bridge Pro pairing</b><div>Press the link button on the Pro</div></div><span class="dot pulse"></span></div>`
+              ? `<div class="pendrow"><div class="info"><b>Hue Bridge Pro pairing</b><div>Press the link button on the Hue Bridge Pro</div></div><span class="dot pulse"></span></div>`
               : ""
           }
           ${
@@ -273,8 +283,8 @@ function renderDashboard(s) {
       </div>
       <div class="pipe row2">
         <div class="step"><div class="lbl">Lights</div><div class="val">${driven}</div><div class="sub">Driven by TV</div></div>
-        <div class="step"><div class="lbl">Stream</div><div class="val">${streamVal(s)}</div><div class="sub">${esc(streamSub(s))}</div></div>
-        <div class="step"><div class="lbl">Backpressure <span class="info" tabindex="0" data-tip="Drops/s: Ambilight frames relume coalesced away because the Bridge Pro could not keep up — healthy, it spares the Pro writes it cannot accept. Errors: failed writes to the Pro (unreachable / 503 overflow) — the real fault signal.">i</span></div><div class="val">${backpressureVal(s)}</div><div class="sub">${esc(backpressureSub(s))}</div></div>
+        <div class="step"><div class="lbl">Stream <span class="info" tabindex="0" data-tip="Jitter is the largest brightness jump between consecutive frames. relume eases each colour toward the latest TV frame with a ${s.smoothingTauMs || 40} ms time constant, so hard scene cuts reach the lamps as a fast fade — the figure is how much smaller the jump is on the sent stream than on the TV input. DTLS path only.">i</span></div><div class="val">${streamVal(s)}</div><div class="sub">${esc(streamSub(s))}<br>jitter ${jitterDisplay(s)}</div></div>
+        <div class="step"><div class="lbl">Backpressure <span class="info" tabindex="0" data-tip="Drops/s: Ambilight frames relume coalesced away because the Hue Bridge Pro could not keep up — healthy, it spares the Hue Bridge Pro writes it cannot accept. Errors: failed writes to the Hue Bridge Pro (unreachable / 503 overflow) — the real fault signal.">i</span></div><div class="val">${backpressureVal(s)}</div><div class="sub">${esc(backpressureSub(s))}</div></div>
         <div class="step"><div class="lbl">Liveness</div><div class="val" id="liveness">—</div><div class="sub">Since last write</div></div>
       </div>
       <div class="grid">${pending}

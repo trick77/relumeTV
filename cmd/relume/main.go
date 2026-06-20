@@ -298,6 +298,10 @@ func runServe(args []string, log *slog.Logger) error {
 	// the DTLS or the REST counters are non-zero at a time, depending on the path.
 	proSendStats := newFrameStats()
 	proStats := newProStats()
+	// jitterStats holds the per-window brightness jump on the incoming TV stream vs
+	// relume's smoothed sent stream, so the UI can show how much the DTLS-path easing
+	// cut the flicker. Fed by the receiver (input) and streamer (sent) rollups below.
+	jitterStats := newJitterStats()
 
 	if pro != nil {
 		client := bridgepro.New(pro)
@@ -348,6 +352,7 @@ func runServe(args []string, log *slog.Logger) error {
 			frameStats:   frameStats,
 			proSendStats: proSendStats,
 			proStats:     proStats,
+			jitterStats:  jitterStats,
 			// UI-only display name for relume's own bridge. NOTE: the actual mDNS
 			// instance the TV discovers is still "Philips Hue - …" (internal/mdns),
 			// deliberately unchanged so discovery keeps working.
@@ -385,6 +390,9 @@ func runServe(args []string, log *slog.Logger) error {
 			clip.MarkActivity()
 			frameStats.Mark()
 		}
+		// Record the incoming stream's per-window brightness jump; paired with the
+		// streamer's sent-side jump (below) it yields the jitter-reduction metric.
+		recv.OnWindowStats = func(briJump, _ uint32) { jitterStats.setInput(briJump) }
 
 		if pro != nil {
 			// Phase C: relume opens its OWN entertainment stream to the Pro over DTLS
@@ -400,6 +408,9 @@ func runServe(args []string, log *slog.Logger) error {
 			// Record each frame sent to the Pro over DTLS so the UI can show the live
 			// outgoing send rate (the 50 Hz counterpart to the TV's ~25 Hz input).
 			streamer.OnSend = proSendStats.Mark
+			// Record the smoothed sent stream's per-window brightness jump; the gap
+			// below the receiver's input jump is how much the easing cut the flicker.
+			streamer.OnWindowStats = func(briJump, _ uint32) { jitterStats.setSent(briJump) }
 			// Honor the TV's group membership: when the TV declares which lights belong to
 			// its Ambilight zone (POST/PUT /groups), restrict the Pro config to that
 			// subset so lights in other rooms are never driven.

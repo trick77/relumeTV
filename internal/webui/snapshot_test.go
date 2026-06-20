@@ -42,6 +42,8 @@ func (f fakeSource) ProWriteRate() int                { return 0 }
 func (f fakeSource) CoalesceRate() int                { return f.coalesce }
 func (f fakeSource) ForwardErrors() int               { return f.fwdErrs }
 func (f fakeSource) LastForwardErr() time.Time        { return f.lastErr }
+func (f fakeSource) SmoothingTauMs() int              { return 40 }
+func (f fakeSource) Jitter() (int, int, bool)         { return 8000, 1600, true }
 
 func TestBuildSnapshot_MapsLightsAndDriven(t *testing.T) {
 	s := BuildSnapshot(fakeSource{driven: []string{"1"}})
@@ -160,6 +162,8 @@ func (emptySource) ProWriteRate() int                { return 0 }
 func (emptySource) CoalesceRate() int                { return 0 }
 func (emptySource) ForwardErrors() int               { return 0 }
 func (emptySource) LastForwardErr() time.Time        { return time.Time{} }
+func (emptySource) SmoothingTauMs() int              { return 40 }
+func (emptySource) Jitter() (int, int, bool)         { return 0, 0, false }
 
 func TestBuildSnapshot_EmptyArraysNotNil(t *testing.T) {
 	s := BuildSnapshot(emptySource{})

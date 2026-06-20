@@ -5,6 +5,7 @@ import (
 
 	"github.com/trick77/relume/internal/clipv1"
 	"github.com/trick77/relume/internal/config"
+	"github.com/trick77/relume/internal/entertainment"
 	"github.com/trick77/relume/internal/webui"
 )
 
@@ -17,6 +18,7 @@ type uiSource struct {
 	frameStats   *frameStats
 	proSendStats *frameStats
 	proStats     *proStats
+	jitterStats  *jitterStats
 	advName      string
 	version      string
 	started      time.Time
@@ -62,6 +64,16 @@ func (u *uiSource) ForwardErrors() int { return int(u.proStats.fwdErrs.Load()) }
 // LastForwardErr is the time of the most recent failed REST write (zero if none),
 // letting the UI decay the error warning once writes have been succeeding again.
 func (u *uiSource) LastForwardErr() time.Time { return u.proStats.LastForwardErr() }
+
+// SmoothingTauMs is the DTLS-path easing time constant in milliseconds — surfaced so
+// the Stream card's tooltip can explain the jitter reduction without hardcoding it.
+func (u *uiSource) SmoothingTauMs() int {
+	return int(entertainment.SmoothTau() / time.Millisecond)
+}
+
+// Jitter returns the latest incoming vs smoothed-sent brightness jump and whether the
+// pair is fresh (false → UI longdash, i.e. not streaming to the Pro over DTLS).
+func (u *uiSource) Jitter() (inBri, sentBri int, ok bool) { return u.jitterStats.Reduction() }
 
 // Active reports whether the TV is currently driving any light — tied to the same
 // 2s freshness window as the driven count, so the header "Active/Idle" state, the

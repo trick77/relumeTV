@@ -73,6 +73,15 @@ type Snapshot struct {
 	// to the healthy state once writes have been succeeding again for a while — so a
 	// long-resolved fault does not leave a permanent warning.
 	LastForwardErr string `json:"lastForwardErr,omitempty"`
+	// SmoothingTauMs is the DTLS-path easing time constant in ms (a fixed config knob).
+	// The Stream card's jitter tooltip reads it so the explanation stays accurate.
+	SmoothingTauMs int `json:"smoothingTauMs,omitempty"`
+	// JitterInBri / JitterSentBri are the latest per-window max brightness jump (16-bit,
+	// 0–65535) on the incoming TV stream vs relume's smoothed sent stream. The UI shows
+	// the reduction (1 − sent/in). Both 0 when not streaming to the Pro over DTLS, so the
+	// card renders a longdash rather than a stale figure.
+	JitterInBri   int `json:"jitterInBri,omitempty"`
+	JitterSentBri int `json:"jitterSentBri,omitempty"`
 }
 
 // StateSource exposes relume's live state to the snapshot builder without
@@ -117,6 +126,13 @@ type StateSource interface {
 	// LastForwardErr is the time of the most recent failed Pro write (zero if none),
 	// so the UI can decay the error warning once writes are succeeding again.
 	LastForwardErr() time.Time
+	// SmoothingTauMs is the DTLS-path easing time constant (ms), for the Stream card's
+	// jitter tooltip.
+	SmoothingTauMs() int
+	// Jitter returns the latest incoming vs smoothed-sent brightness jump and whether
+	// the pair is fresh. ok is false when not streaming to the Pro over DTLS, so the UI
+	// shows a longdash instead of a stale reduction.
+	Jitter() (inBri, sentBri int, ok bool)
 }
 
 func rfc3339(t time.Time) string {
@@ -159,6 +175,11 @@ func BuildSnapshot(src StateSource) Snapshot {
 		CoalesceRate:   src.CoalesceRate(),
 		ForwardErrors:  src.ForwardErrors(),
 		LastForwardErr: rfc3339(src.LastForwardErr()),
+		SmoothingTauMs: src.SmoothingTauMs(),
+	}
+	if inBri, sentBri, ok := src.Jitter(); ok {
+		s.JitterInBri = inBri
+		s.JitterSentBri = sentBri
 	}
 
 	switch {

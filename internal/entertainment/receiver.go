@@ -39,6 +39,10 @@ type Receiver struct {
 	// Pro area lives exactly as long as the TV is streaming.
 	OnStreamStart func(remote string)
 	OnStreamStop  func(remote string)
+	// OnWindowStats, if set, is called once per 5s rollup with the largest brightness
+	// and colour jump on the *incoming* TV stream over that window. The streamer reports
+	// the same on its sent (smoothed) stream; the gap is the jitter the easing removed.
+	OnWindowStats func(briJump, colJump uint32)
 }
 
 // NewReceiver creates the receiver. bindIP is the advertised IP (pins the socket
@@ -248,6 +252,9 @@ func (r *Receiver) handle(ctx context.Context, conn net.Conn) {
 			// Reset the window accumulators for the next interval.
 			briMin, briMax, briJump, colJump, nearZero = 0xFFFF, 0, 0, 0, 0
 			mu.Unlock()
+			if r.OnWindowStats != nil {
+				r.OnWindowStats(bJump, cJump)
+			}
 			if f != nil && total != prev {
 				r.log.Info("entertainment stream", "from", remote,
 					"frames_5s", total-prev, "frames_dropped", drops, "channels", len(f.Channels),
