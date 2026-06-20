@@ -10,6 +10,7 @@ type Event struct {
 	Time  string `json:"time"`  // RFC3339, set by the caller
 	Level string `json:"level"` // e.g. "INFO", "WARN"
 	Msg   string `json:"msg"`
+	Attrs string `json:"attrs,omitempty"` // pre-formatted logfmt, e.g. `failures=3 last_err="i/o timeout"`
 }
 
 // Frame is one message pushed over the SSE stream: either a fresh snapshot or a

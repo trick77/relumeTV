@@ -126,14 +126,15 @@ body {
 /* live log */
 .log { margin-top: 20px; }
 .logrow {
-  display: flex; gap: 12px; font-size: 12px; padding: 5px 0;
+  display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; padding: 5px 0;
   border-bottom: 1px solid rgba(35, 38, 47, .5);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 .logrow:last-child { border: 0; }
 .logrow .ts { color: var(--faint); flex-shrink: 0; }
 .logrow .tag { flex-shrink: 0; width: 52px; font-weight: 600; color: var(--accent); }
-.logrow .msg { color: var(--dim); }
+.logrow .msg { color: var(--dim); min-width: 0; }
+.logrow .attrs { color: var(--faint); min-width: 0; word-break: break-word; }
 
 /* setup assistant (vertical stepper) */
 .steps { display: flex; flex-direction: column; gap: 14px; }

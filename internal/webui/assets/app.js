@@ -279,7 +279,7 @@ function renderDashboard(s) {
 
 let logLines = [];
 const logRow = (e) =>
-  `<div class="logrow"><span class="ts">${esc((e.time || "").slice(11, 19))}</span><span class="tag">${esc(e.level)}</span><span class="msg">${esc(e.msg)}</span></div>`;
+  `<div class="logrow"><span class="ts">${esc((e.time || "").slice(11, 19))}</span><span class="tag">${esc(e.level)}</span><span class="msg">${esc(e.msg)}</span>${e.attrs ? `<span class="attrs">${esc(e.attrs)}</span>` : ``}</div>`;
 
 function render(s) {
   _startedAtMs = s.startedAt ? Date.parse(s.startedAt) : null;
