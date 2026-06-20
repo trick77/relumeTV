@@ -93,8 +93,8 @@ State (bridge identity, TV tokens, **Bridge Pro app key + client key**) lives in
 - **`-entertainment-fallback-recovery`** &nbsp;·&nbsp; default `90s` — Entertainment mode: how long a latched REST fallback persists before the next TV stream activation may recover it (so a transient DTLS failure no longer pins the TV to REST until restart). Set `0` to disable (fallback stays sticky until restart).
 - **`-entertainment-smooth-tau`** &nbsp;·&nbsp; default `40ms` — Entertainment mode: exponential-smoothing time constant for easing the TV's hard scene cuts on the DTLS send path. Lower is snappier but flickers more, higher is smoother but laggier. Set `0` to disable smoothing (frames forwarded verbatim).
 - **`-skip-tls-verify`** &nbsp;·&nbsp; default off — Skip Bridge Pro certificate pinning (fallback).
-- **`-ui`** &nbsp;·&nbsp; default off — Enable the optional web UI (setup assistant + live status dashboard) on the predefined port `33100`. Off keeps relumeTV headless. **No authentication — only enable it on a trusted network**, since with `network_mode: host` the port is reachable by anyone on the LAN.
-- **`-ui-port`** &nbsp;·&nbsp; default `0` — Override the web UI port with a custom value (implies `-ui`). Must differ from `-http-port` (80).
+- **`-headless`** &nbsp;·&nbsp; default off — Disable the web UI. The web UI (setup assistant + live status dashboard) is **on by default** on the predefined port `33100`. ⚠️ **No authentication: with `network_mode: host` the dashboard is reachable by anyone on the LAN out of the box.** Pass `-headless` to turn it off on untrusted networks. (`-ui` is still accepted as a no-op for backward compatibility.)
+- **`-ui-port`** &nbsp;·&nbsp; default `0` — Override the web UI port with a custom value (`0` = the predefined port `33100`). Must differ from `-http-port` (80). Ignored when `-headless` is set.
 - **`-debug`** &nbsp;·&nbsp; default off — SSDP/HTTP diagnostics + mDNS observer.
 
 Discovery-debugging flags (`-discovery-burst-*`) are documented in
@@ -121,4 +121,3 @@ go test ./...
 
 - **[docs/DESIGN.md](docs/DESIGN.md)** — how relumeTV works: identity, pairing, control modes.
 - **[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)** — discovery, common issues, debug flags.
-- **[PLAN.md](PLAN.md)** — project status and next steps.

@@ -325,7 +325,7 @@ func (s *ProStreamer) Push(_ string, f *huestream.Frame) {
 		// A/B/C 16-bit values are forwarded unchanged, so the Pro receives exactly
 		// what the TV sent. No XY↔RGB conversion happens here (that is only the REST
 		// fallback's job, in ToHueV1State). Real-hardware colour accuracy is a
-		// hardware-only check — see PLAN.md "Optional".
+		// hardware-only check.
 		s.st.colorSpace = f.ColorSpace
 		for _, ch := range f.Channels {
 			if proCh, ok := s.st.remap[ch.ID]; ok {

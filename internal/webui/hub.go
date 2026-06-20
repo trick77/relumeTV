@@ -1,6 +1,6 @@
-// Package webui provides relumeTV's optional, opt-in web UI: a guided setup
-// assistant and a live status dashboard. It is started only when -ui-port is
-// non-zero and never touches the TV- or Pro-facing control paths.
+// Package webui provides relumeTV's web UI: a guided setup assistant and a live
+// status dashboard. It is on by default (disabled with -headless) and never
+// touches the TV- or Pro-facing control paths.
 package webui
 
 import "sync"

@@ -409,13 +409,13 @@ func TestProWatcherTick_storedDiscoveryIDNotFoundDoesNotReconnect(t *testing.T) 
 	}
 }
 
-func TestParseServeOptions_UIPortDefaultsDisabled(t *testing.T) {
+func TestParseServeOptions_UIPortDefaultsZero(t *testing.T) {
 	opts, err := parseServeOptions(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if opts.uiPort != 0 {
-		t.Fatalf("ui-port default = %d, want 0 (disabled)", opts.uiPort)
+		t.Fatalf("ui-port default = %d, want 0 (use the predefined port)", opts.uiPort)
 	}
 }
 
@@ -429,20 +429,24 @@ func TestParseServeOptions_UIPortSet(t *testing.T) {
 	}
 }
 
-func TestParseServeOptions_UIFlag(t *testing.T) {
-	off, err := parseServeOptions(nil)
+func TestParseServeOptions_HeadlessFlag(t *testing.T) {
+	on, err := parseServeOptions(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if off.ui {
-		t.Fatal("-ui should default to false")
+	if on.headless {
+		t.Fatal("-headless should default to false (UI is on by default)")
 	}
-	on, err := parseServeOptions([]string{"-ui"})
+	off, err := parseServeOptions([]string{"-headless"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !on.ui {
-		t.Fatal("-ui should be true when set")
+	if !off.headless {
+		t.Fatal("-headless should be true when set")
+	}
+	// -ui is kept as an accepted back-compat no-op (the UI is the default now).
+	if _, err := parseServeOptions([]string{"-ui"}); err != nil {
+		t.Fatalf("-ui should still parse as a no-op: %v", err)
 	}
 }
 
@@ -515,21 +519,21 @@ func TestDeriveServeConfig(t *testing.T) {
 
 func TestUIPortFor(t *testing.T) {
 	cases := []struct {
-		name   string
-		ui     bool
-		uiPort int
-		want   int
+		name     string
+		headless bool
+		uiPort   int
+		want     int
 	}{
-		{"disabled by default", false, 0, 0},
-		{"-ui uses predefined port", true, 0, uiDefaultPort},
-		{"-ui-port overrides without -ui", false, 8080, 8080},
-		{"-ui-port wins over -ui", true, 8080, 8080},
+		{"on by default at the predefined port", false, 0, uiDefaultPort},
+		{"-headless disables the UI", true, 0, 0},
+		{"-ui-port overrides the predefined port", false, 8080, 8080},
+		{"-headless wins over -ui-port", true, 8080, 0},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := uiPortFor(serveOptions{ui: tc.ui, uiPort: tc.uiPort})
+			got := uiPortFor(serveOptions{headless: tc.headless, uiPort: tc.uiPort})
 			if got != tc.want {
-				t.Fatalf("uiPortFor(ui=%v,uiPort=%d) = %d, want %d", tc.ui, tc.uiPort, got, tc.want)
+				t.Fatalf("uiPortFor(headless=%v,uiPort=%d) = %d, want %d", tc.headless, tc.uiPort, got, tc.want)
 			}
 		})
 	}

@@ -13,8 +13,8 @@ import (
 //go:embed assets/*
 var assetsFS embed.FS
 
-// Server is the optional web UI HTTP server. It is separate from the TV-facing
-// clipv1 server and only created/started when -ui-port is non-zero.
+// Server is the web UI HTTP server. It is separate from the TV-facing clipv1
+// server and runs by default (suppressed by -headless).
 type Server struct {
 	addr         string
 	hub          *Hub

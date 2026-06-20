@@ -87,24 +87,26 @@ type serveOptions struct {
 	dtlsFallbackTimeout    time.Duration
 	dtlsFallbackRecovery   time.Duration
 	smoothTau              time.Duration
+	headless               bool
 	ui                     bool
 	uiPort                 int
 }
 
-// uiDefaultPort is the fixed port the web UI listens on when enabled via -ui.
-// -ui-port overrides it with a custom port.
+// uiDefaultPort is the fixed port the web UI listens on. -ui-port overrides it
+// with a custom port; -headless disables the UI entirely.
 const uiDefaultPort = 33100
 
-// uiPortFor resolves the effective web UI port: -ui-port wins when set; otherwise
-// -ui selects the predefined port; 0 means the UI is disabled.
+// uiPortFor resolves the effective web UI port. The UI is ON by default: -headless
+// turns it off (and wins over -ui-port); otherwise -ui-port overrides the predefined
+// port; with neither, the predefined port is used. 0 means the UI is disabled.
 func uiPortFor(opts serveOptions) int {
+	if opts.headless {
+		return 0
+	}
 	if opts.uiPort != 0 {
 		return opts.uiPort
 	}
-	if opts.ui {
-		return uiDefaultPort
-	}
-	return 0
+	return uiDefaultPort
 }
 
 func parseServeOptions(args []string) (serveOptions, error) {
@@ -125,8 +127,9 @@ func parseServeOptions(args []string) (serveOptions, error) {
 	dtlsFallbackTimeout := fs.Duration("entertainment-dtls-timeout", 5*time.Second, "entertainment mode: how long to wait after confirming the TV's stream activation for the TV to open its DTLS stream on :2100 before reverting to REST-follow")
 	dtlsFallbackRecovery := fs.Duration("entertainment-fallback-recovery", 90*time.Second, "entertainment mode: how long a latched REST fallback persists before the next TV activation may recover it (0 disables: fallback stays sticky until restart)")
 	smoothTau := fs.Duration("entertainment-smooth-tau", entertainment.DefaultSmoothTau, "entertainment mode: exponential-smoothing time constant for easing the TV's hard scene cuts on the DTLS send path. Lower = snappier but more flicker, higher = smoother but laggier; 0 disables smoothing (frames forwarded verbatim)")
-	ui := fs.Bool("ui", false, "enable the optional web UI on the predefined port 33100 (off by default)")
-	uiPort := fs.Int("ui-port", 0, "override the web UI port (implies -ui; 0 = use -ui's default). Must differ from -http-port (80)")
+	headless := fs.Bool("headless", false, "disable the web UI (it runs on the predefined port 33100 by default). NOTE: with network_mode: host the UI is otherwise reachable, unauthenticated, by anyone on the LAN")
+	ui := fs.Bool("ui", false, "deprecated no-op: the web UI is on by default now (kept so existing -ui invocations still parse). Use -headless to turn it off")
+	uiPort := fs.Int("ui-port", 0, "override the web UI port (0 = the predefined port 33100). Must differ from -http-port (80). Ignored when -headless is set")
 	if err := fs.Parse(args); err != nil {
 		return serveOptions{}, err
 	}
@@ -147,6 +150,7 @@ func parseServeOptions(args []string) (serveOptions, error) {
 		dtlsFallbackTimeout:    *dtlsFallbackTimeout,
 		dtlsFallbackRecovery:   *dtlsFallbackRecovery,
 		smoothTau:              *smoothTau,
+		headless:               *headless,
 		ui:                     *ui,
 		uiPort:                 *uiPort,
 	}, nil
@@ -213,8 +217,8 @@ func runServe(args []string, log *slog.Logger) error {
 		return err
 	}
 
-	// Optional web UI (enabled via -ui on the predefined port, or -ui-port to
-	// override it). When enabled, tee every log record into a hub so the UI's live
+	// Web UI (on by default on the predefined port; -ui-port overrides it, -headless
+	// disables it). When enabled, tee every log record into a hub so the UI's live
 	// event tail mirrors stderr. When disabled, the logger is untouched and the
 	// whole UI subsystem stays dormant (no overhead, headless behaviour).
 	uiPort := sc.uiPort
@@ -343,9 +347,9 @@ func runServe(args []string, log *slog.Logger) error {
 		go w.run(ctx)
 	}
 
-	// Optional web UI (opt-in via -ui / -ui-port). Read-only: it reads live state
-	// via the uiSource adapter. A bind/serve failure is logged but never takes down
-	// the headless service.
+	// Web UI (on by default; -ui-port to move it, -headless to disable). Read-only: it
+	// reads live state via the uiSource adapter. A bind/serve failure is logged but
+	// never takes down the headless service.
 	if uiPort != 0 {
 		bridgeID := cfg.Identity.BridgeID()
 		src := &uiSource{

@@ -21,12 +21,11 @@ services:
     # Config defaults to relumetv.json; the image's WORKDIR is /data, so it lands
     # in the named volume above.
     command: ["serve"]
-    # Web UI (off by default). To start the setup assistant + live dashboard, use
-    # the line below INSTEAD of the plain `serve` above: the -ui flag serves the UI
-    # on port 33100. With network_mode: host the port is reachable on the LAN as-is
-    # (no port mapping needed) and has NO authentication — only enable it on a
-    # trusted network.
-    # command: ["serve", "-ui"]
+    # Web UI (setup assistant + live dashboard) is ON by default on port 33100.
+    # ⚠️ With network_mode: host it is reachable on the LAN as-is (no port mapping
+    # needed) and has NO authentication — anyone on the LAN can open it. To turn it
+    # off on an untrusted network, run headless INSTEAD of the plain `serve` above:
+    # command: ["serve", "-headless"]
 
 volumes:
   relumetv-data:

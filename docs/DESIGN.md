@@ -110,11 +110,13 @@ A relumeTV restart in the middle of a session orphans the TV's stream; the TV th
 light state and the lights go idle. Toggling Ambilight (not Ambilight+Hue) off and on on the TV
 re-runs the activation handshake. See [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
 
-## Web UI (optional)
+## Web UI
 
-relumeTV can serve an optional web UI — a guided setup assistant plus a live status dashboard.
-It is **off by default** and opt-in via `-ui` (serves on the predefined port `33100`); `-ui-port`
-overrides that with a custom port and must differ from the TV-facing `-http-port`. Design notes:
+relumeTV serves a web UI — a guided setup assistant plus a live status dashboard.
+It is **on by default** on the predefined port `33100`; `-ui-port` overrides that with a custom
+port (must differ from the TV-facing `-http-port`), and `-headless` disables it entirely. It has
+no authentication, so under `network_mode: host` it is reachable by anyone on the LAN — run
+`-headless` on untrusted networks. Design notes:
 
 - **Embedded, no build step.** Static HTML/CSS/JS compiled into the binary via `go:embed`
   (`internal/webui/assets`). No npm/Node/framework.
