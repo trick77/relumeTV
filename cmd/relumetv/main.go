@@ -699,12 +699,12 @@ func autoPairPro(ctx context.Context, cfg *config.Config, clip *clipv1.Server, c
 			setup.setPrecond(true, host, true, "")
 		case errors.Is(derr, ErrNoProBridge):
 			// (b) a bridge was found but it is not a Pro — surface the actual modelid.
-			msg := "A Hue bridge was found, but it is not a Hue Bridge Pro (BSB003). relumeTV requires a Pro."
-			log.Warn("hue bridge pro not paired yet: discovered bridge is not a Pro; retrying", "err", derr)
+			msg := "A Hue bridge was found, but it is not a Hue Bridge Pro (BSB003). relumeTV requires a Hue Bridge Pro."
+			log.Warn("hue bridge pro not paired yet: discovered bridge is not a Hue Bridge Pro; retrying", "err", derr)
 			setup.setPrecond(true, "", false, msg)
 		case errors.Is(derr, ErrProModelUnknown):
 			// (c)-ish a bridge was found but unreachable for its modelid.
-			log.Warn("hue bridge pro not paired yet: a bridge was found but is unreachable to confirm it is a Pro; retrying", "err", derr)
+			log.Warn("hue bridge pro not paired yet: a bridge was found but is unreachable to confirm it is a Hue Bridge Pro; retrying", "err", derr)
 			setup.setPrecond(true, "", false, "A bridge was found but could not be reached to confirm it is a Hue Bridge Pro. Is it powered on?")
 		case derr != nil:
 			// (c) cloud lookup failed (no internet / discovery.meethue.com down).

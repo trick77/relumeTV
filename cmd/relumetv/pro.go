@@ -102,7 +102,7 @@ func selectProForPairing(discover func() ([]bridgepro.DiscoveredBridge, error), 
 		}
 		// Loud, with the ACTUAL modelid: if ModelHueBridgePro is ever wrong, this is the
 		// breadcrumb that explains why every Pro is being rejected.
-		log.Warn("hue bridge pro selection: discovered bridge is not a Pro", "host", b.InternalIPAddress, "modelid", mid, "want", bridgepro.ModelHueBridgePro)
+		log.Warn("hue bridge pro selection: discovered bridge is not a Hue Bridge Pro", "host", b.InternalIPAddress, "modelid", mid, "want", bridgepro.ModelHueBridgePro)
 		seen = append(seen, mid)
 	}
 	if anyResponded {
