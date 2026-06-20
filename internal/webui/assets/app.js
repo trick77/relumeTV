@@ -53,15 +53,15 @@ function currentMode(s) {
   return s.dtlsStreamUp ? "entertainment" : "rest";
 }
 
-// modeSub describes the active forward path under the MODE label. It must never
-// read as a contradiction: in entertainment mode without a DTLS stream, say
-// explicitly whether that is a fallback (DTLS failed) or simply the TV not
-// streaming entertainment at all.
+// modeSub describes the active forward path under the MODE label. The MODE value
+// already shows REST/Entertainment (and "(fallback)"), so the sub must NOT repeat
+// it — it only adds the reason: a fallback's cause, the TV not streaming, or what
+// the plain REST path does.
 function modeSub(s) {
   if (s.dtlsStreamUp) return "DTLS stream up";
-  if (s.fallback) return "fallback to REST (DTLS unavailable)";
-  if (s.mode === "entertainment") return "REST · TV not streaming entertainment";
-  return "REST";
+  if (s.fallback) return "DTLS unavailable";
+  if (s.mode === "entertainment") return "TV not streaming entertainment";
+  return "Per-light writes to the Pro";
 }
 
 // streamVal shows the live entertainment frame rate while the TV is streaming to the
@@ -129,13 +129,20 @@ function backpressureVal(s) {
 // errors only while the warning is active, otherwise it states the benign meaning.
 function backpressureSub(s) {
   if (forwardErrActive(s)) return `${s.forwardErrors} failed Pro writes`;
-  return "Frames spared the Pro";
+  return "Avoided extra Pro writes";
 }
 
-// cap upper-cases the first letter for display (e.g. the mode label), without
-// touching the underlying lower-case value relume uses internally.
-function cap(str) {
-  return str ? str.charAt(0).toUpperCase() + str.slice(1) : str;
+// modeLabel renders the live forward path for display: "Entertainment" as a word,
+// but "REST" as the acronym it is — never the title-cased "Rest".
+function modeLabel(s) {
+  return currentMode(s) === "entertainment" ? "Entertainment" : "REST";
+}
+
+// tvModel extracts the device/model name from a Hue "app#model" devicetype
+// (e.g. "Ambilight#65OLED806" → "65OLED806"); falls back to the whole string.
+function tvModel(dt) {
+  const i = dt.indexOf("#");
+  return i >= 0 ? dt.slice(i + 1) : dt;
 }
 
 // _startedAtMs holds relume's start time (ms epoch) so the uptime can tick every
@@ -260,13 +267,13 @@ function renderDashboard(s) {
         <div class="spacer"></div><div class="health"><span class="${healthDotClass(s.health)}"></span> ${esc(healthLabel(s.health))}</div></div>
       <div class="pipe">
         <div class="step"><div class="lbl">Hue Bridge Pro</div><div class="val">${s.proPaired ? `<span class="ok">✓</span> Paired` : "— Unpaired"}</div><div class="sub">${esc(s.proHost)}${s.proBridgeId ? `<br>${esc(s.proBridgeId.toUpperCase())}` : ""}</div></div>
-        <div class="step"><div class="lbl">TV pairing</div><div class="val">${s.tvClients.length} ${s.tvClients.length === 1 ? "client" : "clients"}</div><div class="sub">${esc(s.tvClients.join(", "))}</div></div>
-        <div class="step"><div class="lbl">Mode <span class="info" tabindex="0" data-tip="Entertainment: low-latency DTLS stream to the Hue Bridge Pro (default). REST: per-light REST writes — the automatic fallback when the TV is not streaming entertainment.">i</span></div><div class="val">${esc(cap(currentMode(s)))}${s.fallback ? " (fallback)" : ""}</div><div class="sub">${esc(modeSub(s))}</div></div>
-        <div class="step"><div class="lbl">Lights</div><div class="val">${driven}</div><div class="sub">Driven by TV</div></div>
-        <div class="step"><div class="lbl">Stream</div><div class="val">${streamVal(s)}</div><div class="sub">${esc(streamSub(s))}</div></div>
+        <div class="step"><div class="lbl">TV pairing</div><div class="val">${s.tvClients.length} ${s.tvClients.length === 1 ? "client" : "clients"}</div><div class="sub">${s.tvClients.map(c => `Philips<br>${esc(tvModel(c))}`).join("<br>")}</div></div>
+        <div class="step"><div class="lbl">Mode <span class="info" tabindex="0" data-tip="Entertainment: low-latency DTLS stream to the Hue Bridge Pro (default). REST: per-light REST writes — the automatic fallback when the TV is not streaming entertainment.">i</span></div><div class="val">${modeLabel(s)}${s.fallback ? " (fallback)" : ""}</div><div class="sub">${esc(modeSub(s))}</div></div>
         <div class="step"><div class="lbl">Uptime</div><div class="val" id="uptime">${s.startedAt ? esc("↑ " + fmtUptime(Date.now() - Date.parse(s.startedAt))) : "—"}</div><div class="sub">Running</div></div>
       </div>
       <div class="pipe row2">
+        <div class="step"><div class="lbl">Lights</div><div class="val">${driven}</div><div class="sub">Driven by TV</div></div>
+        <div class="step"><div class="lbl">Stream</div><div class="val">${streamVal(s)}</div><div class="sub">${esc(streamSub(s))}</div></div>
         <div class="step"><div class="lbl">Backpressure <span class="info" tabindex="0" data-tip="Drops/s: Ambilight frames relume coalesced away because the Bridge Pro could not keep up — healthy, it spares the Pro writes it cannot accept. Errors: failed writes to the Pro (unreachable / 503 overflow) — the real fault signal.">i</span></div><div class="val">${backpressureVal(s)}</div><div class="sub">${esc(backpressureSub(s))}</div></div>
         <div class="step"><div class="lbl">Liveness</div><div class="val" id="liveness">—</div><div class="sub">Since last write</div></div>
       </div>
