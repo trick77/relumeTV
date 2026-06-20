@@ -120,7 +120,7 @@ function forwardErrActive(s) {
   return Date.now() - Date.parse(s.lastForwardErr) < forwardErrDecayMs;
 }
 
-// backpressureVal shows how relume shields the Bridge Pro. coalesceRate (drops/s)
+// backpressureVal shows how relume shields the Hue Bridge Pro. coalesceRate (drops/s)
 // is HEALTHY — the optimistic path sparing the Pro a write it could not keep up
 // with — so it is never coloured as a fault. forwardErrors is the real failure
 // signal (down Pro / 503 overflow); it appears in amber only while recent, then

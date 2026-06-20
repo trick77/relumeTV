@@ -22,7 +22,7 @@ import (
 
 const appKeyHeader = "hue-application-key"
 
-// Error taxonomy for the Bridge Pro client. Callers (e.g. watchPro) use
+// Error taxonomy for the Hue Bridge Pro client. Callers (e.g. watchPro) use
 // errors.Is to distinguish error classes and react accordingly:
 var (
 	// ErrUnreachable means the HTTP round-trip itself failed: httpClient.Do
@@ -62,7 +62,7 @@ func decodeCLIPErrors(raw []byte) error {
 // Client talks to a Hue Bridge Pro.
 // ProController is the Pro-facing read + control surface that the light provider
 // and resilience code depend on, defined here (the producer package) so callers can
-// program to the interface and inject fakes in tests without a live Bridge Pro.
+// program to the interface and inject fakes in tests without a live Hue Bridge Pro.
 // *Client is the production implementation.
 type ProController interface {
 	// Lights returns the Pro's lights (CLIP v2, value types).
@@ -95,7 +95,7 @@ func HTTPClientFor(p *config.BridgePro) *http.Client {
 }
 
 // newHTTPClient builds an HTTPS client with certificate pinning (default) or
-// optionally without TLS verification. The Bridge Pro uses a Signify CA certificate;
+// optionally without TLS verification. The Hue Bridge Pro uses a Signify CA certificate;
 // pinning to the leaf fingerprint avoids CA handling on the local network.
 func newHTTPClient(certSHA256 string, skipVerify bool) *http.Client {
 	tlsCfg := &tls.Config{
@@ -149,7 +149,7 @@ type PairResult struct {
 	ClientKey string
 }
 
-// Pair pairs with the Bridge Pro: the link button must be pressed. Returns
+// Pair pairs with the Hue Bridge Pro: the link button must be pressed. Returns
 // the app key and clientkey (DTLS PSK). httpClient must already be configured
 // correctly (pinning/skip-verify).
 func Pair(httpClient *http.Client, host, deviceType string) (*PairResult, error) {
@@ -247,7 +247,7 @@ func (c *Client) post(path string, payload any) (string, error) {
 }
 
 // put performs an authenticated CLIP v2 PUT (for REST control). The
-// Bridge Pro responds with 200 (ok) or 207 (multi-status) and carries domain
+// Hue Bridge Pro responds with 200 (ok) or 207 (multi-status) and carries domain
 // errors in the "errors" array; HTTP status errors (>=400) remain hard errors.
 func (c *Client) put(path string, payload any) error {
 	body, _ := json.Marshal(payload)

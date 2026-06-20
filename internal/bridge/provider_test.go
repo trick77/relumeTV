@@ -10,14 +10,14 @@ import (
 	"github.com/trick77/relume/internal/bridgepro"
 )
 
-// downClient models an unreachable Bridge Pro: every write fails, so the provider's
+// downClient models an unreachable Hue Bridge Pro: every write fails, so the provider's
 // forward-error path (and the OnForwardErr UI callback) is exercised.
 type downClient struct{}
 
 func (downClient) Lights() ([]bridgepro.Light, error)    { return nil, nil }
 func (downClient) SetLight(string, map[string]any) error { return errors.New("pro unreachable") }
 
-// fakeClient records the v2 bodies forwarded to the Bridge Pro. The first
+// fakeClient records the v2 bodies forwarded to the Hue Bridge Pro. The first
 // SetLight call blocks on gate (if set), letting a test hold the drain goroutine
 // busy while it queues more writes — to observe coalescing deterministically.
 type fakeClient struct {
@@ -145,7 +145,7 @@ func TestForward_emptyV2StateSkipsWriteAndControlled(t *testing.T) {
 }
 
 func TestSetLightV1_isAsyncAndForwards(t *testing.T) {
-	// Given: a provider over a fake Bridge Pro
+	// Given: a provider over a fake Hue Bridge Pro
 	fc := &fakeClient{}
 	p := newTestProvider(fc)
 
@@ -154,7 +154,7 @@ func TestSetLightV1_isAsyncAndForwards(t *testing.T) {
 		t.Fatalf("SetLightV1 returned error: %v", err)
 	}
 
-	// Then: it is eventually forwarded to the Bridge Pro (asynchronously)
+	// Then: it is eventually forwarded to the Hue Bridge Pro (asynchronously)
 	waitFor(t, func() bool { return len(fc.seen()) == 1 })
 	if got := fc.seen(); got[0] != 200 {
 		t.Fatalf("forwarded mirek = %v, want [200]", got)
@@ -174,7 +174,7 @@ func TestSetLightV1_coalescesToLatestPerLight(t *testing.T) {
 		defer fc.mu.Unlock()
 		return fc.n == 1 // drain goroutine is now blocked in the first SetLight
 	})
-	// ...and several more states queue while the Bridge Pro is busy
+	// ...and several more states queue while the Hue Bridge Pro is busy
 	for _, v := range []int{2, 3, 4, 5} {
 		p.SetLightV1("1", map[string]any{"ct": v})
 	}

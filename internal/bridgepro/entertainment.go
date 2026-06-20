@@ -20,7 +20,7 @@ type entServiceList struct {
 	Data   []EntertainmentService `json:"data"`
 }
 
-// EntertainmentServices reads the entertainment services of the Bridge Pro. Each
+// EntertainmentServices reads the entertainment services of the Hue Bridge Pro. Each
 // carries its owning device rid (matching a light's owner.rid), used to build the
 // channel→light mapping for the entertainment_configuration.
 func (c *Client) EntertainmentServices() ([]EntertainmentService, error) {
@@ -31,7 +31,7 @@ func (c *Client) EntertainmentServices() ([]EntertainmentService, error) {
 	return el.Data, nil
 }
 
-// EntChannel is one channel of an entertainment_configuration as the Bridge Pro
+// EntChannel is one channel of an entertainment_configuration as the Hue Bridge Pro
 // returns it. channel_id is assigned by the bridge (do NOT assume 0..N-1) and its
 // members reference the entertainment service(s) it drives.
 type EntChannel struct {

@@ -21,7 +21,7 @@ type LightView struct {
 // LiveColor is the most recent colour the TV pushed for one light, captured where
 // relume actually sees the values flow TV→Pro (the REST forward and the DTLS
 // passthrough). The UI uses it to render the live swatch colour instead of the
-// Bridge Pro's REST light state, which the DTLS passthrough never updates.
+// Hue Bridge Pro's REST light state, which the DTLS passthrough never updates.
 type LiveColor struct {
 	X   float64
 	Y   float64
@@ -59,7 +59,7 @@ type Snapshot struct {
 	// driving the Pro over REST (fallback or plain REST-follow).
 	ProWriteRate int `json:"proWriteRate,omitempty"`
 	// CoalesceRate is the rate (per second) of frames the optimistic REST path
-	// dropped because the Bridge Pro could not keep up. This is healthy backpressure
+	// dropped because the Hue Bridge Pro could not keep up. This is healthy backpressure
 	// (the Pro spared a write it could not accept), NOT an error — the UI must not
 	// render it as a failure. Non-zero only on the REST path.
 	CoalesceRate int `json:"coalesceRate,omitempty"`

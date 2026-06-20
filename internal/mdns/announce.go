@@ -1,5 +1,5 @@
 // Package mdns actively announces relume as a Hue bridge via mDNS/Bonjour
-// (_hue._tcp.local.). Modern Philips TVs (and the Bridge Pro itself) find the
+// (_hue._tcp.local.). Modern Philips TVs (and the Hue Bridge Pro itself) find the
 // bridge primarily this way; they passively listen for the announcement and
 // often make no request of their own. The format follows hass-emulated-hue,
 // which the Ambilight TV is known to discover: instance name
@@ -76,7 +76,7 @@ func (a *Announcer) Run(ctx context.Context) error {
 	// Deliberately NOT calling server.Shutdown() on exit. zeroconf's Shutdown
 	// multicasts an mDNS "goodbye" (records with TTL 0); the Ambilight TV caches
 	// the _hue._tcp answer, so a goodbye evicts relume from its bridge list. With a
-	// powered-on Bridge Pro on the LAN the TV then will NOT re-list relume on
+	// powered-on Hue Bridge Pro on the LAN the TV then will NOT re-list relume on
 	// re-discovery (it prefers the Pro/BSB003), so a plain restart would drop the
 	// bridge from the Ambilight list until the Pro is power-cycled. Letting the
 	// process exit closes the socket WITHOUT a goodbye, so the TV keeps relume

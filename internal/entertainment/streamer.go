@@ -86,7 +86,7 @@ type ProClient interface {
 // when the DTLS stream to the Pro is unavailable (Phase B behaviour).
 type FallbackSink func(v1id string, state map[string]any)
 
-// ProStreamer owns relume's own entertainment stream to the Bridge Pro. On a TV
+// ProStreamer owns relume's own entertainment stream to the Hue Bridge Pro. On a TV
 // stream (OnStreamStart) it ensures+starts a relume entertainment_configuration,
 // dials a DTLS-PSK client to the Pro and re-encodes the decoded TV frames as
 // HueStream v2 at a steady rate. If anything fails it falls back to the REST sink

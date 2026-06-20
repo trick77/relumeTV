@@ -37,7 +37,7 @@ func (s *Server) LightsV1Snapshot() (map[string]any, bool) {
 	return m, true
 }
 
-// UUIDForV1 maps a v1 light id to its Bridge Pro UUID for the web UI. The
+// UUIDForV1 maps a v1 light id to its Hue Bridge Pro UUID for the web UI. The
 // concrete provider implements this; the clipv1 LightProvider interface does
 // not, so this best-effort type-asserts and returns ok=false otherwise.
 func (s *Server) UUIDForV1(v1id string) (string, bool) {
@@ -53,7 +53,7 @@ func (s *Server) UUIDForV1(v1id string) (string, bool) {
 	return "", false
 }
 
-// V1ForUUID maps a Bridge Pro UUID back to its v1 light id — the inverse of
+// V1ForUUID maps a Hue Bridge Pro UUID back to its v1 light id — the inverse of
 // UUIDForV1. Used to intersect a flash target (Pro UUIDs) with the TV's current
 // Ambilight membership (keyed by v1 id). Best-effort type-assert like UUIDForV1.
 func (s *Server) V1ForUUID(uuid string) (string, bool) {

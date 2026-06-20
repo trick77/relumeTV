@@ -54,7 +54,7 @@ func (u *uiSource) ProSendFPS() int   { return u.proSendStats.FPS() }
 func (u *uiSource) ProWriteRate() int { return u.proStats.writes.FPS() }
 
 // CoalesceRate is the rate (per second) of frames the optimistic REST path dropped
-// because the Bridge Pro could not keep up — healthy backpressure, not an error.
+// because the Hue Bridge Pro could not keep up — healthy backpressure, not an error.
 func (u *uiSource) CoalesceRate() int { return u.proStats.coalesces.FPS() }
 
 // ForwardErrors is the cumulative count of failed REST writes to the Pro since

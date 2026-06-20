@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// ControlledSet tracks which Bridge Pro lights the TV is driving for Ambilight,
+// ControlledSet tracks which Hue Bridge Pro lights the TV is driving for Ambilight,
 // as a sliding time window: a light is fresh if the TV drove it within the window.
 //
 // A light only ever leaves the set when a NEWER, still non-empty window no longer

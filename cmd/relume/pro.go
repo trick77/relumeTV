@@ -12,7 +12,7 @@ import (
 	"github.com/trick77/relume/internal/config"
 )
 
-// resolveProHost determines the Bridge Pro's current host. When bridgeIP is set
+// resolveProHost determines the Hue Bridge Pro's current host. When bridgeIP is set
 // it is returned verbatim (no discovery, empty discoveryID). Otherwise it runs
 // cloud discovery and applies the M6 id-matching:
 //
@@ -74,7 +74,7 @@ func pinProShell(host, discoveryID string, skipTLS bool, fetchFingerprint func(h
 	return pro, nil
 }
 
-// proWatcher keeps the already-paired Bridge Pro reachable. It health-checks
+// proWatcher keeps the already-paired Hue Bridge Pro reachable. It health-checks
 // periodically and, on a genuine unreachable failure, re-discovers the Pro's
 // current IP, re-pins its certificate and hot-swaps the light provider — all
 // without a new button press, since the stored appKey/clientKey stay valid

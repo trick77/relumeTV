@@ -23,7 +23,7 @@ type deviceResource struct {
 	} `json:"metadata"`
 }
 
-// BridgeInfo returns the Bridge Pro's user-set name and bridge id (best-effort:
+// BridgeInfo returns the Hue Bridge Pro's user-set name and bridge id (best-effort:
 // either may be empty if the bridge does not report it). The name comes from the
 // device that owns the bridge resource. Requires the Pro to be reachable.
 func (c *Client) BridgeInfo() (name, bridgeID string, err error) {
@@ -54,7 +54,7 @@ func (c *Client) BridgeInfo() (name, bridgeID string, err error) {
 }
 
 // LightDimming / LightColor / LightColorTemperature are the capability sub-objects
-// of a CLIP v2 light. They are POINTERS on Light so their absence (the Bridge Pro
+// of a CLIP v2 light. They are POINTERS on Light so their absence (the Hue Bridge Pro
 // omits the key for unsupported capabilities) is distinguishable from a zero value
 // — that is how relume knows what a bulb can actually do.
 type LightDimming struct {
@@ -106,7 +106,7 @@ type lightList struct {
 	Data   []Light `json:"data"`
 }
 
-// Lights reads all lights of the Bridge Pro, stably sorted by ID.
+// Lights reads all lights of the Hue Bridge Pro, stably sorted by ID.
 func (c *Client) Lights() ([]Light, error) {
 	var ll lightList
 	if err := c.get("/clip/v2/resource/light", &ll); err != nil {
@@ -131,7 +131,7 @@ type entConfigList struct {
 	Data   []EntertainmentConfig `json:"data"`
 }
 
-// EntertainmentConfigs reads the entertainment configurations of the Bridge Pro.
+// EntertainmentConfigs reads the entertainment configurations of the Hue Bridge Pro.
 func (c *Client) EntertainmentConfigs() ([]EntertainmentConfig, error) {
 	var el entConfigList
 	if err := c.get("/clip/v2/resource/entertainment_configuration", &el); err != nil {

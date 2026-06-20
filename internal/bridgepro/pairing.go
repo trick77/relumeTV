@@ -8,7 +8,7 @@ import (
 	"github.com/trick77/relume/internal/config"
 )
 
-// Pairer completes the Bridge Pro pairing handshake on an already-pinned config
+// Pairer completes the Hue Bridge Pro pairing handshake on an already-pinned config
 // shell (Host + CertSHA256 set, no keys yet). It polls Pair until the user taps the
 // Pro's physical link button — the one step that cannot be automated — then fills in
 // the app key, client key and, best-effort, the Pro's name and bridge id.
@@ -61,7 +61,7 @@ func (p *Pairer) WaitForLinkButton(ctx context.Context, pro *config.BridgePro, d
 			return pro, nil
 		}
 		if !deadline.IsZero() && !time.Now().Before(deadline) {
-			return nil, fmt.Errorf("pairing failed (press the Bridge Pro link button in time): %w", err)
+			return nil, fmt.Errorf("pairing failed (press the Hue Bridge Pro link button in time): %w", err)
 		}
 		if onAttempt != nil {
 			onAttempt(attempt)

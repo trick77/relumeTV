@@ -31,7 +31,7 @@ var (
 // times and leaves them off — a visible "relume restarted" indicator. A relume
 // restart drops the TV's REST control session, so those lights would otherwise stay
 // frozen on their last Ambilight color until the TV reconnects. targetUUIDs are
-// the Bridge Pro light UUIDs the TV is currently driving (ControlledSet.Current);
+// the Hue Bridge Pro light UUIDs the TV is currently driving (ControlledSet.Current);
 // ONLY those are touched, never the rest of the home. See flashColor.
 func FlashRestart(client proClient, log *slog.Logger, targetUUIDs []string) {
 	flashColor(client, log, flashGreenXY, restartFlashCount, "restart flash", targetUUIDs)
@@ -48,7 +48,7 @@ func FlashIdle(client proClient, log *slog.Logger, targetUUIDs []string) {
 	flashColor(client, log, flashBlueXY, idleFlashCount, "idle flash", targetUUIDs)
 }
 
-// flashColor blinks the given Bridge Pro light UUIDs with the CIE-xy color
+// flashColor blinks the given Hue Bridge Pro light UUIDs with the CIE-xy color
 // count times and leaves them off. It uses its own client and a direct,
 // deliberate sequence (not the coalescing control path) and runs synchronously
 // (~0.7s). With no target UUIDs (the Ambilight set is not known yet — e.g. a

@@ -66,10 +66,10 @@ type BridgePro struct {
 	CertSHA256 string `json:"certSha256,omitempty"`
 	// SkipTLSVerify disables TLS verification (fallback instead of pinning).
 	SkipTLSVerify bool `json:"skipTlsVerify"`
-	// Name is the Bridge Pro's user-set name, captured at pairing (best-effort).
+	// Name is the Hue Bridge Pro's user-set name, captured at pairing (best-effort).
 	// Used purely as a human-friendly reference in logs.
 	Name string `json:"name,omitempty"`
-	// BridgeID is the Bridge Pro's bridge id, captured at pairing (best-effort).
+	// BridgeID is the Hue Bridge Pro's bridge id, captured at pairing (best-effort).
 	// A stable reference in logs, independent of the IP.
 	BridgeID string `json:"bridgeId,omitempty"`
 	// DiscoveryID is the Pro's cloud-discovery id, captured at pairing, so a later
@@ -77,7 +77,7 @@ type BridgePro struct {
 	DiscoveryID string `json:"discoveryId,omitempty"`
 }
 
-// LogValue renders the Bridge Pro as inlined log attributes: its name and bridge
+// LogValue renders the Hue Bridge Pro as inlined log attributes: its name and bridge
 // id when known, always its host. Attach under an EMPTY key so the fields appear
 // at top level without a redundant "pro." prefix (the upstream bridge is always a
 // Pro), e.g. log.Warn("...", "", cfg.Pro). Renders pro=<none> when unpaired.
@@ -222,7 +222,7 @@ func (c *Config) ApiUserByDeviceType(deviceType string) (*ApiUser, bool) {
 	return nil, false
 }
 
-// GetPro returns the current Bridge Pro pairing data (nil if unpaired). Safe to
+// GetPro returns the current Hue Bridge Pro pairing data (nil if unpaired). Safe to
 // call concurrently with SetPro, which autoPairPro/watchPro invoke from their own
 // goroutines. SetPro replaces the pointer with a fresh *BridgePro rather than
 // mutating fields in place, so the returned value stays immutable for the caller.
@@ -232,7 +232,7 @@ func (c *Config) GetPro() *BridgePro {
 	return c.Pro
 }
 
-// SetPro stores the Bridge Pro pairing data and persists it.
+// SetPro stores the Hue Bridge Pro pairing data and persists it.
 func (c *Config) SetPro(p *BridgePro) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
