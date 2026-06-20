@@ -65,9 +65,10 @@ function modeSub(s) {
 }
 
 // streamVal shows the live entertainment frame rate while the TV is streaming to the
-// Pro: in DTLS mode it shows both the TV input rate and relumeTV's upsampled send rate
-// (in → out fps); on the REST paths it shows relumeTV's outgoing write rate to the Pro
-// (writes/s). Idle/unpaired states show a dash — streamSub explains why.
+// Pro: it shows the TV input rate, plus relumeTV's upsampled send rate (in → out fps)
+// when relumeTV is emitting its own frames (proSendFps>0); on the REST paths it shows
+// relumeTV's outgoing write rate to the Pro (writes/s). Idle/unpaired states show a dash
+// — streamSub explains why.
 function streamVal(s) {
   switch (s.health) {
     case "streaming-pro":
