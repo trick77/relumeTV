@@ -12,16 +12,16 @@ import (
 	"time"
 
 	"github.com/pion/dtls/v3"
-	"github.com/trick77/relume/internal/bridgepro"
-	"github.com/trick77/relume/internal/huestream"
-	"github.com/trick77/relume/internal/translate"
+	"github.com/trick77/relumetv/internal/bridgepro"
+	"github.com/trick77/relumetv/internal/huestream"
+	"github.com/trick77/relumetv/internal/translate"
 )
 
-// configName is the metadata.name relume uses for its own entertainment
+// configName is the metadata.name relumeTV uses for its own entertainment
 // configuration on the Pro, so it can find and reuse it across restarts.
-const configName = "relume"
+const configName = "relumetv"
 
-// sendInterval is the steady rate at which relume re-sends the latest frame to the
+// sendInterval is the steady rate at which relumeTV re-sends the latest frame to the
 // Pro. A continuous send keeps the Pro from auto-stopping the area when the TV's
 // content is momentarily static.
 const sendInterval = 20 * time.Millisecond // 50 Hz
@@ -94,8 +94,8 @@ type ProClient interface {
 // when the DTLS stream to the Pro is unavailable (Phase B behaviour).
 type FallbackSink func(v1id string, state map[string]any)
 
-// ProStreamer owns relume's own entertainment stream to the Hue Bridge Pro. On a TV
-// stream (OnStreamStart) it ensures+starts a relume entertainment_configuration,
+// ProStreamer owns relumeTV's own entertainment stream to the Hue Bridge Pro. On a TV
+// stream (OnStreamStart) it ensures+starts a relumeTV entertainment_configuration,
 // dials a DTLS-PSK client to the Pro and re-encodes the decoded TV frames as
 // HueStream v2 at a steady rate. If anything fails it falls back to the REST sink
 // (Phase B) so the lights still follow — DTLS and REST are mutually exclusive.
@@ -115,8 +115,8 @@ type ProStreamer struct {
 	OnColor func(states map[string]map[string]any)
 
 	// OnSend, if set, is called once per frame successfully written to the Pro over
-	// DTLS (the 50 Hz sendLoop). Lets the web UI show the live relume→Pro send rate,
-	// the upsampled counterpart to the TV→relume input rate. Wired by main.
+	// DTLS (the 50 Hz sendLoop). Lets the web UI show the live relumeTV→Pro send rate,
+	// the upsampled counterpart to the TV→relumeTV input rate. Wired by main.
 	OnSend func()
 
 	// OnWindowStats, if set, is called once per 5s rollup with the largest brightness
@@ -130,7 +130,7 @@ type ProStreamer struct {
 	// ctx so a Stop cancels an in-flight handshake (not just the 10s cap).
 	dial func(ctx context.Context, host string, port int, identity string, psk []byte) (net.Conn, error)
 
-	// loadCfgID / saveCfgID persist the resolved relume config id across restarts
+	// loadCfgID / saveCfgID persist the resolved relumeTV config id across restarts
 	// (Phase D). Optional; nil keeps the streamer purely in-memory. Wired in main.go
 	// to config.LoadEntConfigID / SaveEntConfigID. saveCfgID("") clears a stale id.
 	loadCfgID func() string
@@ -153,7 +153,7 @@ type ProStreamer struct {
 	st state
 }
 
-// SetConfigStore wires optional persistence of the resolved relume config id (Phase
+// SetConfigStore wires optional persistence of the resolved relumeTV config id (Phase
 // D), so the streamer reuses its entertainment_configuration across restarts instead
 // of re-finding it. load returns the persisted id (empty if none); save persists it
 // (an empty id clears it). Call before Start.
@@ -174,7 +174,7 @@ type state struct {
 	current    map[uint8]huestream.Channel // Pro channel id → eased colour actually streamed
 	seq        uint8
 	path       string // "dtls" | "rest"
-	// cachedConfigID is the relume config id resolved earlier this process, so repeat
+	// cachedConfigID is the relumeTV config id resolved earlier this process, so repeat
 	// establish calls (stream re-connects, backoff retries) skip the list+match
 	// round-trips. Guarded by st.mu: cheap and still correct now that Stop joins the
 	// run goroutine (only one run touches it at a time) — the guard also covers the
@@ -390,7 +390,7 @@ func (s *ProStreamer) run(ctx context.Context, done chan struct{}) {
 	}
 }
 
-// establish ensures the relume entertainment_configuration exists and is started,
+// establish ensures the relumeTV entertainment_configuration exists and is started,
 // then dials the DTLS-PSK client and builds the TV→Pro channel map.
 func (s *ProStreamer) establish(ctx context.Context) error {
 	configID, remap, reused, channels, err := s.ensureConfig()
@@ -400,7 +400,7 @@ func (s *ProStreamer) establish(ctx context.Context) error {
 	s.log.Info("hue bridge pro entertainment config ready", "id", configID, "name", configName, "reused", reused, "channels", channels)
 
 	if err := s.pro.StartStream(configID); err != nil {
-		// A reused config can be left active=true if relume restarted mid-stream
+		// A reused config can be left active=true if relumeTV restarted mid-stream
 		// (the Pro keeps the area active, ownerless). Starting an already-active
 		// configuration is rejected, so stop it and retry once — otherwise Phase C
 		// would fall back to REST permanently on every subsequent run.
@@ -583,7 +583,7 @@ func (s *ProStreamer) setPath(p string) {
 	s.st.mu.Unlock()
 }
 
-// ensureConfig finds the relume entertainment_configuration (or creates one
+// ensureConfig finds the relumeTV entertainment_configuration (or creates one
 // covering all color-capable lights), then reads it back to learn the
 // bridge-assigned channel ids and build the TV-v1-id → Pro-channel-id map.
 func (s *ProStreamer) ensureConfig() (id string, remap map[uint16]uint8, reused bool, channels int, err error) {
@@ -611,7 +611,7 @@ func (s *ProStreamer) ensureConfig() (id string, remap map[uint16]uint8, reused 
 		}
 	}
 
-	// Honor the TV's group membership: if the TV told relume which lights belong to
+	// Honor the TV's group membership: if the TV told relumeTV which lights belong to
 	// its Ambilight zone (via POST/PUT /groups with a lights array), restrict the
 	// config to exactly that subset. nil → no subset known yet (cold start), so keep
 	// the legacy "all color lights" behaviour so nothing is ever accidentally dark.
@@ -663,7 +663,7 @@ func (s *ProStreamer) ensureConfig() (id string, remap map[uint16]uint8, reused 
 	}
 
 	// Slow path: list the Pro's configs (authoritative — prevents duplicate creates)
-	// and pick the persisted id if still present, else a config named `relume`.
+	// and pick the persisted id if still present, else a config named `relumetv`.
 	configs, err := s.pro.EntertainmentConfigs()
 	if err != nil {
 		return "", nil, false, 0, fmt.Errorf("entertainment configs: %w", err)
@@ -711,7 +711,7 @@ func (s *ProStreamer) ensureConfig() (id string, remap map[uint16]uint8, reused 
 		default:
 			// The candidate is in the authoritative list yet GetEntertainmentConfig
 			// failed — a transient error, not a missing config. Do NOT recreate (that
-			// would mint a duplicate `relume` config); fail so run() retries via the
+			// would mint a duplicate `relumetv` config); fail so run() retries via the
 			// REST fallback and re-lists on backoff.
 			return "", nil, false, 0, fmt.Errorf("get candidate config %s: %w", id, gerr)
 		}

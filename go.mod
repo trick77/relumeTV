@@ -1,4 +1,4 @@
-module github.com/trick77/relume
+module github.com/trick77/relumetv
 
 go 1.26.4
 

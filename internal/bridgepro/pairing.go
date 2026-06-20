@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/trick77/relume/internal/config"
+	"github.com/trick77/relumetv/internal/config"
 )
 
 // Pairer completes the Hue Bridge Pro pairing handshake on an already-pinned config
@@ -20,7 +20,7 @@ import (
 // policies for those steps differ. The seam fields (pair, capture) carry production
 // defaults and are overridden in tests so the loop is exercisable without a live Pro.
 type Pairer struct {
-	// DeviceType is the application identifier sent to the Pro (e.g. "relume#host").
+	// DeviceType is the application identifier sent to the Pro (e.g. "relumetv#host").
 	DeviceType string
 	// Interval is the delay between link-button poll attempts.
 	Interval time.Duration

@@ -66,7 +66,7 @@ func TestBuildSnapshot_MapsLightsAndDriven(t *testing.T) {
 		t.Fatalf("streamFps = %d, want 25 (TV input rate flows through to the snapshot)", s.StreamFPS)
 	}
 	if s.ProSendFPS != 50 {
-		t.Fatalf("proSendFps = %d, want 50 (relume→Pro DTLS send rate flows through)", s.ProSendFPS)
+		t.Fatalf("proSendFps = %d, want 50 (relumeTV→Pro DTLS send rate flows through)", s.ProSendFPS)
 	}
 	if s.ProWriteRate != 0 {
 		t.Fatalf("proWriteRate = %d, want 0 (no REST writes while streaming DTLS)", s.ProWriteRate)
@@ -199,7 +199,7 @@ type restFallbackSource struct{ fakeSource }
 
 func (restFallbackSource) ModeInfo() (string, bool, bool) { return "entertainment", false, true }
 
-// B: the TV activated a stream but DTLS to the Pro failed, so relume reverted to
+// B: the TV activated a stream but DTLS to the Pro failed, so relumeTV reverted to
 // REST. This is a degraded fallback and must read distinctly from a plain
 // REST-follow so the UI can flag it.
 func TestBuildSnapshot_HealthDegradesToFallback(t *testing.T) {

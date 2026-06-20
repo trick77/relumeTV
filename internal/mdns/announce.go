@@ -1,4 +1,4 @@
-// Package mdns actively announces relume as a Hue bridge via mDNS/Bonjour
+// Package mdns actively announces relumeTV as a Hue bridge via mDNS/Bonjour
 // (_hue._tcp.local.). Modern Philips TVs (and the Hue Bridge Pro itself) find the
 // bridge primarily this way; they passively listen for the announcement and
 // often make no request of their own. The format follows hass-emulated-hue,
@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/grandcat/zeroconf"
-	"github.com/trick77/relume/internal/config"
-	"github.com/trick77/relume/internal/netutil"
+	"github.com/trick77/relumetv/internal/config"
+	"github.com/trick77/relumetv/internal/netutil"
 )
 
 const (
@@ -75,11 +75,11 @@ func (a *Announcer) Run(ctx context.Context) error {
 	}
 	// Deliberately NOT calling server.Shutdown() on exit. zeroconf's Shutdown
 	// multicasts an mDNS "goodbye" (records with TTL 0); the Ambilight TV caches
-	// the _hue._tcp answer, so a goodbye evicts relume from its bridge list. With a
-	// powered-on Hue Bridge Pro on the LAN the TV then will NOT re-list relume on
+	// the _hue._tcp answer, so a goodbye evicts relumeTV from its bridge list. With a
+	// powered-on Hue Bridge Pro on the LAN the TV then will NOT re-list relumeTV on
 	// re-discovery (it prefers the Pro/BSB003), so a plain restart would drop the
 	// bridge from the Ambilight list until the Pro is power-cycled. Letting the
-	// process exit closes the socket WITHOUT a goodbye, so the TV keeps relume
+	// process exit closes the socket WITHOUT a goodbye, so the TV keeps relumeTV
 	// cached across restarts; the next start simply re-announces. This is the same
 	// "never emit a goodbye" reasoning as the no-periodic-re-register note below —
 	// the shutdown path was the remaining goodbye source.
@@ -93,10 +93,10 @@ func (a *Announcer) Run(ctx context.Context) error {
 	// We deliberately do NOT periodically re-register. Re-registration goes through
 	// Server.Shutdown(), which multicasts an mDNS "goodbye" (records with TTL 0)
 	// before re-announcing. The Ambilight TV actively queries _hue._tcp (confirmed
-	// by packet capture) and caches the answer, so a goodbye evicts relume from the
+	// by packet capture) and caches the answer, so a goodbye evicts relumeTV from the
 	// TV's bridge list — the bridge flickers out mid-discovery and never appears.
 	// The confirmed-working ha-hue-entertainment emulator also registers exactly
-	// once. This is why relume served an identical descriptor yet was never listed.
+	// once. This is why relumeTV served an identical descriptor yet was never listed.
 	if a.BurstDuration > 0 {
 		// The startup discovery burst is handled by the SSDP responder. mDNS needs
 		// no burst: the TV queries actively, and a real re-announce here would only

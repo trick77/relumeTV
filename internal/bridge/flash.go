@@ -4,7 +4,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/trick77/relume/internal/translate"
+	"github.com/trick77/relumetv/internal/translate"
 )
 
 // flashGreenXY / flashBlueXY are Hue's green and blue primaries in CIE xy. The
@@ -28,7 +28,7 @@ var (
 )
 
 // FlashRestart blinks the TV-controlled Ambilight bulbs green restartFlashCount
-// times and leaves them off — a visible "relume restarted" indicator. A relume
+// times and leaves them off — a visible "relumeTV restarted" indicator. A relumeTV
 // restart drops the TV's REST control session, so those lights would otherwise stay
 // frozen on their last Ambilight color until the TV reconnects. targetUUIDs are
 // the Hue Bridge Pro light UUIDs the TV is currently driving (ControlledSet.Current);
@@ -41,7 +41,7 @@ func FlashRestart(client proClient, log *slog.Logger, targetUUIDs []string) {
 // leaves them off — the idle-off indicator. When the TV is switched off it simply
 // stops sending its REST light-state writes (there is no off signal), so those
 // lights would otherwise stay frozen on their last Ambilight color. The idle
-// monitor (see cmd/relume) calls this once the writes have gone silent for the
+// monitor (see cmd/relumetv) calls this once the writes have gone silent for the
 // timeout. targetUUIDs scopes it to the Ambilight bulbs only — never the rest of
 // the home.
 func FlashIdle(client proClient, log *slog.Logger, targetUUIDs []string) {

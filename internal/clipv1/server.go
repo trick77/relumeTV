@@ -19,8 +19,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/trick77/relume/internal/config"
-	"github.com/trick77/relume/internal/upnp"
+	"github.com/trick77/relumetv/internal/config"
+	"github.com/trick77/relumetv/internal/upnp"
 )
 
 // LightProvider supplies the (already v1-translated) light list of the Hue Bridge Pro
@@ -48,7 +48,7 @@ type Server struct {
 	// identified by this IP or by the Android/Dalvik Philips-TV User-Agent.
 	TVIP string
 
-	// EntertainmentMode makes relume confirm the TV's stream activation for real
+	// EntertainmentMode makes relumeTV confirm the TV's stream activation for real
 	// (so the TV opens the DTLS entertainment stream, which the receiver services)
 	// instead of the REST-mode generic ack that keeps the TV on REST-follow. Opt-in
 	// via -mode entertainment; REST stays the default.
@@ -84,7 +84,7 @@ type Server struct {
 	OnGroupMembers func(v1ids []uint16)
 }
 
-// defaultDTLSFallbackTimeout is how long relume waits, after confirming the TV's
+// defaultDTLSFallbackTimeout is how long relumeTV waits, after confirming the TV's
 // stream activation, for the TV to open its DTLS stream before falling back to
 // REST-follow. The tested TV opens it ~1s after confirmation, so 5s is ample margin.
 const defaultDTLSFallbackTimeout = 5 * time.Second
@@ -96,7 +96,7 @@ func New(cfg *config.Config, advIP string, httpPort int, log *slog.Logger) *Serv
 		stream:   newStreamState(defaultDTLSFallbackTimeout)}
 }
 
-// SetDTLSFallbackTimeout overrides how long relume waits for the TV's DTLS stream
+// SetDTLSFallbackTimeout overrides how long relumeTV waits for the TV's DTLS stream
 // after confirming activation before reverting to REST-follow (the
 // -entertainment-dtls-timeout flag). A non-positive value keeps the default. Call
 // before serving.
@@ -112,7 +112,7 @@ func (s *Server) SetDTLSFallbackRecovery(d time.Duration) {
 	s.stream.setRecoveryCooldown(d)
 }
 
-// confirmsEntertainment reports whether relume should confirm the TV's stream
+// confirmsEntertainment reports whether relumeTV should confirm the TV's stream
 // activation for real: in entertainment mode, unless it has fallen back to REST
 // (see streamState.fallback).
 func (s *Server) confirmsEntertainment() bool {
@@ -493,7 +493,7 @@ func (s *Server) handlePairing(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Accept the TV's first pairing immediately. relume always auto-accepts, so there
+	// Accept the TV's first pairing immediately. relumeTV always auto-accepts, so there
 	// is no link-button wait to emulate; returning 101 here only makes the TV retry
 	// POST /api in a tight loop until it succeeds (it polls for ~30s), which is pure
 	// request spam for no benefit.
@@ -541,7 +541,7 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 func (s *Server) shortConfig() map[string]any {
 	id := s.cfg.Identity
 	return map[string]any{
-		"name":             "Relume",
+		"name":             "relumeTV",
 		"datastoreversion": "131",
 		"swversion":        "1967054020",
 		"apiversion":       "1.67.0",
@@ -674,7 +674,7 @@ func (s *Server) handleGroups(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) bridgeGroup(id string) map[string]any {
 	groupType := "Entertainment"
-	name := "Relume Entertainment"
+	name := "relumeTV Entertainment"
 	if id == "0" {
 		groupType = "LightGroup"
 		name = "Group 0"
@@ -735,7 +735,7 @@ func (s *Server) handleCreateGroup(w http.ResponseWriter, r *http.Request) {
 		s.log.Info("group create (not yet persisted)", "body", string(body))
 	}
 	// Honor the TV's group membership: the lights array is the subset of lights the TV
-	// put in its Ambilight zone. Remember it (and push it to the streamer) so relume
+	// put in its Ambilight zone. Remember it (and push it to the streamer) so relumeTV
 	// only ever drives those — lights in other rooms stay untouched. Gated on
 	// type==Entertainment: the TV may also post a LightGroup (entertainment stickiness,
 	// see TROUBLESHOOTING), which must not clobber the entertainment subset.
@@ -755,7 +755,7 @@ func (s *Server) handleCreateGroup(w http.ResponseWriter, r *http.Request) {
 // middleware, is the tripwire that surfaces the path being exercised at all).
 //
 // But rather than silently drop the write if some TV/firmware ever does use it, the
-// action state is fanned out to every light relume offers, reusing the same coalescing
+// action state is fanned out to every light relumeTV offers, reusing the same coalescing
 // provider as per-light writes — so the lights follow either way. No-op until a Pro is
 // paired or when the body carries no state.
 func (s *Server) handleGroupAction(w http.ResponseWriter, r *http.Request) {
@@ -843,7 +843,7 @@ func (s *Server) handleGroupUpdate(w http.ResponseWriter, r *http.Request) {
 			s.log.Info("ENTERTAINMENT stream activation requested by TV",
 				"group", id, "active", active, "owner", owner)
 			// Arm the fallback watchdog on activation (entertainment mode only): if the
-			// TV confirms here but never opens the DTLS stream, relume reverts to
+			// TV confirms here but never opens the DTLS stream, relumeTV reverts to
 			// REST-follow. A deactivation cancels any pending watchdog.
 			if active {
 				s.stream.armWatchdog(s.EntertainmentMode, s.log)

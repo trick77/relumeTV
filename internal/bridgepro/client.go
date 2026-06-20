@@ -17,7 +17,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/trick77/relume/internal/config"
+	"github.com/trick77/relumetv/internal/config"
 )
 
 const appKeyHeader = "hue-application-key"
@@ -274,7 +274,7 @@ func (c *Client) put(path string, payload any) error {
 	return nil
 }
 
-// del performs an authenticated CLIP v2 DELETE. Used to remove relume's own
+// del performs an authenticated CLIP v2 DELETE. Used to remove relumeTV's own
 // entertainment_configuration when it no longer matches the current light set (so
 // stale configs do not pile up on the Pro and hit its area limit).
 func (c *Client) del(path string) error {

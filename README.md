@@ -1,8 +1,8 @@
-# relume
+# relumeTV
 
 A software bridge that connects a **Philips Ambilight TV** to a **Hue Bridge Pro (BSB003)**.
 
-![How relume sits between the Ambilight TV and the Hue Bridge Pro](docs/architecture.png)
+![How relumeTV sits between the Ambilight TV and the Hue Bridge Pro](docs/architecture.png)
 
 > **⚠️ Disclaimer — read this first**
 >
@@ -23,7 +23,7 @@ there is no official fix.
 
 ## What this does
 
-Relume sits between the TV and the Bridge Pro: to the TV it impersonates an old gen-2 bridge
+relumeTV sits between the TV and the Bridge Pro: to the TV it impersonates an old gen-2 bridge
 (BSB002) speaking the v1 HTTP API, and it proxies every request to the real Bridge Pro over
 HTTPS/CLIP v2. See [docs/DESIGN.md](docs/DESIGN.md) for identity, pairing, and the two control
 modes.
@@ -35,14 +35,14 @@ modes.
   Developed and tested against a **Philips 65OLED806**, Android TV 11; other Ambilight models
   may behave differently. **Note:** 2025/2026 TVs ship the new **AmbiScape** feature instead,
   which talks to bulbs directly over Matter and bypasses the Hue Bridge entirely — those TVs
-  neither need nor work with Relume.
+  neither need nor work with relumeTV.
 - **A Hue Bridge Pro (BSB003)**, already set up with your lights and reachable on the LAN.
-- **A Linux host** to run Relume on. Discovery uses multicast (mDNS/SSDP), so the container
+- **A Linux host** to run relumeTV on. Discovery uses multicast (mDNS/SSDP), so the container
   needs `network_mode: host` — **Docker Desktop on macOS/Windows won't work**, its
   host-networking mode doesn't reliably carry the multicast traffic.
-- **TV, Relume host, and Bridge Pro on the same L2 network / VLAN**, with multicast allowed
+- **TV, relumeTV host, and Bridge Pro on the same L2 network / VLAN**, with multicast allowed
   (no client/AP isolation between them).
-- **TCP port 80 free on the host** — Relume emulates a gen-2 bridge, which the TV reaches on
+- **TCP port 80 free on the host** — relumeTV emulates a gen-2 bridge, which the TV reaches on
   `:80`. The TV **hardcodes** this port and ignores any port advertised over mDNS/SSDP, so `:80`
   is effectively mandatory — don't move it. Under rootless Docker, see the
   [port-80 note](docs/TROUBLESHOOTING.md#rootless-docker-and-port-80).
@@ -50,25 +50,25 @@ modes.
 ## Quick start (Docker)
 
 ```bash
-# 1. Start the service. On first run relume auto-pairs with the Bridge Pro in the
+# 1. Start the service. On first run relumeTV auto-pairs with the Bridge Pro in the
 #    background — just briefly TAP the link button on the Pro (do not hold it).
 docker compose up -d
 
-# 2. On the TV, start the Ambilight+Hue bridge search and select relume.
-#    relume auto-accepts the TV's pairing — no button to press on relume's side.
+# 2. On the TV, start the Ambilight+Hue bridge search and select relumeTV.
+#    relumeTV auto-accepts the TV's pairing — no button to press on relumeTV's side.
 
 # Optional: pair up front and verify before serving. Add -bridge-ip <ip> if cloud
 # discovery finds nothing.
-docker compose run --rm relume setup
+docker compose run --rm relumetv setup
 ```
 
-The image is pulled from `ghcr.io/trick77/relume` (built by the release workflow).
-To build locally instead: `docker build -f Containerfile -t relume:dev .`
+The image is pulled from `ghcr.io/trick77/relumetv` (built by the release workflow).
+To build locally instead: `docker build -f Containerfile -t relumetv:dev .`
 
 ### Data & secrets
 
 State (bridge identity, TV tokens, **Bridge Pro app key + client key**) lives in
-`./data/relume.json`. This file holds secrets — do not share or commit it (it is gitignored).
+`./data/relumetv.json`. This file holds secrets — do not share or commit it (it is gitignored).
 
 ## Usage
 
@@ -93,7 +93,7 @@ State (bridge identity, TV tokens, **Bridge Pro app key + client key**) lives in
 - **`-entertainment-fallback-recovery`** &nbsp;·&nbsp; default `90s` — Entertainment mode: how long a latched REST fallback persists before the next TV stream activation may recover it (so a transient DTLS failure no longer pins the TV to REST until restart). Set `0` to disable (fallback stays sticky until restart).
 - **`-entertainment-smooth-tau`** &nbsp;·&nbsp; default `40ms` — Entertainment mode: exponential-smoothing time constant for easing the TV's hard scene cuts on the DTLS send path. Lower is snappier but flickers more, higher is smoother but laggier. Set `0` to disable smoothing (frames forwarded verbatim).
 - **`-skip-tls-verify`** &nbsp;·&nbsp; default off — Skip Bridge Pro certificate pinning (fallback).
-- **`-ui`** &nbsp;·&nbsp; default off — Enable the optional web UI (setup assistant + live status dashboard) on the predefined port `33100`. Off keeps relume headless. **No authentication — only enable it on a trusted network**, since with `network_mode: host` the port is reachable by anyone on the LAN.
+- **`-ui`** &nbsp;·&nbsp; default off — Enable the optional web UI (setup assistant + live status dashboard) on the predefined port `33100`. Off keeps relumeTV headless. **No authentication — only enable it on a trusted network**, since with `network_mode: host` the port is reachable by anyone on the LAN.
 - **`-ui-port`** &nbsp;·&nbsp; default `0` — Override the web UI port with a custom value (implies `-ui`). Must differ from `-http-port` (80).
 - **`-debug`** &nbsp;·&nbsp; default off — SSDP/HTTP diagnostics + mDNS observer.
 
@@ -102,7 +102,7 @@ Discovery-debugging flags (`-discovery-burst-*`) are documented in
 
 ## Troubleshooting
 
-The most common reason the TV never lists Relume: **a powered-on Bridge Pro (or any other Hue
+The most common reason the TV never lists relumeTV: **a powered-on Bridge Pro (or any other Hue
 bridge) on the same LAN wins discovery and hides it.** Power the other bridge off — or block it
 from the cloud — before scanning, then run the TV's Ambilight+Hue search again.
 
@@ -113,12 +113,12 @@ deeper discovery/coexistence problem with the experimental identity flags — is
 ## Development
 
 ```bash
-go build -o relume ./cmd/relume
+go build -o relumetv ./cmd/relumetv
 go test ./...
 ```
 
 ## Documentation
 
-- **[docs/DESIGN.md](docs/DESIGN.md)** — how Relume works: identity, pairing, control modes.
+- **[docs/DESIGN.md](docs/DESIGN.md)** — how relumeTV works: identity, pairing, control modes.
 - **[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)** — discovery, common issues, debug flags.
 - **[PLAN.md](PLAN.md)** — project status and next steps.

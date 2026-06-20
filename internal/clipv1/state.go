@@ -65,12 +65,12 @@ const idleGapLogFloor = time.Second
 
 // gapTrace gates the temporary inter-write gap log used to calibrate the
 // idle-off timeout. It is a dedicated env var (not -debug) so a calibration run
-// is not buried under per-request http rx/tx spam: set RELUME_GAP_TRACE=1 and
+// is not buried under per-request http rx/tx spam: set RELUMETV_GAP_TRACE=1 and
 // grep "ambilight write gap". Remove once the timeout default is settled.
-var gapTrace = os.Getenv("RELUME_GAP_TRACE") != ""
+var gapTrace = os.Getenv("RELUMETV_GAP_TRACE") != ""
 
 // recordWriteTime stamps the time of an Ambilight light-state write for the
-// idle-off monitor (independent of Debug). With RELUME_GAP_TRACE set it also logs
+// idle-off monitor (independent of Debug). With RELUMETV_GAP_TRACE set it also logs
 // the gap since the previous write when it exceeds idleGapLogFloor, to calibrate
 // the idle-off timeout against the TV's real maximum legitimate pause.
 func (a *activityTracker) recordWriteTime() {
@@ -180,7 +180,7 @@ func newStreamState(fallbackTimeout time.Duration) *streamState {
 	}
 }
 
-// setFallbackTimeout overrides how long relume waits for the TV's DTLS stream
+// setFallbackTimeout overrides how long relumeTV waits for the TV's DTLS stream
 // after confirming activation before reverting to REST-follow. A non-positive
 // value keeps the existing value. Call before serving.
 func (s *streamState) setFallbackTimeout(d time.Duration) {
@@ -236,7 +236,7 @@ func (s *streamState) tryRecoverFallback() bool {
 	return true
 }
 
-// inFallback reports whether relume has fallen back to REST-follow.
+// inFallback reports whether relumeTV has fallen back to REST-follow.
 func (s *streamState) inFallback() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -253,7 +253,7 @@ func (s *streamState) isUp() bool {
 
 // noteRESTDriving reports whether the caller should emit the one-shot state-C
 // log: the TV is driving via a per-light REST write while no DTLS stream is up,
-// no stream activation is in flight (active), and relume is not in fallback —
+// no stream activation is in flight (active), and relumeTV is not in fallback —
 // i.e. the TV simply never opened an entertainment stream. Returns true exactly
 // once per REST-driving episode; resetNotice (called on any stream-state
 // transition) re-arms it for the next episode.
@@ -288,9 +288,9 @@ func (s *streamState) snapshot() (active bool, owner string) {
 	return s.active, s.owner
 }
 
-// armWatchdog starts (or restarts) the fallback timer after relume confirms a
+// armWatchdog starts (or restarts) the fallback timer after relumeTV confirms a
 // stream activation in entertainment mode. If the TV does not open its DTLS
-// stream (markStreamUp) before it fires, relume falls back to REST-follow. No-op
+// stream (markStreamUp) before it fires, relumeTV falls back to REST-follow. No-op
 // when not in entertainment mode, once already fallen back, or while the stream
 // is already up (no fresh stream-start would fire to disarm it).
 func (s *streamState) armWatchdog(entertainment bool, log *slog.Logger) {
@@ -363,7 +363,7 @@ func (s *streamState) markStreamDown(log *slog.Logger) {
 // watchdogFired is invoked when the fallback timer elapses. Under the lock it
 // no-ops if the stream came up in the meantime (streamUp) or if it was stopped/
 // superseded (its generation no longer matches the current one). Otherwise it
-// flips relume (stickily, until the next stream-up) back to REST-follow:
+// flips relumeTV (stickily, until the next stream-up) back to REST-follow:
 // subsequent activations get the generic ack and GET /groups/1 reports the stream
 // inactive, so the TV resumes per-light PUTs.
 func (s *streamState) watchdogFired(gen uint64, log *slog.Logger) {

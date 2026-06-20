@@ -1,4 +1,4 @@
-// Command relume is a software bridge that connects a Philips Ambilight TV to
+// Command relumetv is a software bridge that connects a Philips Ambilight TV to
 // a Hue Bridge Pro by presenting itself to the TV as a Gen-2 bridge and
 // forwarding commands to the Pro.
 package main
@@ -17,16 +17,16 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/trick77/relume/internal/bridge"
-	"github.com/trick77/relume/internal/bridgepro"
-	"github.com/trick77/relume/internal/clipv1"
-	"github.com/trick77/relume/internal/config"
-	"github.com/trick77/relume/internal/diag"
-	"github.com/trick77/relume/internal/entertainment"
-	"github.com/trick77/relume/internal/huestream"
-	"github.com/trick77/relume/internal/mdns"
-	"github.com/trick77/relume/internal/ssdp"
-	"github.com/trick77/relume/internal/webui"
+	"github.com/trick77/relumetv/internal/bridge"
+	"github.com/trick77/relumetv/internal/bridgepro"
+	"github.com/trick77/relumetv/internal/clipv1"
+	"github.com/trick77/relumetv/internal/config"
+	"github.com/trick77/relumetv/internal/diag"
+	"github.com/trick77/relumetv/internal/entertainment"
+	"github.com/trick77/relumetv/internal/huestream"
+	"github.com/trick77/relumetv/internal/mdns"
+	"github.com/trick77/relumetv/internal/ssdp"
+	"github.com/trick77/relumetv/internal/webui"
 )
 
 // version is set at build time via -ldflags "-X main.version=..." (CI).
@@ -42,7 +42,7 @@ func main() {
 
 	switch cmd {
 	case "version", "-version", "--version":
-		fmt.Println("relume", version)
+		fmt.Println("relumeTV", version)
 		return
 	case "serve":
 		if err := runServe(os.Args[2:], log); err != nil {
@@ -109,7 +109,7 @@ func uiPortFor(opts serveOptions) int {
 
 func parseServeOptions(args []string) (serveOptions, error) {
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
-	cfgPath := fs.String("config", "relume.json", "path to the configuration file")
+	cfgPath := fs.String("config", "relumetv.json", "path to the configuration file")
 	httpPort := fs.Int("http-port", 80, "HTTP port of the emulated bridge")
 	advIP := fs.String("advertise-ip", "", "advertised IP (empty = auto-detect)")
 	debug := fs.Bool("debug", false, "verbose diagnostics: SSDP/HTTP datagrams + mDNS observer")
@@ -244,7 +244,7 @@ func runServe(args []string, log *slog.Logger) error {
 			return fmt.Errorf("auto-detect advertise-ip: %w (use -advertise-ip)", err)
 		}
 	}
-	log.Info("relume", "version", version)
+	log.Info("relumeTV", "version", version)
 	log.Info("identity", "serial", cfg.Identity.Serial, "bridgeid", cfg.Identity.BridgeID(), "advertise", ip)
 	// Dump the saved state on startup (no secrets): which Hue Bridge Pro is paired and
 	// which TVs are already paired. An already-paired TV explains an "instant"
@@ -295,14 +295,14 @@ func runServe(args []string, log *slog.Logger) error {
 	// frame below) so the web UI can show the stream's frames/s. Harmless when no UI
 	// runs or no DTLS stream is active (reports 0).
 	frameStats := newFrameStats()
-	// proSendStats tracks relume's *outgoing* DTLS rate to the Pro (50 Hz sendLoop),
+	// proSendStats tracks relumeTV's *outgoing* DTLS rate to the Pro (50 Hz sendLoop),
 	// the counterpart to frameStats' incoming rate. proStats bundles the REST-path
 	// counters: write rate, coalesced drops/s, and cumulative forward errors. Only
 	// the DTLS or the REST counters are non-zero at a time, depending on the path.
 	proSendStats := newFrameStats()
 	proStats := newProStats()
 	// jitterStats holds the per-window brightness jump on the incoming TV stream vs
-	// relume's smoothed sent stream, so the UI can show how much the DTLS-path easing
+	// relumeTV's smoothed sent stream, so the UI can show how much the DTLS-path easing
 	// cut the flicker. Fed by the receiver (input) and streamer (sent) rollups below.
 	jitterStats := newJitterStats()
 
@@ -328,7 +328,7 @@ func runServe(args []string, log *slog.Logger) error {
 	defer stop()
 
 	// Pair the Hue Bridge Pro backend in the background, independently of the TV: the
-	// TV can discover/pair relume before the Pro is paired; relume just returns an
+	// TV can discover/pair relumeTV before the Pro is paired; relumeTV just returns an
 	// empty light list until the Pro pairing completes, then hot-loads the lights.
 	if pro == nil {
 		log.Warn("no hue bridge pro paired yet – auto-pairing in background; TAP the hue bridge pro link button")
@@ -356,10 +356,10 @@ func runServe(args []string, log *slog.Logger) error {
 			proSendStats: proSendStats,
 			proStats:     proStats,
 			jitterStats:  jitterStats,
-			// UI-only display name for relume's own bridge. NOTE: the actual mDNS
+			// UI-only display name for relumeTV's own bridge. NOTE: the actual mDNS
 			// instance the TV discovers is still "Philips Hue - …" (internal/mdns),
 			// deliberately unchanged so discovery keeps working.
-			advName: "Relume Bridge - " + bridgeID[len(bridgeID)-6:],
+			advName: "relumeTV Bridge - " + bridgeID[len(bridgeID)-6:],
 			version: version,
 			started: time.Now(),
 			// The configured DTLS easing time constant (ms), so the Stream card's
@@ -381,13 +381,13 @@ func runServe(args []string, log *slog.Logger) error {
 	go clip.LogActivitySummary(ctx, sc.activityWindow)
 
 	// entStreamer is hoisted to function scope so the shutdown path can release
-	// relume's own entertainment stream on the Pro synchronously (Phase D), rather
+	// relumeTV's own entertainment stream on the Pro synchronously (Phase D), rather
 	// than racing the receiver's async OnStreamStop against process exit.
 	var entStreamer *entertainment.ProStreamer
 
 	if entertainmentMode {
 		// Entertainment mode: run the real DTLS receiver on :2100. It decrypts the
-		// TV's stream (PSK = the clientkey relume minted at pairing) and decodes the
+		// TV's stream (PSK = the clientkey relumeTV minted at pairing) and decodes the
 		// HueStream frames.
 		recv := entertainment.NewReceiver(ip, cfg.PSKForUser, log)
 		// Count stream frames as activity so the idle-off monitor doesn't flash the
@@ -402,7 +402,7 @@ func runServe(args []string, log *slog.Logger) error {
 		recv.OnWindowStats = func(briJump, _ uint32) { jitterStats.setInput(briJump) }
 
 		if pro != nil {
-			// Phase C: relume opens its OWN entertainment stream to the Pro over DTLS
+			// Phase C: relumeTV opens its OWN entertainment stream to the Pro over DTLS
 			// and re-encodes the decoded TV frames at full rate, avoiding the per-light
 			// REST writes that overflow the Pro's command queue (503). The streamer
 			// auto-falls back to the REST forward (Phase B) if DTLS cannot establish.
@@ -424,11 +424,11 @@ func runServe(args []string, log *slog.Logger) error {
 			// its Ambilight zone (POST/PUT /groups), restrict the Pro config to that
 			// subset so lights in other rooms are never driven.
 			clip.OnGroupMembers = streamer.SetRequestedMembers
-			// Persist/reuse relume's own entertainment_configuration across restarts
+			// Persist/reuse relumeTV's own entertainment_configuration across restarts
 			// instead of re-finding it each stream (Phase D).
 			streamer.SetConfigStore(cfg.LoadEntConfigID, func(id string) {
 				if err := cfg.SaveEntConfigID(id); err != nil {
-					log.Warn("persisting relume entertainment config id", "err", err)
+					log.Warn("persisting relumeTV entertainment config id", "err", err)
 				}
 			})
 			entStreamer = streamer
@@ -524,7 +524,7 @@ func runServe(args []string, log *slog.Logger) error {
 		return err
 	}
 	shutdownHTTP(httpSrv)
-	// Release relume's own entertainment stream on the Pro before flashing, so the
+	// Release relumeTV's own entertainment stream on the Pro before flashing, so the
 	// Pro area is deactivated (StopStream uses the client's own timeout, not the
 	// cancelled ctx) and never leaks past process exit (Phase D).
 	stopEntertainment(entStreamer)
@@ -605,7 +605,7 @@ func newProvider(client *bridgepro.Client, controlled *bridge.ControlledSet, liv
 	p.OnControlled = controlled.Seen
 	p.OnColor = live.SetState
 	// Record each successful REST write to the Pro so the UI can show the live
-	// outgoing write rate when relume drives the Pro over REST (no DTLS stream).
+	// outgoing write rate when relumeTV drives the Pro over REST (no DTLS stream).
 	p.OnForward = stats.writes.Mark
 	// Backpressure signals for the UI: coalesced (healthy drops/s the optimistic
 	// path spared the Pro) and forward errors (the real failure signal, cumulative).
@@ -668,7 +668,7 @@ func idleShouldFire(now, lastSeen time.Time, fired bool, idleTimeout time.Durati
 	return !fired && !lastSeen.IsZero() && now.Sub(lastSeen) >= idleTimeout
 }
 
-// autoPairPro pairs relume with the Hue Bridge Pro in the background, independently of
+// autoPairPro pairs relumeTV with the Hue Bridge Pro in the background, independently of
 // the TV side. It discovers the Pro (cloud, unless bridgeIP is given), pins the
 // leaf certificate, then polls until the user taps the Pro's physical link button
 // (the one step that cannot be automated). On success it persists the credentials
@@ -680,7 +680,7 @@ func autoPairPro(ctx context.Context, cfg *config.Config, clip *clipv1.Server, c
 		if derr == nil && h != "" {
 			host, discoveryID = h, id
 			// Make the source explicit: with no -bridge-ip the host comes from the
-			// Philips cloud (discovery.meethue.com), so a config-less relume still
+			// Philips cloud (discovery.meethue.com), so a config-less relumeTV still
 			// "knows" a bridge it never stored — that is the cloud cache, not local state.
 			source := "Philips cloud (discovery.meethue.com)"
 			if bridgeIP != "" {
@@ -712,7 +712,7 @@ func autoPairPro(ctx context.Context, cfg *config.Config, clip *clipv1.Server, c
 	}
 
 	log.Info("waiting for the hue bridge pro link button — TAP it now", "host", host)
-	paired, perr := bridgepro.NewPairer("relume#"+hostname()).
+	paired, perr := bridgepro.NewPairer("relumetv#"+hostname()).
 		WaitForLinkButton(ctx, pro, time.Time{}, func(attempt int) {
 			if attempt%6 == 0 {
 				log.Info("still waiting for the hue bridge pro link button — TAP it", "host", host)
@@ -781,12 +781,12 @@ func runDiscover() error {
 
 // runAvahiService prints an Avahi static service file with which a Linux host
 // running avahi-daemon announces the _hue._tcp service. Needed when avahi
-// occupies port 5353 and relume's built-in mDNS announcer therefore can't bind:
+// occupies port 5353 and relumeTV's built-in mDNS announcer therefore can't bind:
 //
-//	relume avahi-service > /etc/avahi/services/relume-hue.service
+//	relumeTV avahi-service > /etc/avahi/services/relumeTV-hue.service
 func runAvahiService(args []string) error {
 	fs := flag.NewFlagSet("avahi-service", flag.ExitOnError)
-	cfgPath := fs.String("config", "relume.json", "path to the configuration file")
+	cfgPath := fs.String("config", "relumetv.json", "path to the configuration file")
 	port := fs.Int("http-port", 80, "advertised port (must match the serve http-port)")
 	_ = fs.Parse(args)
 
@@ -811,11 +811,11 @@ func runAvahiService(args []string) error {
 	return nil
 }
 
-// runSetup pairs relume with the real Hue Bridge Pro: pin the certificate,
+// runSetup pairs relumeTV with the real Hue Bridge Pro: pin the certificate,
 // wait for the link button, fetch the app key + clientkey and persist them.
 func runSetup(args []string, log *slog.Logger) error {
 	fs := flag.NewFlagSet("setup", flag.ExitOnError)
-	cfgPath := fs.String("config", "relume.json", "path to the configuration file")
+	cfgPath := fs.String("config", "relumetv.json", "path to the configuration file")
 	bridgeIP := fs.String("bridge-ip", "", "IP of the Hue Bridge Pro (empty = cloud discovery)")
 	skipTLS := fs.Bool("skip-tls-verify", false, "disable TLS verification against the Pro (instead of cert pinning)")
 	timeout := fs.Duration("timeout", 60*time.Second, "how long to wait for the link button")
@@ -844,7 +844,7 @@ func runSetup(args []string, log *slog.Logger) error {
 
 	fmt.Printf("\n>>> Now press the link button on the Hue Bridge Pro (%s) <<<\n\n", host)
 
-	pairer := bridgepro.NewPairer("relume#" + hostname())
+	pairer := bridgepro.NewPairer("relumetv#" + hostname())
 	pairer.Interval = 2 * time.Second
 	paired, perr := pairer.WaitForLinkButton(context.Background(), pro, time.Now().Add(*timeout),
 		func(int) { fmt.Print(".") })

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/trick77/relume/internal/bridgepro"
+	"github.com/trick77/relumetv/internal/bridgepro"
 )
 
 // flashFake records the on/off and color of every SetLight call.

@@ -3,12 +3,12 @@ package main
 import (
 	"time"
 
-	"github.com/trick77/relume/internal/clipv1"
-	"github.com/trick77/relume/internal/config"
-	"github.com/trick77/relume/internal/webui"
+	"github.com/trick77/relumetv/internal/clipv1"
+	"github.com/trick77/relumetv/internal/config"
+	"github.com/trick77/relumetv/internal/webui"
 )
 
-// uiSource adapts relume's live state to webui.StateSource. It is read-only and
+// uiSource adapts relumeTV's live state to webui.StateSource. It is read-only and
 // exposes no secrets (app/client keys, cert fingerprint never leave the core).
 type uiSource struct {
 	cfg          *config.Config

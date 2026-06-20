@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/trick77/relume/internal/config"
+	"github.com/trick77/relumetv/internal/config"
 )
 
 func testResponder() *Responder {

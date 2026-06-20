@@ -45,7 +45,7 @@ function healthDotClass(h) {
   return "dot pulse";
 }
 
-// currentMode is the path relume is forwarding on RIGHT NOW, not the configured
+// currentMode is the path relumeTV is forwarding on RIGHT NOW, not the configured
 // startup mode. The TV only drives over entertainment/DTLS while its stream is
 // actually up; in every other case (rest mode, fallback, or entertainment
 // configured but the TV not streaming) the live path is REST.
@@ -65,8 +65,8 @@ function modeSub(s) {
 }
 
 // streamVal shows the live entertainment frame rate while the TV is streaming to the
-// Pro: in DTLS mode it shows both the TV input rate and relume's upsampled send rate
-// (in → out fps); on the REST paths it shows relume's outgoing write rate to the Pro
+// Pro: in DTLS mode it shows both the TV input rate and relumeTV's upsampled send rate
+// (in → out fps); on the REST paths it shows relumeTV's outgoing write rate to the Pro
 // (writes/s). Idle/unpaired states show a dash — streamSub explains why.
 function streamVal(s) {
   switch (s.health) {
@@ -96,7 +96,7 @@ function streamSub(s) {
   }
 }
 
-// jitterDisplay shows how much relume's easing cut the stream's brightness jitter —
+// jitterDisplay shows how much relumeTV's easing cut the stream's brightness jitter —
 // the reduction of the smoothed sent max jump vs the TV input max jump over the last
 // window. A longdash when there is no value: not streaming to the Hue Bridge Pro over
 // DTLS (smoothing only applies there), or nothing jumped to smooth.
@@ -120,7 +120,7 @@ function forwardErrActive(s) {
   return Date.now() - Date.parse(s.lastForwardErr) < forwardErrDecayMs;
 }
 
-// backpressureVal shows how relume shields the Hue Bridge Pro. coalesceRate (drops/s)
+// backpressureVal shows how relumeTV shields the Hue Bridge Pro. coalesceRate (drops/s)
 // is HEALTHY — the optimistic path sparing the Pro a write it could not keep up
 // with — so it is never coloured as a fault. forwardErrors is the real failure
 // signal (down Pro / 503 overflow); it appears in amber only while recent, then
@@ -157,7 +157,7 @@ function tvModel(dt) {
   return i >= 0 ? dt.slice(i + 1) : dt;
 }
 
-// _startedAtMs holds relume's start time (ms epoch) so the uptime can tick every
+// _startedAtMs holds relumeTV's start time (ms epoch) so the uptime can tick every
 // second between snapshot pushes. fmtUptime renders only the largest unit, spelled
 // out with correct singular/plural: weeks once past 7 days, then days/hours/
 // minutes/seconds (e.g. "1 week", "2 days", "1 hour", "50 seconds").
@@ -225,7 +225,7 @@ function renderSetup(s) {
         <div class="step ${s.proPaired ? (s.tvClients.length ? "done" : "active") : "todo"}">
           <div class="rail"><div class="num">${s.tvClients.length ? "✓" : "2"}</div><div class="line"></div></div>
           <div class="card"><h3>Connect your TV ${tvPill}</h3>
-            <div class="d">On the TV, start the Ambilight+Hue bridge search and pick relume. Advertised as “${esc(s.bridgeName)}”.</div>
+            <div class="d">On the TV, start the Ambilight+Hue bridge search and pick relumeTV. Advertised as “${esc(s.bridgeName)}”.</div>
             ${
               !s.tvClients.length
                 ? `<div class="action"><span class="dot pulse"></span><div><div class="big">Waiting for TV search…</div></div></div>`
@@ -275,8 +275,8 @@ function renderDashboard(s) {
       </div>
       <div class="pipe row2">
         <div class="step"><div class="lbl">Lights</div><div class="val">${driven}</div><div class="sub">Driven by TV</div></div>
-        <div class="step"><div class="lbl">Stream <span class="info" tabindex="0" data-tip="Jitter is the largest brightness jump between two consecutive frames. relume eases each colour toward the latest TV frame with a ${s.smoothingTauMs || 40} ms time constant, so the TV's hard scene cuts reach the lamps as a fast fade instead of a flicker. The figure is the reduction this buys: −45% means the biggest jump on the stream sent to the Hue Bridge Pro is 45% smaller than on the TV input — more negative is smoother. 0% when nothing jumped, or the cut passed through unsmoothed (e.g. tau set to 0). DTLS path only.">i</span></div><div class="val">${streamVal(s)}</div><div class="sub">${esc(streamSub(s))}<br>Jitter ${jitterDisplay(s)}</div></div>
-        <div class="step"><div class="lbl">Backpressure <span class="info" tabindex="0" data-tip="Drops/s: Ambilight frames relume coalesced away because the Hue Bridge Pro could not keep up — healthy, it spares the Hue Bridge Pro writes it cannot accept. Errors: failed writes to the Hue Bridge Pro (unreachable / 503 overflow) — the real fault signal.">i</span></div><div class="val">${backpressureVal(s)}</div><div class="sub">${backpressureSub(s)}</div></div>
+        <div class="step"><div class="lbl">Stream <span class="info" tabindex="0" data-tip="Jitter is the largest brightness jump between two consecutive frames. relumeTV eases each colour toward the latest TV frame with a ${s.smoothingTauMs || 40} ms time constant, so the TV's hard scene cuts reach the lamps as a fast fade instead of a flicker. The figure is the reduction this buys: −45% means the biggest jump on the stream sent to the Hue Bridge Pro is 45% smaller than on the TV input — more negative is smoother. 0% when nothing jumped, or the cut passed through unsmoothed (e.g. tau set to 0). DTLS path only.">i</span></div><div class="val">${streamVal(s)}</div><div class="sub">${esc(streamSub(s))}<br>Jitter ${jitterDisplay(s)}</div></div>
+        <div class="step"><div class="lbl">Backpressure <span class="info" tabindex="0" data-tip="Drops/s: Ambilight frames relumeTV coalesced away because the Hue Bridge Pro could not keep up — healthy, it spares the Hue Bridge Pro writes it cannot accept. Errors: failed writes to the Hue Bridge Pro (unreachable / 503 overflow) — the real fault signal.">i</span></div><div class="val">${backpressureVal(s)}</div><div class="sub">${backpressureSub(s)}</div></div>
         <div class="step"><div class="lbl">Liveness</div><div class="val" id="liveness">—</div><div class="sub">Since last write</div></div>
       </div>
       <div class="grid">${pending}

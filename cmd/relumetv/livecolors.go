@@ -4,11 +4,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/trick77/relume/internal/webui"
+	"github.com/trick77/relumetv/internal/webui"
 )
 
 // liveColors records the most recent colour the TV pushed for each v1 light id,
-// captured at the two points relume actually sees the colour values flow TV→Pro:
+// captured at the two points relumeTV actually sees the colour values flow TV→Pro:
 // the REST/fallback forward (bridge.LightProvider.OnColor) and the DTLS passthrough
 // (entertainment.ProStreamer.OnColor). The web UI reads it so each lamp swatch
 // shows the live streamed colour instead of the Hue Bridge Pro's REST light state,

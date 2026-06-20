@@ -5,7 +5,7 @@ import (
 	"sort"
 )
 
-// bridgeResource is the subset of a CLIP v2 bridge resource relevant for relume.
+// bridgeResource is the subset of a CLIP v2 bridge resource relevant for relumeTV.
 type bridgeResource struct {
 	ID       string `json:"id"`
 	BridgeID string `json:"bridge_id"`
@@ -14,7 +14,7 @@ type bridgeResource struct {
 	} `json:"owner"`
 }
 
-// deviceResource is the subset of a CLIP v2 device resource relevant for relume
+// deviceResource is the subset of a CLIP v2 device resource relevant for relumeTV
 // (used to read the bridge's user-set name via the bridge's owning device).
 type deviceResource struct {
 	ID       string `json:"id"`
@@ -56,7 +56,7 @@ func (c *Client) BridgeInfo() (name, bridgeID string, err error) {
 // LightDimming / LightColor / LightColorTemperature are the capability sub-objects
 // of a CLIP v2 light. They are POINTERS on Light so their absence (the Hue Bridge Pro
 // omits the key for unsupported capabilities) is distinguishable from a zero value
-// — that is how relume knows what a bulb can actually do.
+// — that is how relumeTV knows what a bulb can actually do.
 type LightDimming struct {
 	Brightness float64 `json:"brightness"`
 }
@@ -72,7 +72,7 @@ type LightColorTemperature struct {
 	Mirek int `json:"mirek"`
 }
 
-// Light is the subset of a CLIP v2 light resource that is relevant for relume.
+// Light is the subset of a CLIP v2 light resource that is relevant for relumeTV.
 type Light struct {
 	ID       string `json:"id"`
 	IDv1     string `json:"id_v1"`
@@ -117,7 +117,7 @@ func (c *Client) Lights() ([]Light, error) {
 }
 
 // EntertainmentConfig is the subset of an entertainment_configuration resource
-// that is relevant for relume.
+// that is relevant for relumeTV.
 type EntertainmentConfig struct {
 	ID       string `json:"id"`
 	Metadata struct {

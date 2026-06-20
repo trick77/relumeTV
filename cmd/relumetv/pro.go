@@ -6,10 +6,10 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/trick77/relume/internal/bridge"
-	"github.com/trick77/relume/internal/bridgepro"
-	"github.com/trick77/relume/internal/clipv1"
-	"github.com/trick77/relume/internal/config"
+	"github.com/trick77/relumetv/internal/bridge"
+	"github.com/trick77/relumetv/internal/bridgepro"
+	"github.com/trick77/relumetv/internal/clipv1"
+	"github.com/trick77/relumetv/internal/config"
 )
 
 // resolveProHost determines the Hue Bridge Pro's current host. When bridgeIP is set
@@ -178,7 +178,7 @@ func (w *proWatcher) tick() (reconnected bool) {
 
 	w.log.Warn("hue bridge pro not reachable — is it turned off? "+
 		"Turn it back on (or check its power/network cable); "+
-		"relume can't control the lights until it is back. Retrying.", "", pro, "err", err)
+		"relumeTV can't control the lights until it is back. Retrying.", "", pro, "err", err)
 
 	host, discoveryID, derr := resolveProHost(w.bridgeIP, pro.DiscoveryID, w.discover, w.log)
 	if derr != nil || host == "" {

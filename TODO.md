@@ -42,7 +42,7 @@ adb pull /sdcard/screen.png .
 
 ### Screens worth capturing for the README
 
-- [ ] Ambilight+Hue: bridge discovered ("Relume" in the bridge list)
+- [ ] Ambilight+Hue: bridge discovered ("relumeTV" in the bridge list)
 - [ ] Bulb list showing the paired Hue color bulbs
 - [ ] Light-position assignment screen
 - [ ] Ambilight running with the lights following the screen

@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/trick77/relume/internal/config"
+	"github.com/trick77/relumetv/internal/config"
 )
 
 func TestServiceSpec_matchesHueBridgeAnnouncement(t *testing.T) {

@@ -3,7 +3,7 @@ package entertainment
 import (
 	"math"
 
-	"github.com/trick77/relume/internal/huestream"
+	"github.com/trick77/relumetv/internal/huestream"
 )
 
 // ToHueV1State converts one decoded HueStream channel into a CLIP v1 light state

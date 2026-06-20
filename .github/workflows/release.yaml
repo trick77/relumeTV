@@ -71,7 +71,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           build-args: |
-            RELUME_VERSION=${{ steps.ver.outputs.version }}
+            RELUMETV_VERSION=${{ steps.ver.outputs.version }}
           tags: |
             ghcr.io/${{ github.repository }}:${{ steps.ver.outputs.version }}
             ghcr.io/${{ github.repository }}:${{ steps.ver.outputs.major }}.${{ steps.ver.outputs.minor }}

@@ -4,22 +4,22 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/trick77/relume/internal/config"
+	"github.com/trick77/relumetv/internal/config"
 )
 
-func TestRender_defaultFriendlyNameIsRelume(t *testing.T) {
+func TestRender_defaultFriendlyNameIsRelumeTV(t *testing.T) {
 	// Given
 	id := config.Identity{Serial: "2c4d54ea2832"}
 
 	// When
 	xml, err := Render(id, "192.0.2.10", 80)
 
-	// Then: TV-visible name is Relume; discovery-critical fields unchanged
+	// Then: TV-visible name is relumeTV; discovery-critical fields unchanged
 	if err != nil {
 		t.Fatalf("Render: %v", err)
 	}
 	for _, want := range []string{
-		"<friendlyName>Relume (192.0.2.10)</friendlyName>",
+		"<friendlyName>relumeTV (192.0.2.10)</friendlyName>",
 		"<deviceType>urn:schemas-upnp-org:device:Basic:1</deviceType>",
 		"<manufacturer>Signify</manufacturer>",
 		"<manufacturerURL>http://www.meethue.com</manufacturerURL>",

@@ -60,7 +60,7 @@ func TestCreateEntertainmentConfig_payloadAndID(t *testing.T) {
 	defer srv.Close()
 
 	// When
-	id, err := testClient(srv).CreateEntertainmentConfig("relume", []ConfigMember{
+	id, err := testClient(srv).CreateEntertainmentConfig("relumetv", []ConfigMember{
 		{ServiceRID: "svc-1"}, {ServiceRID: "svc-2", X: 0.5},
 	})
 
@@ -74,7 +74,7 @@ func TestCreateEntertainmentConfig_payloadAndID(t *testing.T) {
 	if gotBody["configuration_type"] != "screen" {
 		t.Errorf("configuration_type = %v", gotBody["configuration_type"])
 	}
-	if gotBody["metadata"].(map[string]any)["name"] != "relume" {
+	if gotBody["metadata"].(map[string]any)["name"] != "relumetv" {
 		t.Errorf("name = %v", gotBody["metadata"])
 	}
 	locs := gotBody["locations"].(map[string]any)["service_locations"].([]any)
@@ -151,7 +151,7 @@ func TestGetEntertainmentConfig_channels(t *testing.T) {
 			t.Errorf("path = %s", r.URL.Path)
 		}
 		_, _ = io.WriteString(w, `{"errors":[],"data":[{
-			"id":"cfg-1","metadata":{"name":"relume"},"status":"inactive",
+			"id":"cfg-1","metadata":{"name":"relumetv"},"status":"inactive",
 			"channels":[
 				{"channel_id":0,"members":[{"service":{"rid":"svc-1","rtype":"entertainment"},"index":0}]},
 				{"channel_id":1,"members":[{"service":{"rid":"svc-2","rtype":"entertainment"},"index":0}]}

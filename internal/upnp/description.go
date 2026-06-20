@@ -7,7 +7,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/trick77/relume/internal/config"
+	"github.com/trick77/relumetv/internal/config"
 )
 
 // ServerHeaderDefault is the exact SERVER header of a real Hue bridge
@@ -26,7 +26,7 @@ const tmplText = `<?xml version="1.0" encoding="UTF-8" ?>
 <URLBase>http://{{.IP}}:{{.Port}}/</URLBase>
 <device>
 <deviceType>urn:schemas-upnp-org:device:Basic:1</deviceType>
-<friendlyName>Relume ({{.IP}})</friendlyName>
+<friendlyName>relumeTV ({{.IP}})</friendlyName>
 <manufacturer>Signify</manufacturer>
 <manufacturerURL>http://www.meethue.com</manufacturerURL>
 <modelDescription>Philips hue Personal Wireless Lighting</modelDescription>

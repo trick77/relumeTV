@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/trick77/relume/internal/config"
+	"github.com/trick77/relumetv/internal/config"
 )
 
 func mustGet(t *testing.T, url string) *http.Response {
@@ -233,8 +233,8 @@ func TestShortConfig_unauthenticated(t *testing.T) {
 	if cfg["factorynew"] != false {
 		t.Errorf("factorynew = %v", cfg["factorynew"])
 	}
-	if cfg["name"] != "Relume" {
-		t.Errorf("name = %v, expected Relume", cfg["name"])
+	if cfg["name"] != "relumeTV" {
+		t.Errorf("name = %v, expected relumeTV", cfg["name"])
 	}
 }
 
@@ -647,7 +647,7 @@ func TestStreamActivation_entertainmentMode_fallsBackToRESTOnDTLSTimeout(t *test
 	json.NewDecoder(resp.Body).Decode(&paired)
 	username := paired[0]["success"]["username"]
 
-	// When: the TV activates the stream — relume confirms it for real (arms the watchdog)
+	// When: the TV activates the stream — relumeTV confirms it for real (arms the watchdog)
 	actResp := mustPut(t, ts.URL+"/api/"+username+"/groups/1", `{"stream":{"active":true}}`)
 	var act []map[string]map[string]any
 	json.NewDecoder(actResp.Body).Decode(&act)
@@ -659,7 +659,7 @@ func TestStreamActivation_entertainmentMode_fallsBackToRESTOnDTLSTimeout(t *test
 	// And: the TV never opens the DTLS stream → the watchdog fires
 	time.Sleep(120 * time.Millisecond)
 
-	// Then: relume has fallen back to REST — a further activation gets the generic ack
+	// Then: relumeTV has fallen back to REST — a further activation gets the generic ack
 	actResp2 := mustPut(t, ts.URL+"/api/"+username+"/groups/1", `{"stream":{"active":true}}`)
 	var act2 []map[string]map[string]any
 	json.NewDecoder(actResp2.Body).Decode(&act2)
@@ -884,7 +884,7 @@ func TestStreamState_fallbackStickyWhenRecoveryDisabled(t *testing.T) {
 	}
 }
 
-// M1 end-to-end via confirmsEntertainment(): after a racing stream-up, relume must
+// M1 end-to-end via confirmsEntertainment(): after a racing stream-up, relumeTV must
 // still confirm entertainment (not be stuck in REST fallback).
 func TestServer_confirmsEntertainment_afterRacingStreamUp(t *testing.T) {
 	for i := 0; i < 100; i++ {
@@ -1050,7 +1050,7 @@ func TestGroupsExposeMinimalEntertainmentGroup(t *testing.T) {
 
 func TestParseGroupLights_realTVCreateBody(t *testing.T) {
 	// The exact body the Ambilight TV sends (from the live log): a light subset plus
-	// type/class. relume must pull out the v1 ids and ignore the rest.
+	// type/class. relumeTV must pull out the v1 ids and ignore the rest.
 	body := []byte(`{"lights":["3","4"],"type":"Entertainment", "class":"TV"}`)
 	ids, ok := parseGroupLights(body)
 	if !ok {

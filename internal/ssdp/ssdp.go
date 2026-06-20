@@ -1,4 +1,4 @@
-// Package ssdp implements the SSDP/UPnP responder that lets relume present
+// Package ssdp implements the SSDP/UPnP responder that lets relumeTV present
 // itself to the TV as a Gen-2 Hue bridge. It listens on the multicast
 // 239.255.255.250:1900, answers M-SEARCH queries immediately and sends
 // periodic NOTIFY ssdp:alive broadcasts.
@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/trick77/relume/internal/config"
-	"github.com/trick77/relume/internal/netutil"
-	"github.com/trick77/relume/internal/upnp"
+	"github.com/trick77/relumetv/internal/config"
+	"github.com/trick77/relumetv/internal/netutil"
+	"github.com/trick77/relumetv/internal/upnp"
 )
 
 const (
@@ -39,7 +39,7 @@ type Responder struct {
 }
 
 // New creates a Responder. advIP is the IP advertised in the LOCATION header
-// (the address of relume's HTTP server).
+// (the address of relumeTV's HTTP server).
 func New(id config.Identity, advIP string, httpPort int, log *slog.Logger) *Responder {
 	return &Responder{id: id, advIP: advIP, httpPort: httpPort, log: log}
 }
