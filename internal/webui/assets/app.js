@@ -277,7 +277,7 @@ function renderDashboard(s) {
         <div class="spacer"></div><div class="health"><span class="${healthDotClass(s.health)}"></span> ${esc(healthLabel(s.health))}</div></div>
       <div class="pipe">
         <div class="step"><div class="lbl">Hue Bridge Pro</div><div class="val">${s.proPaired ? `<span class="ok">✓</span> Paired` : "— Unpaired"}</div><div class="sub">${esc(s.proHost)}${s.proBridgeId ? `<br>${esc(s.proBridgeId.toUpperCase())}` : ""}</div></div>
-        <div class="step"><div class="lbl">TV pairing</div><div class="val">${s.tvClients.length} ${s.tvClients.length === 1 ? "client" : "clients"}</div><div class="sub">${s.tvClients.map(c => `Philips<br>${esc(tvModel(c))}`).join("<br>")}</div></div>
+        <div class="step"><div class="lbl">TV pairing</div><div class="val">${s.tvClients.length ? "Philips TV" : "—"}</div><div class="sub">${s.tvClients.map(c => esc(tvModel(c))).join("<br>")}</div></div>
         <div class="step"><div class="lbl">Mode <span class="info" tabindex="0" data-tip="Entertainment: low-latency DTLS stream to the Hue Bridge Pro (default). REST: per-light REST writes — the automatic fallback when the TV is not streaming entertainment.">i</span></div><div class="val">${modeLabel(s)}${s.fallback ? " (fallback)" : ""}</div><div class="sub">${esc(modeSub(s))}</div></div>
         <div class="step"><div class="lbl">Uptime</div><div class="val" id="uptime">${s.startedAt ? esc("↑ " + fmtUptime(Date.now() - Date.parse(s.startedAt))) : "—"}</div><div class="sub">Running</div></div>
       </div>
