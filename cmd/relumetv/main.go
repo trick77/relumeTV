@@ -359,10 +359,12 @@ func runServe(args []string, log *slog.Logger) error {
 			proStats:     proStats,
 			jitterStats:  jitterStats,
 			setup:        setup,
-			// UI-only display name for relumeTV's own bridge. NOTE: the actual mDNS
-			// instance the TV discovers is still "Philips Hue - …" (internal/mdns),
-			// deliberately unchanged so discovery keeps working.
-			advName: "relumeTV Bridge - " + bridgeID[len(bridgeID)-6:],
+			// The name the TV shows for this bridge — matches the TV-facing /config
+			// name and UPnP friendlyName ("relumeTV-XXXXXX", a single token; the TV
+			// truncates at the first space). NOTE: the mDNS instance the TV discovers
+			// is still "Philips Hue - …" (internal/mdns), deliberately unchanged so
+			// discovery keeps working.
+			advName: "relumeTV-" + bridgeID[len(bridgeID)-6:],
 			version: version,
 			started: time.Now(),
 			// The configured DTLS easing time constant (ms), so the Stream card's

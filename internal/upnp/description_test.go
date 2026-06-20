@@ -19,7 +19,9 @@ func TestRender_defaultFriendlyNameIsRelumeTV(t *testing.T) {
 		t.Fatalf("Render: %v", err)
 	}
 	for _, want := range []string{
-		"<friendlyName>relumeTV (192.0.2.10)</friendlyName>",
+		// Single-token name with the bridge-id suffix (BridgeID of this serial ends
+		// EA2832). No space — the TV truncates the displayed name at the first space.
+		"<friendlyName>relumeTV-EA2832</friendlyName>",
 		"<deviceType>urn:schemas-upnp-org:device:Basic:1</deviceType>",
 		"<manufacturer>Signify</manufacturer>",
 		"<manufacturerURL>http://www.meethue.com</manufacturerURL>",

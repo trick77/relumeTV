@@ -567,10 +567,11 @@ func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 func (s *Server) shortConfig() map[string]any {
 	id := s.cfg.Identity
 	return map[string]any{
-		// TV-visible bridge name. Append the bridge-id suffix (the canonical Hue
-		// identifier, matching the "Philips Hue - XXXXXX" mDNS instance) so the bridge
-		// is distinguishable in the TV's Ambilight+Hue picker instead of a bare "relumeTV".
-		"name":             "relumeTV - " + bridgeIDSuffix(id.BridgeID()),
+		// TV-visible bridge name. Append the bridge-id suffix so the bridge is
+		// distinguishable in the TV's Ambilight+Hue picker instead of a bare "relumeTV".
+		// NO spaces: the TV truncates the displayed bridge name at the first space, so
+		// "relumeTV - XXXXXX" would show as just "relumeTV". A single token survives.
+		"name":             "relumeTV-" + bridgeIDSuffix(id.BridgeID()),
 		"datastoreversion": "131",
 		"swversion":        "1967054020",
 		"apiversion":       "1.67.0",

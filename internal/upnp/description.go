@@ -26,7 +26,7 @@ const tmplText = `<?xml version="1.0" encoding="UTF-8" ?>
 <URLBase>http://{{.IP}}:{{.Port}}/</URLBase>
 <device>
 <deviceType>urn:schemas-upnp-org:device:Basic:1</deviceType>
-<friendlyName>relumeTV ({{.IP}})</friendlyName>
+<friendlyName>relumeTV-{{.Suffix}}</friendlyName>
 <manufacturer>Signify</manufacturer>
 <manufacturerURL>http://www.meethue.com</manufacturerURL>
 <modelDescription>Philips hue Personal Wireless Lighting</modelDescription>
@@ -44,17 +44,28 @@ var tmpl = template.Must(template.New("description").Parse(tmplText))
 
 // Render generates the description.xml for the given identity and address.
 func Render(id config.Identity, ip string, port int) (string, error) {
+	// Suffix is the last 6 of the bridge id (the canonical Hue short identifier),
+	// matching the TV-facing /config name so the bridge shows as "relumeTV-XXXXXX"
+	// wherever the TV reads the name. Single token — the TV truncates at the first
+	// space, so the previous "relumeTV (IP)" displayed as a bare "relumeTV".
+	bridgeID := id.BridgeID()
+	suffix := bridgeID
+	if len(bridgeID) > 6 {
+		suffix = bridgeID[len(bridgeID)-6:]
+	}
 	var sb strings.Builder
 	err := tmpl.Execute(&sb, struct {
 		IP     string
 		Port   int
 		Serial string
 		UUID   string
+		Suffix string
 	}{
 		IP:     ip,
 		Port:   port,
 		Serial: id.Serial,
 		UUID:   id.UUID(),
+		Suffix: suffix,
 	})
 	return sb.String(), err
 }

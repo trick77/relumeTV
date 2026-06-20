@@ -236,7 +236,7 @@ func TestShortConfig_unauthenticated(t *testing.T) {
 	// The TV-visible name carries the bridge-id suffix so it is identifiable in the
 	// Ambilight+Hue picker (not a bare "relumeTV").
 	bridgeID, _ := cfg["bridgeid"].(string)
-	wantName := "relumeTV - " + bridgeID[len(bridgeID)-6:]
+	wantName := "relumeTV-" + bridgeID[len(bridgeID)-6:]
 	if cfg["name"] != wantName {
 		t.Errorf("name = %v, expected %q", cfg["name"], wantName)
 	}
