@@ -136,26 +136,31 @@ body {
 .logrow .msg { color: var(--dim); min-width: 0; }
 .logrow .attrs { color: var(--faint); min-width: 0; word-break: break-word; }
 
-/* setup assistant (vertical stepper). The step number is vertically CENTERED against
-   its card; the connecting line is drawn as an absolute segment from just below the
-   number down through the gap to the next step's rail. */
+/* setup assistant (vertical stepper). The step number sits at a FIXED offset from the
+   top of each card (aligned with the step title), not centered against the card. With a
+   fixed offset the connecting line meets every circle the same way regardless of card
+   height, so the segments are evenly spaced from the top circle to the bottom one. The
+   geometry below is derived from these constants:
+     --num-top: 15px  (number's top edge from the card top → its center aligns the title)
+     number Ø 30px, inter-step gap 14px. */
 .steps { display: flex; flex-direction: column; gap: 14px; }
 .step { display: flex; gap: 16px; }
 .steps .step { align-items: stretch; }
 .steps .rail {
   position: relative; width: 30px; flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center;
+  display: flex; align-items: flex-start; justify-content: center;
 }
 .num {
-  position: relative; z-index: 1;
+  position: relative; z-index: 1; margin-top: 15px;
   width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
   font-weight: 700; font-size: 13px; flex-shrink: 0; border: 1px solid var(--line); background: var(--panel2); color: var(--dim);
 }
-/* From just below the centered number to the bottom of the card plus the inter-step
-   gap, so it visually links to the next step's number. */
+/* From the bottom of this number (num-top 15 + Ø 30 = 45px) to the top of the next
+   number (gap 14 + num-top 15 = 29px below this card's bottom). Fixed offsets → every
+   segment connects circle-to-circle identically, evenly spaced top to bottom. */
 .steps .line {
   position: absolute; left: 50%; transform: translateX(-50%);
-  top: calc(50% + 19px); bottom: -23px; width: 2px; background: var(--line);
+  top: 45px; bottom: -29px; width: 2px; background: var(--line);
 }
 .steps .step.done .num { background: rgba(34, 197, 94, .15); border-color: rgba(34, 197, 94, .5); color: var(--ok); }
 .steps .step.done .line { background: rgba(34, 197, 94, .4); }
@@ -167,8 +172,8 @@ body {
 .steps .card { flex: 1; }
 .steps .step.active .card { border-color: rgba(124, 140, 255, .4); }
 .steps .step.todo { opacity: .55; }
-.steps .card h3 { font-size: 15px; font-weight: 650; margin-bottom: 3px; text-transform: none; letter-spacing: 0; color: var(--txt); }
-.steps .card .d { font-size: 12.5px; color: var(--dim); }
+.steps .card h3 { font-size: 16px; font-weight: 650; margin-bottom: 5px; text-transform: none; letter-spacing: 0; color: var(--txt); }
+.steps .card .d { font-size: 14px; line-height: 1.55; color: var(--dim); }
 .pill { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; padding: 3px 8px; border-radius: 6px; margin-left: auto; }
 .pill.ok { background: rgba(34, 197, 94, .15); color: var(--ok); }
 .pill.wait { background: rgba(240, 180, 41, .12); color: var(--warn); }

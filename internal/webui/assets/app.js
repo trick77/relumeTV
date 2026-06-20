@@ -242,7 +242,7 @@ const SETUP_STEPS = [
     body: (s) =>
       `In the TV's <b>Ambilight+Hue</b> settings, start the bridge search, pick <b>${esc(s.bridgeName)}</b> and <b>link</b> it (confirm the pairing on the TV — this is essential, not just selecting it). Then wait here: <b>do not assign any bulbs yet</b> — that's the final step, after the Hue Bridge Pro is back on.`,
     action: () =>
-      `<div class="action"><span class="dot pulse"></span><div><div class="big">Waiting for the TV to pair…</div></div></div>`,
+      `<div class="action"><span class="dot pulse"></span><div><div class="big">Waiting for the TV to link…</div></div></div>`,
   },
   {
     title: "Turn the Hue Bridge Pro back on",
