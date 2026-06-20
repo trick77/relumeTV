@@ -251,16 +251,21 @@ func (w *proWatcher) tick() (reconnected bool) {
 		return false
 	}
 
-	w.log.Warn("hue bridge pro not reachable — is it turned off? "+
+	// During setup the Pro is deliberately powered off (wizard steps "disconnect" then
+	// "turn back on"), so these unreachable/retry messages are not only noise — the
+	// alarming "turn it back on" guidance would mislead the user into powering the Pro
+	// back on too early, before the TV has paired with relumeTV, breaking the flow.
+	// Suppress them to Debug until the setup is committed; the wizard narrates the steps.
+	w.retryLog("hue bridge pro not reachable — is it turned off? "+
 		"Turn it back on (or check its power/network cable); "+
 		"relumeTV can't control the lights until it is back. Retrying.", "", pro, "err", err)
 
 	host, discoveryID, derr := resolveProHost(pro.DiscoveryID, w.discover, w.log)
 	if derr != nil || host == "" {
 		if pro.DiscoveryID != "" {
-			w.log.Warn("hue bridge pro reconnect: stored bridge not found via discovery; will retry", "discoveryId", pro.DiscoveryID, "err", derr)
+			w.retryLog("hue bridge pro reconnect: stored bridge not found via discovery; will retry", "discoveryId", pro.DiscoveryID, "err", derr)
 		} else {
-			w.log.Warn("hue bridge pro reconnect: not found via discovery; will retry", "err", derr)
+			w.retryLog("hue bridge pro reconnect: not found via discovery; will retry", "err", derr)
 		}
 		w.reportReachable(false)
 		return false
@@ -270,7 +275,7 @@ func (w *proWatcher) tick() (reconnected bool) {
 	if !w.skipTLS && !pro.SkipTLSVerify {
 		fp, ferr := w.fetchFingerprint(host)
 		if ferr != nil {
-			w.log.Warn("hue bridge pro reconnect: cert fetch failed; will retry", "host", host, "err", ferr)
+			w.retryLog("hue bridge pro reconnect: cert fetch failed; will retry", "host", host, "err", ferr)
 			w.reportReachable(false)
 			return false
 		}
@@ -284,7 +289,7 @@ func (w *proWatcher) tick() (reconnected bool) {
 		updated.DiscoveryID = discoveryID
 	}
 	if verr := w.healthCheck(updated); verr != nil {
-		w.log.Warn("hue bridge pro reconnect: still unreachable", "host", host, "err", verr)
+		w.retryLog("hue bridge pro reconnect: still unreachable", "host", host, "err", verr)
 		w.reportReachable(false)
 		return false
 	}
@@ -307,4 +312,16 @@ func (w *proWatcher) reportReachable(reachable bool) {
 	if w.onReachable != nil {
 		w.onReachable(reachable)
 	}
+}
+
+// retryLog logs a watcher unreachable/retry message at WARN once the setup is committed
+// (steady state — a Pro that goes away then is a real problem), but only at DEBUG while
+// the setup is still in progress: there the Pro is intentionally powered off as a wizard
+// step, so a loud "turn it back on" would mislead the user into breaking the flow.
+func (w *proWatcher) retryLog(msg string, args ...any) {
+	if w.cfg.Committed() {
+		w.log.Warn(msg, args...)
+		return
+	}
+	w.log.Debug(msg, args...)
 }
