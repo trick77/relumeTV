@@ -121,7 +121,7 @@ func selectProForPairing(discover func() ([]bridgepro.DiscoveredBridge, error), 
 
 // pinProShell builds the *config.BridgePro shell for a host: it pins the leaf
 // certificate (unless skipTLS) and returns the shell ready for Pair. discoveryID
-// is the cloud-discovery id captured at selection and is carried onto the shell so
+// is the discovery id captured at selection and is carried onto the shell so
 // it survives the eventual SetPro (and disambiguates the bridge on later reconnects).
 func pinProShell(host, discoveryID string, skipTLS bool, fetchFingerprint func(host string) (string, error)) (*config.BridgePro, error) {
 	pro := &config.BridgePro{Host: host, SkipTLSVerify: skipTLS, DiscoveryID: discoveryID}
@@ -174,9 +174,23 @@ type proWatcher struct {
 	applyProvider    func(*config.BridgePro)
 }
 
-// discoverThrottle is the minimum spacing between mDNS re-discovery browses in the
-// watcher, independent of its (possibly fast, setup-time) health-check cadence.
-const discoverThrottle = 60 * time.Second
+// Minimum spacing between mDNS re-discovery browses in the watcher, independent of its
+// health-check cadence. Shorter during setup so the step-5 "Pro back on" transition is
+// detected promptly even when the power-cycle gave the Pro a new DHCP IP (a same-IP
+// return is caught instantly by the health check, no browse); gentler once committed.
+const (
+	discoverThrottleSetup  = 15 * time.Second
+	discoverThrottleSteady = 60 * time.Second
+)
+
+// discoverThrottle returns the current re-discovery spacing (faster while the setup is
+// still in progress).
+func (w *proWatcher) discoverThrottle() time.Duration {
+	if w.cfg.Committed() {
+		return discoverThrottleSteady
+	}
+	return discoverThrottleSetup
+}
 
 // newProWatcher constructs a proWatcher with the production seams wired in.
 func newProWatcher(cfg *config.Config, clip *clipv1.Server, controlled *bridge.ControlledSet, live *liveColors, stats *proStats, skipTLS bool, log *slog.Logger) *proWatcher {
@@ -288,7 +302,7 @@ func (w *proWatcher) tick() (reconnected bool) {
 	// the next health check, no browse). Only re-browse at discoverThrottle cadence, so the
 	// fast setup tick — which runs while the Pro is intentionally off for minutes — doesn't
 	// browse the network every few seconds.
-	if !w.lastDiscover.IsZero() && time.Since(w.lastDiscover) < discoverThrottle {
+	if !w.lastDiscover.IsZero() && time.Since(w.lastDiscover) < w.discoverThrottle() {
 		w.reportReachable(false)
 		return false
 	}

@@ -72,7 +72,7 @@ type BridgePro struct {
 	// BridgeID is the Hue Bridge Pro's bridge id, captured at pairing (best-effort).
 	// A stable reference in logs, independent of the IP.
 	BridgeID string `json:"bridgeId,omitempty"`
-	// DiscoveryID is the Pro's cloud-discovery id, captured at pairing, so a later
+	// DiscoveryID is the Pro's discovery id, captured at pairing, so a later
 	// re-discovery can pick THIS bridge rather than bridges[0] on a multi-bridge LAN.
 	DiscoveryID string `json:"discoveryId,omitempty"`
 }

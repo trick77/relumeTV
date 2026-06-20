@@ -51,10 +51,10 @@ type setupStatus struct {
 	step int
 
 	// Preconditions, set by autoPairPro from the discovery outcome:
-	//   webLookupOK=false        -> (c) cloud lookup unavailable
+	//   discoveryOK=false        -> (c) mDNS discovery unavailable
 	//   discoveredHost==""       -> (a) no bridge found
 	//   bridgeIsPro==false       -> (b) the found bridge is not a Pro
-	webLookupOK    bool
+	discoveryOK    bool
 	discoveredHost string
 	bridgeIsPro    bool
 	precondMsg     string
@@ -85,7 +85,7 @@ type setupStatus struct {
 func newSetupStatus(cfg *config.Config, active func() bool, commit func() error, log *slog.Logger) *setupStatus {
 	s := &setupStatus{
 		step:        stepPairPro,
-		webLookupOK: true, // optimistic until autoPairPro reports otherwise
+		discoveryOK: true, // optimistic until autoPairPro reports otherwise
 		cfg:         cfg,
 		active:      active,
 		commit:      commit,
@@ -110,10 +110,10 @@ func (s *setupStatus) CurrentStep() int {
 }
 
 // Precond returns the discovery precondition state for the snapshot/UI banner.
-func (s *setupStatus) Precond() (webLookupOK bool, discoveredHost string, bridgeIsPro bool, msg string) {
+func (s *setupStatus) Precond() (discoveryOK bool, discoveredHost string, bridgeIsPro bool, msg string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.webLookupOK, s.discoveredHost, s.bridgeIsPro, s.precondMsg
+	return s.discoveryOK, s.discoveredHost, s.bridgeIsPro, s.precondMsg
 }
 
 // ProReachable reports the latest Pro reachability for the snapshot.
@@ -132,9 +132,9 @@ func (s *setupStatus) TVDescriptorSeen() bool {
 
 // setPrecond records the discovery precondition outcome from autoPairPro and pushes a
 // snapshot. msg is empty on success.
-func (s *setupStatus) setPrecond(webLookupOK bool, discoveredHost string, bridgeIsPro bool, msg string) {
+func (s *setupStatus) setPrecond(discoveryOK bool, discoveredHost string, bridgeIsPro bool, msg string) {
 	s.mu.Lock()
-	s.webLookupOK = webLookupOK
+	s.discoveryOK = discoveryOK
 	s.discoveredHost = discoveredHost
 	s.bridgeIsPro = bridgeIsPro
 	s.precondMsg = msg

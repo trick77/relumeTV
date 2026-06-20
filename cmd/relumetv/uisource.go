@@ -90,11 +90,11 @@ func (u *uiSource) CurrentStep() int { return u.setup.CurrentStep() }
 func (u *uiSource) FirstRun() bool { return u.cfg.FirstRun() }
 
 // SetupInfo bundles the discovery preconditions and live setup signals for the wizard.
-func (u *uiSource) SetupInfo() (discoveredHost string, bridgeIsPro, webLookupOK, proReachable, tvDescriptorSeen bool, precondMsg string) {
-	webLookupOK, discoveredHost, bridgeIsPro, precondMsg = u.setup.Precond()
+func (u *uiSource) SetupInfo() (discoveredHost string, bridgeIsPro, discoveryOK, proReachable, tvDescriptorSeen bool, precondMsg string) {
+	discoveryOK, discoveredHost, bridgeIsPro, precondMsg = u.setup.Precond()
 	proReachable = u.setup.ProReachable()
 	tvDescriptorSeen = u.setup.TVDescriptorSeen()
-	return discoveredHost, bridgeIsPro, webLookupOK, proReachable, tvDescriptorSeen, precondMsg
+	return discoveredHost, bridgeIsPro, discoveryOK, proReachable, tvDescriptorSeen, precondMsg
 }
 
 // Active reports whether the TV is currently driving any light — tied to the same

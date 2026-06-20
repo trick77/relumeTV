@@ -101,15 +101,15 @@ type Snapshot struct {
 	DiscoveredHost string `json:"discoveredHost,omitempty"`
 	// BridgeIsPro is whether the discovered bridge is a real Pro (modelid BSB003).
 	BridgeIsPro bool `json:"bridgeIsPro"`
-	// WebLookupOK is whether the local mDNS discovery subsystem is working.
-	WebLookupOK bool `json:"webLookupOK"`
+	// DiscoveryOK is whether the local mDNS discovery subsystem is working.
+	DiscoveryOK bool `json:"discoveryOK"`
 	// ProReachable is the live Pro reachability from the setup reachability poller
 	// (drives steps 3 and 5).
 	ProReachable bool `json:"proReachable"`
 	// TVDescriptorSeen is whether the TV has fetched the descriptor (step 2 signal).
 	TVDescriptorSeen bool `json:"tvDescriptorSeen"`
 	// PrecondMsg is a human-readable precondition warning for the wizard banner:
-	// (a) no bridge found, (b) the bridge is not a Pro, or (c) cloud lookup down.
+	// (a) no bridge found, (b) the bridge is not a Pro, or (c) mDNS discovery unavailable.
 	// Empty when there is nothing to flag.
 	PrecondMsg string `json:"precondMsg,omitempty"`
 }
@@ -172,10 +172,10 @@ type StateSource interface {
 	// FirstRun reports a fresh install (no config file existed at startup).
 	FirstRun() bool
 	// SetupInfo bundles the discovery preconditions and live setup signals:
-	// discoveredHost (pre-pairing Pro host), bridgeIsPro (modelid BSB003), webLookupOK
+	// discoveredHost (pre-pairing Pro host), bridgeIsPro (modelid BSB003), discoveryOK
 	// (mDNS discovery working), proReachable (live), tvDescriptorSeen (step 2), and
 	// precondMsg (the wizard banner text, empty when nothing to flag).
-	SetupInfo() (discoveredHost string, bridgeIsPro, webLookupOK, proReachable, tvDescriptorSeen bool, precondMsg string)
+	SetupInfo() (discoveredHost string, bridgeIsPro, discoveryOK, proReachable, tvDescriptorSeen bool, precondMsg string)
 }
 
 func rfc3339(t time.Time) string {
@@ -229,7 +229,7 @@ func BuildSnapshot(src StateSource) Snapshot {
 	s.SetupComplete = src.SetupComplete()
 	s.CurrentStep = src.CurrentStep()
 	s.FirstRun = src.FirstRun()
-	s.DiscoveredHost, s.BridgeIsPro, s.WebLookupOK, s.ProReachable, s.TVDescriptorSeen, s.PrecondMsg = src.SetupInfo()
+	s.DiscoveredHost, s.BridgeIsPro, s.DiscoveryOK, s.ProReachable, s.TVDescriptorSeen, s.PrecondMsg = src.SetupInfo()
 
 	switch {
 	case !paired:
