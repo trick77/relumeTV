@@ -93,3 +93,44 @@ func (f *frameStats) trim(now time.Time) {
 	}
 	f.times = f.times[i:]
 }
+
+// jitterStaleAfter is how long a jump window stays valid without a refresh. The
+// receiver/streamer report once per 5s rollup, so a little over two windows lets a
+// single missed rollup pass without blanking, yet the metric clears to "no value"
+// within ~12s of the stream stopping.
+const jitterStaleAfter = 12 * time.Second
+
+// jitterStats holds the latest per-window max brightness jump on the incoming TV
+// stream (input) and on relume's smoothed sent stream (sent). The gap between them
+// is the jitter the DTLS-path easing removed. Only the brightness axis is kept — it
+// is the visible flicker — and only the most recent 5s window, stamped so the metric
+// reads as "no value" (UI longdash) once the stream stops refreshing it.
+type jitterStats struct {
+	inputBri  atomic.Uint32
+	sentBri   atomic.Uint32
+	updatedAt atomic.Int64 // unix nanos of the last sent-side update
+}
+
+func newJitterStats() *jitterStats { return &jitterStats{} }
+
+// setInput records the latest incoming-stream brightness jump.
+func (j *jitterStats) setInput(briJump uint32) { j.inputBri.Store(briJump) }
+
+// setSent records the latest sent-stream brightness jump and stamps freshness. The
+// sent side only fires while relume is streaming to the Pro over DTLS, so its
+// timestamp is what gates the metric on/off.
+func (j *jitterStats) setSent(briJump uint32) {
+	j.sentBri.Store(briJump)
+	j.updatedAt.Store(time.Now().UnixNano())
+}
+
+// Reduction returns the latest input and sent brightness jumps and whether they are
+// fresh. ok is false (UI shows a longdash) when no sent-side window has landed within
+// jitterStaleAfter — i.e. relume is not streaming to the Pro over DTLS.
+func (j *jitterStats) Reduction() (inBri, sentBri int, ok bool) {
+	u := j.updatedAt.Load()
+	if u == 0 || time.Since(time.Unix(0, u)) > jitterStaleAfter {
+		return 0, 0, false
+	}
+	return int(j.inputBri.Load()), int(j.sentBri.Load()), true
+}

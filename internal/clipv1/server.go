@@ -23,7 +23,7 @@ import (
 	"github.com/trick77/relume/internal/upnp"
 )
 
-// LightProvider supplies the (already v1-translated) light list of the Bridge Pro
+// LightProvider supplies the (already v1-translated) light list of the Hue Bridge Pro
 // and sets light states (REST fallback). It is set by the backend (M2+); if it is
 // nil, the server returns empty lists (M1).
 type LightProvider interface {
@@ -54,7 +54,7 @@ type Server struct {
 	// via -mode entertainment; REST stays the default.
 	EntertainmentMode bool
 
-	// ControlledLights, if set, returns the Bridge Pro light UUIDs the TV is
+	// ControlledLights, if set, returns the Hue Bridge Pro light UUIDs the TV is
 	// currently driving (the flash-target set). Surfaced in the activity rollup so
 	// the live Ambilight light set is visible. Wired to ControlledSet by main.
 	ControlledLights func() []string
@@ -145,7 +145,7 @@ func (s *Server) MarkDTLSStreamDown() {
 	s.stream.markStreamDown(s.log)
 }
 
-// SetLightProvider registers the source for the light list (Bridge Pro backend).
+// SetLightProvider registers the source for the light list (Hue Bridge Pro backend).
 // Safe to call at runtime: the backend may be paired asynchronously after the
 // HTTP server is already serving the TV.
 func (s *Server) SetLightProvider(p LightProvider) {
@@ -154,7 +154,7 @@ func (s *Server) SetLightProvider(p LightProvider) {
 	s.lightsMu.Unlock()
 }
 
-// ForwardLight pushes a light state (v1 id + state) to the Bridge Pro via the
+// ForwardLight pushes a light state (v1 id + state) to the Hue Bridge Pro via the
 // current provider — used by the entertainment receiver to drive the lights from
 // the decoded DTLS stream, reusing the same coalescing async path as REST writes.
 // No-op until a Pro is paired.
@@ -171,7 +171,7 @@ func (s *Server) lightProvider() LightProvider {
 	return s.lights
 }
 
-// lightsV1 returns the Bridge Pro lights (v1-translated), or an empty map if no
+// lightsV1 returns the Hue Bridge Pro lights (v1-translated), or an empty map if no
 // backend is paired yet or the read fails. This is the single source of truth for
 // the lights both in GET /api/{user} (full datastore) and GET /api/{user}/lights.
 func (s *Server) lightsV1() map[string]any {
@@ -412,7 +412,7 @@ func (s *Server) flushActivity(window time.Duration) {
 	if !lastWrite.IsZero() {
 		attrs = append(attrs, "since_last_write", time.Since(lastWrite).Round(time.Second).String())
 	}
-	// Forwarding health from the Bridge Pro provider (dropped/coalesced frames and
+	// Forwarding health from the Hue Bridge Pro provider (dropped/coalesced frames and
 	// failed writes), if the backend exposes it.
 	if ds, ok := s.lightProvider().(drainStatsProvider); ok {
 		coalesced, forwardErrors := ds.DrainStatsDelta()
@@ -591,7 +591,7 @@ func (s *Server) handleDatastore(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleLights returns the lights of the Bridge Pro (v1-translated) or an empty
+// handleLights returns the lights of the Hue Bridge Pro (v1-translated) or an empty
 // list if no backend is paired yet (M1).
 func (s *Server) handleLights(w http.ResponseWriter, r *http.Request) {
 	if !s.authorized(w, r) {
@@ -613,7 +613,7 @@ func (s *Server) handleLight(w http.ResponseWriter, r *http.Request) {
 	lights, err := lp.LightsV1()
 	if err != nil {
 		s.log.Warn("reading lights from hue bridge pro", "err", err)
-		writeError(w, 901, "/lights/"+id, "bridge pro error")
+		writeError(w, 901, "/lights/"+id, "hue bridge pro error")
 		return
 	}
 	light, ok := lights[id]
@@ -625,7 +625,7 @@ func (s *Server) handleLight(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleSetLightState handles the REST control path: accept v1 state, translate
-// it to v2 and forward it to the Bridge Pro.
+// it to v2 and forward it to the Hue Bridge Pro.
 func (s *Server) handleSetLightState(w http.ResponseWriter, r *http.Request) {
 	if !s.authorized(w, r) {
 		return
@@ -638,7 +638,7 @@ func (s *Server) handleSetLightState(w http.ResponseWriter, r *http.Request) {
 	}
 	lp := s.lightProvider()
 	if lp == nil {
-		writeError(w, 3, "/lights/"+id, "no bridge pro paired")
+		writeError(w, 3, "/lights/"+id, "no hue bridge pro paired")
 		return
 	}
 	// Defense in depth: restrict the per-light write to the TV's requested Ambilight
@@ -659,11 +659,11 @@ func (s *Server) handleSetLightState(w http.ResponseWriter, r *http.Request) {
 		s.log.Info("entertainment mode: TV driving via per-light REST writes — no DTLS stream opened " +
 			"(not a fallback; the TV simply isn't streaming entertainment)")
 	}
-	// Optimistic: the provider queues the write and forwards it to the Bridge Pro
+	// Optimistic: the provider queues the write and forwards it to the Hue Bridge Pro
 	// asynchronously, so this returns immediately without blocking on the round-trip.
 	if err := lp.SetLightV1(id, state); err != nil {
 		s.log.Warn("setting light", "id", id, "err", err)
-		writeError(w, 901, "/lights/"+id+"/state", "bridge pro error")
+		writeError(w, 901, "/lights/"+id+"/state", "hue bridge pro error")
 		return
 	}
 	writeJSON(w, lightStateSuccess(id, state))

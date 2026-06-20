@@ -1,4 +1,4 @@
-// Package translate translates between the CLIP v2 model of the Bridge Pro and the
+// Package translate translates between the CLIP v2 model of the Hue Bridge Pro and the
 // CLIP v1 representation that the Ambilight TV expects, including a stable
 // mapping between v1 light IDs (numeric) and v2 resource UUIDs.
 package translate
@@ -19,7 +19,7 @@ type LightMap struct {
 
 // LightsV1 translates the v2 lights into the v1 structure. Only color-capable
 // lights are offered: the Ambilight stream pushes xy colors, so non-color bulbs
-// (white/CT/dimmable/on-off) cannot follow it and would make the Bridge Pro
+// (white/CT/dimmable/on-off) cannot follow it and would make the Hue Bridge Pro
 // reject the xy writes (207). Numeric v1 IDs are assigned over the KEPT lights in
 // the caller's (UUID-sorted) order, so they stay stable while the bulb set is.
 func LightsV1(lights []bridgepro.Light) LightMap {

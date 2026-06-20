@@ -13,21 +13,21 @@ import (
 	"github.com/trick77/relume/internal/translate"
 )
 
-// lightCacheTTL limits how often the Bridge Pro is queried for lights.
+// lightCacheTTL limits how often the Hue Bridge Pro is queried for lights.
 const lightCacheTTL = 5 * time.Second
 
 // proClient is the Pro read + control surface the provider needs. It aliases the
 // canonical bridgepro.ProController (defined in the producer package) so the
-// optimistic control path can be tested without a live Bridge Pro.
+// optimistic control path can be tested without a live Hue Bridge Pro.
 type proClient = bridgepro.ProController
 
-// LightProvider implements clipv1.LightProvider on top of the Bridge Pro and
+// LightProvider implements clipv1.LightProvider on top of the Hue Bridge Pro and
 // holds the v1→UUID mapping for control (REST fallback path).
 type LightProvider struct {
 	client proClient
 	log    *slog.Logger
 
-	// OnControlled, if set, is called with the Bridge Pro UUID of each light the TV
+	// OnControlled, if set, is called with the Hue Bridge Pro UUID of each light the TV
 	// drives, on every per-light forward. It feeds the sliding-window ControlledSet
 	// so the restart/idle flash and idle-off touch only the bulbs the TV is
 	// currently driving, not the whole home. Wired by main.
@@ -40,19 +40,19 @@ type LightProvider struct {
 	OnColor func(v1id string, state map[string]any)
 
 	// OnForward, if set, is called once per light state successfully written to the
-	// Bridge Pro over REST (coalesced; dropped frames never reach the Pro and are not
+	// Hue Bridge Pro over REST (coalesced; dropped frames never reach the Pro and are not
 	// counted). Lets the web UI show the live relume→Pro REST write rate — the
 	// REST-path counterpart to the DTLS sendLoop's frame rate. Wired by main.
 	OnForward func()
 
 	// OnCoalesce, if set, is called once per frame DROPPED because a newer state for
-	// the same light arrived before the Bridge Pro accepted the previous one — the
+	// the same light arrived before the Hue Bridge Pro accepted the previous one — the
 	// optimistic path sparing the Pro a write it could not keep up with. This is
 	// healthy backpressure, NOT an error. Fed to the web UI as a drops/s rate. Wired
 	// by main.
 	OnCoalesce func()
 
-	// OnForwardErr, if set, is called once per FAILED REST write to the Bridge Pro (a
+	// OnForwardErr, if set, is called once per FAILED REST write to the Hue Bridge Pro (a
 	// down/unreachable Pro, a 503 overflow). Unlike OnCoalesce this is the real error
 	// signal. Fed to the web UI as a cumulative count. Wired by main.
 	OnForwardErr func()
@@ -64,15 +64,15 @@ type LightProvider struct {
 	fetchedAt time.Time
 
 	// Optimistic REST control: the TV's per-light writes are acknowledged
-	// immediately (see SetLightV1) and forwarded to the Bridge Pro asynchronously
+	// immediately (see SetLightV1) and forwarded to the Hue Bridge Pro asynchronously
 	// by drain. pending keeps only the latest state per light, so intermediate
-	// Ambilight frames the Bridge Pro cannot keep up with are coalesced away.
+	// Ambilight frames the Hue Bridge Pro cannot keep up with are coalesced away.
 	ctrlMu   sync.Mutex
 	pending  map[string]map[string]any
 	draining bool
 
 	// Forward errors are summarized rather than logged per failed write: the
-	// optimistic ack removes the old per-write back-pressure, so a down Bridge Pro
+	// optimistic ack removes the old per-write back-pressure, so a down Hue Bridge Pro
 	// would otherwise spam a Warn many times per second (cf. the Ambilight activity
 	// summary). errCount accumulates failures between rollups.
 	errMu      sync.Mutex
@@ -81,7 +81,7 @@ type LightProvider struct {
 
 	// Window stats for the activity rollup, reset by DrainStatsDelta. coalesced
 	// counts frames dropped because a newer state for the same light arrived before
-	// the Bridge Pro accepted the previous one (the Pro can't keep up); forwardErr
+	// the Hue Bridge Pro accepted the previous one (the Pro can't keep up); forwardErr
 	// counts failed writes to the Pro.
 	coalesced  atomic.Uint64
 	forwardErr atomic.Uint64
@@ -97,7 +97,7 @@ func (p *LightProvider) DrainStatsDelta() (coalesced, forwardErrors uint64) {
 // suppressed count), matching the Ambilight activity-summary cadence.
 const errLogInterval = 30 * time.Second
 
-// NewLightProvider creates a provider for the given Bridge Pro. log receives the
+// NewLightProvider creates a provider for the given Hue Bridge Pro. log receives the
 // asynchronous control-path errors that are no longer surfaced to the TV.
 func NewLightProvider(client *bridgepro.Client, log *slog.Logger) *LightProvider {
 	return &LightProvider{client: client, log: log, pending: map[string]map[string]any{}}
@@ -144,16 +144,16 @@ func (p *LightProvider) V1ForUUID(uuid string) (string, bool) {
 }
 
 // SetLightV1 queues the latest state for a light and returns immediately; the
-// write is forwarded to the Bridge Pro asynchronously by drain. Acknowledging the
-// TV right away keeps its REST control path from blocking on the Bridge Pro
-// round-trip — the dominant Ambilight lag. Bridge Pro errors are logged, not
+// write is forwarded to the Hue Bridge Pro asynchronously by drain. Acknowledging the
+// TV right away keeps its REST control path from blocking on the Hue Bridge Pro
+// round-trip — the dominant Ambilight lag. Hue Bridge Pro errors are logged, not
 // surfaced to the TV (latency over error reporting). Always returns nil.
 func (p *LightProvider) SetLightV1(v1id string, v1state map[string]any) error {
 	p.ctrlMu.Lock()
 	var coalesced bool
 	if _, exists := p.pending[v1id]; exists {
 		// A previous frame for this light is still queued → it is dropped (coalesced)
-		// because the Bridge Pro has not drained it yet.
+		// because the Hue Bridge Pro has not drained it yet.
 		p.coalesced.Add(1)
 		coalesced = true
 	}
@@ -171,7 +171,7 @@ func (p *LightProvider) SetLightV1(v1id string, v1state map[string]any) error {
 	return nil
 }
 
-// drain forwards queued light states to the Bridge Pro until none remain, keeping
+// drain forwards queued light states to the Hue Bridge Pro until none remain, keeping
 // only the latest state per light. It runs in its own goroutine started by
 // SetLightV1 and exits once the queue is empty, so a replaced provider's goroutine
 // terminates on its own (no writes arrive → drain finishes).
@@ -197,7 +197,7 @@ func (p *LightProvider) drain() {
 
 // recordForwardErr logs the first failure of a burst immediately, then suppresses
 // further ones and emits a summary at most every errLogInterval with the count of
-// suppressed failures — so a down Bridge Pro cannot flood the log.
+// suppressed failures — so a down Hue Bridge Pro cannot flood the log.
 func (p *LightProvider) recordForwardErr(err error) {
 	p.forwardErr.Add(1)
 	if p.OnForwardErr != nil {
@@ -220,7 +220,7 @@ func (p *LightProvider) recordForwardErr(err error) {
 	p.errMu.Unlock()
 }
 
-// forward translates a v1 state to v2 and writes it to the Bridge Pro, resolving
+// forward translates a v1 state to v2 and writes it to the Hue Bridge Pro, resolving
 // the v1→UUID mapping (loading the light list once if it is not built yet).
 func (p *LightProvider) forward(v1id string, v1state map[string]any) error {
 	// Translate first and skip a no-op write: a state that yields an empty v2 body

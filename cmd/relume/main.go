@@ -116,8 +116,8 @@ func parseServeOptions(args []string) (serveOptions, error) {
 	burstDuration := fs.Duration("discovery-burst-duration", 0, "send SSDP and mDNS discovery announcements at startup for this long")
 	burstInterval := fs.Duration("discovery-burst-interval", time.Second, "interval for discovery-burst announcements")
 	disableSSDP := fs.Bool("disable-ssdp", false, "do not run the SSDP responder (mDNS-only, like ha-hue-entertainment) — diagnostic")
-	bridgeIP := fs.String("bridge-ip", "", "Bridge Pro IP for auto-pairing (empty = cloud discovery)")
-	skipTLS := fs.Bool("skip-tls-verify", false, "skip TLS verification to the Bridge Pro (instead of cert pinning)")
+	bridgeIP := fs.String("bridge-ip", "", "Hue Bridge Pro IP for auto-pairing (empty = cloud discovery)")
+	skipTLS := fs.Bool("skip-tls-verify", false, "skip TLS verification to the Hue Bridge Pro (instead of cert pinning)")
 	idleOffTimeout := fs.Duration("idle-off-timeout", 30*time.Second, "when the TV stops sending light writes for this long, flash the lights green twice and turn them off (0 = disabled)")
 	controlledLightWindow := fs.Duration("controlled-light-window", time.Minute, "sliding window: a light counts as a current Ambilight light only if the TV drove it within this window; the restart/idle flash and idle-off touch only those (so config changes are forgotten after the window)")
 	mode := fs.String("mode", "entertainment", "control mode: 'entertainment' (default, low-latency DTLS stream to the Pro; auto-falls back to REST if the TV never opens its stream) or 'rest' (per-light REST-follow)")
@@ -243,7 +243,7 @@ func runServe(args []string, log *slog.Logger) error {
 	}
 	log.Info("relume", "version", version)
 	log.Info("identity", "serial", cfg.Identity.Serial, "bridgeid", cfg.Identity.BridgeID(), "advertise", ip)
-	// Dump the saved state on startup (no secrets): which Bridge Pro is paired and
+	// Dump the saved state on startup (no secrets): which Hue Bridge Pro is paired and
 	// which TVs are already paired. An already-paired TV explains an "instant"
 	// re-pairing — POST /api then returns the stored user without the 5s delay.
 	log.Info("saved config",
@@ -298,6 +298,10 @@ func runServe(args []string, log *slog.Logger) error {
 	// the DTLS or the REST counters are non-zero at a time, depending on the path.
 	proSendStats := newFrameStats()
 	proStats := newProStats()
+	// jitterStats holds the per-window brightness jump on the incoming TV stream vs
+	// relume's smoothed sent stream, so the UI can show how much the DTLS-path easing
+	// cut the flicker. Fed by the receiver (input) and streamer (sent) rollups below.
+	jitterStats := newJitterStats()
 
 	if pro != nil {
 		client := bridgepro.New(pro)
@@ -320,7 +324,7 @@ func runServe(args []string, log *slog.Logger) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	// Pair the Bridge Pro backend in the background, independently of the TV: the
+	// Pair the Hue Bridge Pro backend in the background, independently of the TV: the
 	// TV can discover/pair relume before the Pro is paired; relume just returns an
 	// empty light list until the Pro pairing completes, then hot-loads the lights.
 	if pro == nil {
@@ -348,6 +352,7 @@ func runServe(args []string, log *slog.Logger) error {
 			frameStats:   frameStats,
 			proSendStats: proSendStats,
 			proStats:     proStats,
+			jitterStats:  jitterStats,
 			// UI-only display name for relume's own bridge. NOTE: the actual mDNS
 			// instance the TV discovers is still "Philips Hue - …" (internal/mdns),
 			// deliberately unchanged so discovery keeps working.
@@ -385,6 +390,9 @@ func runServe(args []string, log *slog.Logger) error {
 			clip.MarkActivity()
 			frameStats.Mark()
 		}
+		// Record the incoming stream's per-window brightness jump; paired with the
+		// streamer's sent-side jump (below) it yields the jitter-reduction metric.
+		recv.OnWindowStats = func(briJump, _ uint32) { jitterStats.setInput(briJump) }
 
 		if pro != nil {
 			// Phase C: relume opens its OWN entertainment stream to the Pro over DTLS
@@ -400,6 +408,9 @@ func runServe(args []string, log *slog.Logger) error {
 			// Record each frame sent to the Pro over DTLS so the UI can show the live
 			// outgoing send rate (the 50 Hz counterpart to the TV's ~25 Hz input).
 			streamer.OnSend = proSendStats.Mark
+			// Record the smoothed sent stream's per-window brightness jump; the gap
+			// below the receiver's input jump is how much the easing cut the flicker.
+			streamer.OnWindowStats = func(briJump, _ uint32) { jitterStats.setSent(briJump) }
 			// Honor the TV's group membership: when the TV declares which lights belong to
 			// its Ambilight zone (POST/PUT /groups), restrict the Pro config to that
 			// subset so lights in other rooms are never driven.
@@ -518,7 +529,7 @@ func runServe(args []string, log *slog.Logger) error {
 }
 
 // shutdownFlashBudget caps the total time the restart flash may take on shutdown.
-// FlashRestart runs synchronously and each light write blocks on the Bridge Pro's
+// FlashRestart runs synchronously and each light write blocks on the Hue Bridge Pro's
 // HTTP timeout; if the Pro is unreachable at shutdown, an unbounded flash would
 // stall well past the container stop grace (then get SIGKILLed). This bounds it so
 // the process exits promptly.
@@ -548,7 +559,7 @@ type zoneMembership interface {
 	AllowsMember(v1id uint16) bool
 }
 
-// inZoneUUIDs filters a flash target (Bridge Pro light UUIDs) down to the lights
+// inZoneUUIDs filters a flash target (Hue Bridge Pro light UUIDs) down to the lights
 // still in the TV's current Ambilight zone, so the restart/idle flash never touches
 // an off-zone light — even one that lingers in the ControlledSet from before the zone
 // shrank. A UUID is dropped only when its v1 id resolves AND is positively outside the
@@ -576,7 +587,7 @@ func stopEntertainment(s *entertainment.ProStreamer) {
 	}
 }
 
-// newProvider builds the Bridge Pro light provider and wires it to feed the
+// newProvider builds the Hue Bridge Pro light provider and wires it to feed the
 // sliding-window ControlledSet with each light the TV drives, so the restart/idle
 // flash and idle-off touch only the bulbs the TV is currently driving — never the
 // rest of the home.
@@ -601,7 +612,7 @@ func shutdownHTTP(srv *http.Server) {
 }
 
 // monitorIdle watches the TV's Ambilight write activity and, once it has gone
-// silent for idleTimeout after having been active, flashes the Bridge Pro lights
+// silent for idleTimeout after having been active, flashes the Hue Bridge Pro lights
 // green twice and turns them off (bridge.FlashIdle). The TV sends no explicit
 // off signal — it just stops writing — so this inactivity timeout stands in for
 // it. It fires once per active→idle transition and re-arms when the TV resumes
@@ -648,7 +659,7 @@ func idleShouldFire(now, lastSeen time.Time, fired bool, idleTimeout time.Durati
 	return !fired && !lastSeen.IsZero() && now.Sub(lastSeen) >= idleTimeout
 }
 
-// autoPairPro pairs relume with the Bridge Pro in the background, independently of
+// autoPairPro pairs relume with the Hue Bridge Pro in the background, independently of
 // the TV side. It discovers the Pro (cloud, unless bridgeIP is given), pins the
 // leaf certificate, then polls until the user taps the Pro's physical link button
 // (the one step that cannot be automated). On success it persists the credentials
@@ -713,7 +724,7 @@ func autoPairPro(ctx context.Context, cfg *config.Config, clip *clipv1.Server, c
 	}
 }
 
-// reconnectProConfig builds the Bridge Pro config for a reconnect: it keeps the
+// reconnectProConfig builds the Hue Bridge Pro config for a reconnect: it keeps the
 // existing credentials (appKey/clientKey — valid across reboots and IP changes,
 // so no re-pairing) and refreshes only the host and pinned certificate. The
 // DiscoveryID carries forward like Name/BridgeID (it identifies the SAME bridge

@@ -47,7 +47,7 @@ func (f *Frame) ColorSpaceName() string {
 
 // Encode serialises a Frame back into a HueStream datagram — the exact inverse of
 // Parse. Phase C re-encodes the frames decoded from the TV and streams them to the
-// Bridge Pro. v1 emits 9-byte light records (type, id[2], A[2], B[2], C[2]); v2
+// Hue Bridge Pro. v1 emits 9-byte light records (type, id[2], A[2], B[2], C[2]); v2
 // emits the 36-byte config id then 7-byte channel records (id, A[2], B[2], C[2]).
 // The channel ID is written as the version dictates: 2 bytes for v1, 1 byte for v2
 // (callers must have remapped it into 0..255 for v2 before encoding).

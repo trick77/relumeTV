@@ -11,7 +11,7 @@ import (
 // captured at the two points relume actually sees the colour values flow TV→Pro:
 // the REST/fallback forward (bridge.LightProvider.OnColor) and the DTLS passthrough
 // (entertainment.ProStreamer.OnColor). The web UI reads it so each lamp swatch
-// shows the live streamed colour instead of the Bridge Pro's REST light state,
+// shows the live streamed colour instead of the Hue Bridge Pro's REST light state,
 // which the DTLS passthrough never updates.
 //
 // It also tracks WHEN each light was last seen, so it can answer which lights the

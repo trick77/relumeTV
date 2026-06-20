@@ -47,7 +47,7 @@ func (s *Server) runSnapshotLoop(ctx context.Context) {
 			return
 		case <-t.C:
 			// Skip when no browser is connected: BuildSnapshot reads the lights from
-			// the Bridge Pro (behind a cache), and the queue-sensitive Pro should not
+			// the Hue Bridge Pro (behind a cache), and the queue-sensitive Pro should not
 			// be polled for an audience of nobody.
 			if s.hub.hasSubscribers() {
 				s.hub.SetSnapshot(BuildSnapshot(s.src))

@@ -34,6 +34,10 @@ const sendInterval = 20 * time.Millisecond // 50 Hz
 // the lag stays within the budget the DTLS path buys (M4) — tune here, it is the single knob.
 const smoothTau = 40 * time.Millisecond
 
+// SmoothTau exposes the easing time constant so the web UI can explain the jitter
+// reduction it produces (in the Stream card's tooltip) without hardcoding the value.
+func SmoothTau() time.Duration { return smoothTau }
+
 // snapColorDelta is the per-component distance (of 65535) within which current snaps to
 // target instead of easing. Two jobs: it terminates the geometric tail (with integer
 // rounding a sub-1 step would round to 0 and never converge) and skips streaming
@@ -82,7 +86,7 @@ type ProClient interface {
 // when the DTLS stream to the Pro is unavailable (Phase B behaviour).
 type FallbackSink func(v1id string, state map[string]any)
 
-// ProStreamer owns relume's own entertainment stream to the Bridge Pro. On a TV
+// ProStreamer owns relume's own entertainment stream to the Hue Bridge Pro. On a TV
 // stream (OnStreamStart) it ensures+starts a relume entertainment_configuration,
 // dials a DTLS-PSK client to the Pro and re-encodes the decoded TV frames as
 // HueStream v2 at a steady rate. If anything fails it falls back to the REST sink
@@ -106,6 +110,11 @@ type ProStreamer struct {
 	// DTLS (the 50 Hz sendLoop). Lets the web UI show the live relume→Pro send rate,
 	// the upsampled counterpart to the TV→relume input rate. Wired by main.
 	OnSend func()
+
+	// OnWindowStats, if set, is called once per 5s rollup with the largest brightness
+	// and colour jump on the *sent* (smoothed) stream over that window. Paired with the
+	// receiver's input-side jumps, the web UI shows how much the easing cut the jitter.
+	OnWindowStats func(briJump, colJump uint32)
 
 	// port overrides the Pro DTLS port (default 2100); for tests.
 	port int
@@ -422,6 +431,9 @@ func (s *ProStreamer) sendLoop(ctx context.Context) {
 				s.log.Info("hue bridge pro entertainment stream", "frames_5s", sent-prev, "channels", ch, "seq", seq,
 					"bri_max_jump", briJump, "col_max_jump", colJump)
 				prev = sent
+			}
+			if s.OnWindowStats != nil {
+				s.OnWindowStats(briJump, colJump)
 			}
 			briJump, colJump = 0, 0
 		case <-t.C:

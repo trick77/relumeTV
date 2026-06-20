@@ -67,7 +67,7 @@ func (h *Hub) Snapshot() Snapshot {
 }
 
 // hasSubscribers reports whether any SSE client is currently connected. The
-// snapshot loop uses this to avoid polling state (and the Bridge Pro) when no
+// snapshot loop uses this to avoid polling state (and the Hue Bridge Pro) when no
 // browser is watching.
 func (h *Hub) hasSubscribers() bool {
 	h.mu.Lock()
