@@ -783,7 +783,7 @@ func runDiscover() error {
 // running avahi-daemon announces the _hue._tcp service. Needed when avahi
 // occupies port 5353 and relumeTV's built-in mDNS announcer therefore can't bind:
 //
-//	relumeTV avahi-service > /etc/avahi/services/relumeTV-hue.service
+//	relumetv avahi-service > /etc/avahi/services/relumetv-hue.service
 func runAvahiService(args []string) error {
 	fs := flag.NewFlagSet("avahi-service", flag.ExitOnError)
 	cfgPath := fs.String("config", "relumetv.json", "path to the configuration file")
