@@ -65,13 +65,19 @@ function modeSub(s) {
 }
 
 // streamVal shows the live entertainment frame rate while the TV is streaming to the
-// Pro: in DTLS mode it shows both the TV input rate and relumeTV's upsampled send rate
-// (in → out fps); on the REST paths it shows relumeTV's outgoing write rate to the Pro
-// (writes/s). Idle/unpaired states show a dash — streamSub explains why.
+// Pro: it shows the TV input rate, plus relumeTV's upsampled send rate (in → out fps)
+// when relumeTV is emitting its own frames (proSendFps>0); on the REST paths it shows
+// relumeTV's outgoing write rate to the Pro (writes/s). Idle/unpaired states show a dash
+// — streamSub explains why.
 function streamVal(s) {
   switch (s.health) {
     case "streaming-pro":
-      return `<span class="ok">●</span> ${s.streamFps || 0} → ${s.proSendFps || 0} fps`;
+      // Show the upsampled send rate (in → out) only when relumeTV is pushing its own
+      // frames (proSendFps>0); otherwise show just the TV input rate rather than a
+      // confusing "→ 0". Entertainment is up either way.
+      return (s.proSendFps || 0) > 0
+        ? `<span class="ok">●</span> ${s.streamFps || 0} → ${s.proSendFps} fps`
+        : `<span class="ok">●</span> ${s.streamFps || 0} fps`;
     case "entertainment-fallback":
       // Amber dot: streaming, but degraded (DTLS to the Pro failed → REST fallback).
       return `<span class="warn">●</span> ${s.streamFps || 0} fps in`;
@@ -353,6 +359,7 @@ function renderDashboard(s) {
       <div class="grid">${pending}
         <div class="card"><h3>Lights <span class="cnt">${shown.length} shown · ${driven} driven</span></h3><div class="lights">${lights}</div></div>
       </div>
+      <div class="note">Tip: after relumeTV restarts, if Ambilight+Hue stops responding, open the TV's Ambilight menu and toggle the <b>Ambilight</b> function (not Hue) off and back to your setting (e.g. Vivid).</div>
       <div class="card log"><h3>Live events</h3><div id="log"></div></div>
     </div>`;
 }

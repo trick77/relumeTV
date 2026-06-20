@@ -123,6 +123,10 @@ body {
 .pendrow .info b { font-size: 13px; }
 .pendrow .info div { font-size: 11px; color: var(--dim); }
 
+/* dashboard footnote / tip — subtle, never a banner */
+.note { margin: 16px 2px 0; font-size: 12.5px; line-height: 1.5; color: var(--faint); }
+.note b { color: var(--dim); font-weight: 650; }
+
 /* live log */
 .log { margin-top: 20px; }
 .logrow {
