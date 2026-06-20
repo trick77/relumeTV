@@ -455,15 +455,14 @@ func (s *Server) isTVRequest(r *http.Request) bool {
 
 func (s *Server) handleDescription(w http.ResponseWriter, r *http.Request) {
 	// Setup wizard step-2 signal: the TV re-fetches the descriptor after a reboot. Fire
-	// only for the TV (isTVRequest), never an arbitrary LAN probe. Log the actual
-	// User-Agent so a TV whose UA isTVRequest fails to match is diagnosable (then the
-	// UI fallback button is the manual path) — the descriptor heuristic is unverified
-	// against real hardware, so the real UA must be visible.
-	if s.isTVRequest(r) {
-		s.log.Info("descriptor fetched by TV", "user-agent", r.UserAgent(), "from", r.RemoteAddr)
-		if s.OnDescriptorFetch != nil {
-			s.OnDescriptorFetch()
-		}
+	// the auto-advance only for the TV (isTVRequest), never an arbitrary LAN probe. Log
+	// EVERY descriptor fetch with its User-Agent and whether it was recognised as the
+	// TV, so on a real run we can confirm the auto-detection (or see exactly which UA to
+	// match if it doesn't fire — the UI fallback button covers a miss meanwhile).
+	isTV := s.isTVRequest(r)
+	s.log.Info("descriptor fetched", "tv_recognized", isTV, "user-agent", r.UserAgent(), "from", r.RemoteAddr)
+	if isTV && s.OnDescriptorFetch != nil {
+		s.OnDescriptorFetch()
 	}
 	xml, err := upnp.Render(s.cfg.Identity, s.advIP, s.httpPort)
 	if err != nil {
