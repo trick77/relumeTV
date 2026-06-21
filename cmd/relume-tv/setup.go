@@ -4,7 +4,7 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/trick77/relumetv/internal/config"
+	"github.com/trick77/relume-tv/internal/config"
 )
 
 // The setup wizard's six steps. The state machine advances monotonically: a step is
@@ -14,7 +14,7 @@ const (
 	stepPairPro     = 1 // pair the Hue Bridge Pro (proPaired)
 	stepProPowerOff = 2 // disconnect the Pro from power (reachable -> unreachable)
 	stepRebootTV    = 3 // reboot the TV (its UA fetches /description.xml)
-	stepTVScan      = 4 // the TV scans and pairs with relumeTV (tvClients > 0)
+	stepTVScan      = 4 // the TV scans and pairs with relume-tv (tvClients > 0)
 	stepProPowerOn  = 5 // power the Pro back on (reachable again)
 	stepAssignBulbs = 6 // assign bulbs / first TV data drives the lights
 	stepDone        = 7 // setup complete (config committed)
@@ -28,7 +28,7 @@ var setupTitles = map[int]string{
 	stepPairPro:     "pair the Hue Bridge Pro",
 	stepRebootTV:    "reboot your TV",
 	stepProPowerOff: "disconnect the Hue Bridge Pro from power",
-	stepTVScan:      "start the relumeTV scan in the TV's Ambilight+Hue settings",
+	stepTVScan:      "start the relume-tv scan in the TV's Ambilight+Hue settings",
 	stepProPowerOn:  "turn the Hue Bridge Pro back on",
 	stepAssignBulbs: "assign your color bulbs in the TV's Ambilight+Hue menu",
 }

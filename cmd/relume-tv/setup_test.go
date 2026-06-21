@@ -6,14 +6,14 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/trick77/relumetv/internal/config"
+	"github.com/trick77/relume-tv/internal/config"
 )
 
 // newTestSetup builds a setupStatus over a fresh (uncommitted) temp config, with a
 // controllable active() signal and a commit counter.
 func newTestSetup(t *testing.T) (*setupStatus, *config.Config, *bool, *int) {
 	t.Helper()
-	cfg, err := config.Load(filepath.Join(t.TempDir(), "relumetv.json"))
+	cfg, err := config.Load(filepath.Join(t.TempDir(), "relume-tv.json"))
 	if err != nil {
 		t.Fatalf("config.Load: %v", err)
 	}
@@ -47,7 +47,7 @@ func TestSetup_StartsAtStepOne(t *testing.T) {
 }
 
 func TestSetup_CommittedConfigStartsDone(t *testing.T) {
-	cfg, _ := config.Load(filepath.Join(t.TempDir(), "relumetv.json"))
+	cfg, _ := config.Load(filepath.Join(t.TempDir(), "relume-tv.json"))
 	if err := cfg.Commit(); err != nil {
 		t.Fatalf("Commit: %v", err)
 	}

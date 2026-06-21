@@ -9,8 +9,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/trick77/relumetv/internal/bridgepro"
-	"github.com/trick77/relumetv/internal/translate"
+	"github.com/trick77/relume-tv/internal/bridgepro"
+	"github.com/trick77/relume-tv/internal/translate"
 )
 
 // lightCacheTTL limits how often the Hue Bridge Pro is queried for lights.
@@ -41,7 +41,7 @@ type LightProvider struct {
 
 	// OnForward, if set, is called once per light state successfully written to the
 	// Hue Bridge Pro over REST (coalesced; dropped frames never reach the Pro and are not
-	// counted). Lets the web UI show the live relumeTV→Pro REST write rate — the
+	// counted). Lets the web UI show the live relume-tv→Pro REST write rate — the
 	// REST-path counterpart to the DTLS sendLoop's frame rate. Wired by main.
 	OnForward func()
 

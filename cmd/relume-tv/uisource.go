@@ -3,12 +3,12 @@ package main
 import (
 	"time"
 
-	"github.com/trick77/relumetv/internal/clipv1"
-	"github.com/trick77/relumetv/internal/config"
-	"github.com/trick77/relumetv/internal/webui"
+	"github.com/trick77/relume-tv/internal/clipv1"
+	"github.com/trick77/relume-tv/internal/config"
+	"github.com/trick77/relume-tv/internal/webui"
 )
 
-// uiSource adapts relumeTV's live state to webui.StateSource. It is read-only and
+// uiSource adapts relume-tv's live state to webui.StateSource. It is read-only and
 // exposes no secrets (app/client keys, cert fingerprint never leave the core).
 type uiSource struct {
 	cfg           *config.Config
@@ -54,7 +54,7 @@ func (u *uiSource) StreamFPS() int    { return u.frameStats.FPS() }
 func (u *uiSource) ProSendFPS() int   { return u.proSendStats.FPS() }
 func (u *uiSource) ProWriteRate() int { return u.proStats.writes.FPS() }
 
-// RestRecvRate is the rate (per second) of inbound REST control calls the TV sends relumeTV
+// RestRecvRate is the rate (per second) of inbound REST control calls the TV sends relume-tv
 // (per-light state PUTs + group-action PUTs) — the REST-path counterpart to StreamFPS. 0
 // unless the TV is driving over REST.
 func (u *uiSource) RestRecvRate() int { return u.restRecvStats.FPS() }

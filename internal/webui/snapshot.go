@@ -19,7 +19,7 @@ type LightView struct {
 }
 
 // LiveColor is the most recent colour the TV pushed for one light, captured where
-// relumeTV actually sees the values flow TV→Pro (the REST forward and the DTLS
+// relume-tv actually sees the values flow TV→Pro (the REST forward and the DTLS
 // passthrough). The UI uses it to render the live swatch colour instead of the
 // Hue Bridge Pro's REST light state, which the DTLS passthrough never updates.
 type LiveColor struct {
@@ -50,15 +50,15 @@ type Snapshot struct {
 	// StreamFPS is the live entertainment-stream frame rate (frames/s the TV is
 	// pushing over DTLS). Non-zero only while streaming to the Pro; 0 otherwise.
 	StreamFPS int `json:"streamFps"`
-	// ProSendFPS is relumeTV's outgoing DTLS frame rate to the Pro (frames/s, the 50 Hz
+	// ProSendFPS is relume-tv's outgoing DTLS frame rate to the Pro (frames/s, the 50 Hz
 	// sendLoop). The upsampled counterpart to StreamFPS; non-zero only in DTLS mode.
 	ProSendFPS int `json:"proSendFps,omitempty"`
-	// ProWriteRate is relumeTV's outgoing REST write rate to the Pro (writes/s, per
+	// ProWriteRate is relume-tv's outgoing REST write rate to the Pro (writes/s, per
 	// light, coalesced). The REST-path counterpart to ProSendFPS; non-zero only when
 	// driving the Pro over REST (fallback or plain REST-follow).
 	ProWriteRate int `json:"proWriteRate,omitempty"`
 	// RestRecvRate is the rate (per second) of inbound REST control calls the TV sends
-	// relumeTV (per-light state PUTs + group-action PUTs). The REST-path counterpart to
+	// relume-tv (per-light state PUTs + group-action PUTs). The REST-path counterpart to
 	// StreamFPS on the receive side; non-zero only when the TV drives over REST. Surfaced
 	// by the UI "Received" card.
 	RestRecvRate int `json:"restRecvRate,omitempty"`
@@ -81,7 +81,7 @@ type Snapshot struct {
 	// The Stream card's jitter tooltip reads it so the explanation stays accurate.
 	SmoothingTauMs int `json:"smoothingTauMs,omitempty"`
 	// JitterInBri / JitterSentBri are the latest per-window max brightness jump (16-bit,
-	// 0–65535) on the incoming TV stream vs relumeTV's smoothed sent stream. The UI shows
+	// 0–65535) on the incoming TV stream vs relume-tv's smoothed sent stream. The UI shows
 	// the reduction (1 − sent/in). Both 0 when not streaming to the Pro over DTLS, so the
 	// card renders a longdash rather than a stale figure.
 	JitterInBri   int `json:"jitterInBri,omitempty"`
@@ -119,8 +119,8 @@ type Snapshot struct {
 	PrecondMsg string `json:"precondMsg,omitempty"`
 }
 
-// StateSource exposes relumeTV's live state to the snapshot builder without
-// coupling the UI to the control internals. Implemented by cmd/relumetv.
+// StateSource exposes relume-tv's live state to the snapshot builder without
+// coupling the UI to the control internals. Implemented by cmd/relume-tv.
 type StateSource interface {
 	Version() string
 	StartedAt() time.Time
@@ -142,17 +142,17 @@ type StateSource interface {
 	// Active reports whether the TV is currently driving the lights (it has
 	// written/streamed within the idle window). False when the TV is off or idle.
 	Active() bool
-	// StreamFPS is the live entertainment-stream frame rate (TV→relumeTV over DTLS).
+	// StreamFPS is the live entertainment-stream frame rate (TV→relume-tv over DTLS).
 	// 0 when no DTLS stream is running.
 	StreamFPS() int
-	// ProSendFPS is relumeTV's outgoing DTLS frame rate to the Pro (frames/s). 0 unless
+	// ProSendFPS is relume-tv's outgoing DTLS frame rate to the Pro (frames/s). 0 unless
 	// streaming to the Pro over DTLS.
 	ProSendFPS() int
-	// ProWriteRate is relumeTV's outgoing REST write rate to the Pro (writes/s). 0
+	// ProWriteRate is relume-tv's outgoing REST write rate to the Pro (writes/s). 0
 	// unless driving the Pro over REST.
 	ProWriteRate() int
 	// RestRecvRate is the rate (per second) of inbound REST control calls the TV sends
-	// relumeTV (per-light state + group-action PUTs). 0 unless the TV drives over REST.
+	// relume-tv (per-light state + group-action PUTs). 0 unless the TV drives over REST.
 	RestRecvRate() int
 	// CoalesceRate is the rate (per second) of frames the optimistic REST path
 	// dropped because the Pro could not keep up — healthy backpressure, not an error.
@@ -247,19 +247,19 @@ func BuildSnapshot(src StateSource) Snapshot {
 		s.Health = "no-tv"
 	case !src.Active():
 		// TV is paired but not currently driving (off / Ambilight idle). Don't claim
-		// "Active" — relumeTV is just standing by.
+		// "Active" — relume-tv is just standing by.
 		s.Health = "idle"
 	case mode == "entertainment" && dtlsUp && !fallback:
 		s.Health = "streaming-pro"
 	case mode == "entertainment" && fallback:
-		// B: the TV activated a stream but relumeTV could not drive the Pro over DTLS,
+		// B: the TV activated a stream but relume-tv could not drive the Pro over DTLS,
 		// so it reverted to REST-follow. A degraded state worth flagging distinctly.
 		s.Health = "entertainment-fallback"
 	default:
 		// Driving the lights over per-light REST writes. Two non-degraded ways to
 		// land here, both surfaced as a single "Active": entertainment mode is
 		// configured but the TV never opened a DTLS stream (nothing failed — it just
-		// isn't streaming), or relumeTV is in plain REST mode where REST is the intended
+		// isn't streaming), or relume-tv is in plain REST mode where REST is the intended
 		// path. Neither is a fallback, so they share one health state.
 		s.Health = "active-rest"
 	}

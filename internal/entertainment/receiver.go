@@ -13,15 +13,15 @@ import (
 	"time"
 
 	"github.com/pion/dtls/v3"
-	"github.com/trick77/relumetv/internal/huestream"
+	"github.com/trick77/relume-tv/internal/huestream"
 )
 
 // KeyLookup returns the DTLS pre-shared key for a client identity (the Hue
 // username / application key the TV presents) and whether it is known.
 type KeyLookup func(identity string) ([]byte, bool)
 
-// Receiver is the DTLS-PSK server on udp :2100. The PSK is the clientkey relumeTV
-// minted for the TV at pairing, so relumeTV can decrypt the stream.
+// Receiver is the DTLS-PSK server on udp :2100. The PSK is the clientkey relume-tv
+// minted for the TV at pairing, so relume-tv can decrypt the stream.
 type Receiver struct {
 	bindIP string
 	lookup KeyLookup
@@ -35,7 +35,7 @@ type Receiver struct {
 	// idle-off monitor so a streaming TV is not treated as idle.
 	OnActivity func()
 	// OnStreamStart / OnStreamStop, if set, bracket a TV DTLS connection — Phase C
-	// wires these to establish / tear down relumeTV's own stream to the Pro so the
+	// wires these to establish / tear down relume-tv's own stream to the Pro so the
 	// Pro area lives exactly as long as the TV is streaming.
 	OnStreamStart func(remote string)
 	OnStreamStop  func(remote string)

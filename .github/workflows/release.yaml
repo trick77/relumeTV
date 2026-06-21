@@ -41,7 +41,7 @@ jobs:
           esac
           NEXT="$MA.$MI.$PA"
           SHORT=$(git rev-parse --short HEAD)
-          # GHCR repository names must be lowercase; the repo slug contains "relumeTV".
+          # GHCR repository names must be lowercase; the repo slug contains "relume-tv".
           IMAGE="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
           echo "version=$NEXT" >> "$GITHUB_OUTPUT"
           echo "major=$MA"     >> "$GITHUB_OUTPUT"
@@ -74,7 +74,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           build-args: |
-            RELUMETV_VERSION=${{ steps.ver.outputs.version }}
+            RELUME_TV_VERSION=${{ steps.ver.outputs.version }}
           tags: |
             ${{ steps.ver.outputs.image }}:${{ steps.ver.outputs.version }}
             ${{ steps.ver.outputs.image }}:${{ steps.ver.outputs.major }}.${{ steps.ver.outputs.minor }}

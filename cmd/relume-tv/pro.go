@@ -7,10 +7,10 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/trick77/relumetv/internal/bridge"
-	"github.com/trick77/relumetv/internal/bridgepro"
-	"github.com/trick77/relumetv/internal/clipv1"
-	"github.com/trick77/relumetv/internal/config"
+	"github.com/trick77/relume-tv/internal/bridge"
+	"github.com/trick77/relume-tv/internal/bridgepro"
+	"github.com/trick77/relume-tv/internal/clipv1"
+	"github.com/trick77/relume-tv/internal/config"
 )
 
 // Setup precondition sentinels for the initial pairing selection (selectProForPairing).
@@ -211,7 +211,7 @@ func newProWatcher(cfg *config.Config, clip *clipv1.Server, controlled *bridge.C
 		_, _, err := bridgepro.New(p).BridgeInfo()
 		return err
 	}
-	// Browse mDNS for Hue bridges, excluding relumeTV's own announcement (it advertises
+	// Browse mDNS for Hue bridges, excluding relume-tv's own announcement (it advertises
 	// itself as a Hue bridge to the TV under the same bridge id).
 	w.discover = func() ([]bridgepro.DiscoveredBridge, error) {
 		return bridgepro.Discover(cfg.Identity.BridgeID())
@@ -291,11 +291,11 @@ func (w *proWatcher) tick() (reconnected bool) {
 	// During setup the Pro is deliberately powered off (wizard steps "disconnect" then
 	// "turn back on"), so these unreachable/retry messages are not only noise — the
 	// alarming "turn it back on" guidance would mislead the user into powering the Pro
-	// back on too early, before the TV has paired with relumeTV, breaking the flow.
+	// back on too early, before the TV has paired with relume-tv, breaking the flow.
 	// Suppress them to Debug until the setup is committed; the wizard narrates the steps.
 	w.retryLog("hue bridge pro not reachable — is it turned off? "+
 		"Turn it back on (or check its power/network cable); "+
-		"relumeTV can't control the lights until it is back. Retrying.", "", pro, "err", err)
+		"relume-tv can't control the lights until it is back. Retrying.", "", pro, "err", err)
 
 	// Throttle mDNS re-discovery: the health check above already proves the stored host
 	// is down and reports it; a power-cycled Pro usually returns at the same IP (caught by

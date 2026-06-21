@@ -3,7 +3,7 @@ package translate
 import (
 	"testing"
 
-	"github.com/trick77/relumetv/internal/bridgepro"
+	"github.com/trick77/relume-tv/internal/bridgepro"
 )
 
 func colorLight(id, name string) bridgepro.Light {

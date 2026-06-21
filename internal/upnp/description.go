@@ -7,7 +7,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/trick77/relumetv/internal/config"
+	"github.com/trick77/relume-tv/internal/config"
 )
 
 // ServerHeaderDefault is the exact SERVER header of a real Hue bridge
@@ -26,7 +26,7 @@ const tmplText = `<?xml version="1.0" encoding="UTF-8" ?>
 <URLBase>http://{{.IP}}:{{.Port}}/</URLBase>
 <device>
 <deviceType>urn:schemas-upnp-org:device:Basic:1</deviceType>
-<friendlyName>relumeTV-{{.Suffix}}</friendlyName>
+<friendlyName>relume-tv-{{.Suffix}}</friendlyName>
 <manufacturer>Signify</manufacturer>
 <manufacturerURL>http://www.meethue.com</manufacturerURL>
 <modelDescription>Philips hue Personal Wireless Lighting</modelDescription>
@@ -45,9 +45,9 @@ var tmpl = template.Must(template.New("description").Parse(tmplText))
 // Render generates the description.xml for the given identity and address.
 func Render(id config.Identity, ip string, port int) (string, error) {
 	// Suffix is the last 6 of the bridge id (the canonical Hue short identifier),
-	// matching the TV-facing /config name so the bridge shows as "relumeTV-XXXXXX"
+	// matching the TV-facing /config name so the bridge shows as "relume-tv-XXXXXX"
 	// wherever the TV reads the name. Single token — the TV truncates at the first
-	// space, so the previous "relumeTV (IP)" displayed as a bare "relumeTV".
+	// space, so the previous "relume-tv (IP)" displayed as a bare "relume-tv".
 	bridgeID := id.BridgeID()
 	suffix := bridgeID
 	if len(bridgeID) > 6 {

@@ -45,7 +45,7 @@ function healthDotClass(h) {
   return "dot pulse";
 }
 
-// currentMode is the path relumeTV is forwarding on RIGHT NOW, not the configured
+// currentMode is the path relume-tv is forwarding on RIGHT NOW, not the configured
 // startup mode. The TV only drives over entertainment/DTLS while its stream is
 // actually up; in every other case (rest mode, fallback, or entertainment
 // configured but the TV not streaming) the live path is REST.
@@ -69,7 +69,7 @@ function proPathSub(s) {
   }
 }
 
-// jitterDisplay shows how much relumeTV's easing cut the stream's brightness jitter —
+// jitterDisplay shows how much relume-tv's easing cut the stream's brightness jitter —
 // the reduction of the smoothed sent max jump vs the TV input max jump over the last
 // window. Defaults to 0% (rather than a dash) when there is no current measurement —
 // e.g. not streaming to the Hue Bridge Pro over DTLS, or nothing jumped to smooth.
@@ -93,7 +93,7 @@ function forwardErrActive(s) {
   return Date.now() - Date.parse(s.lastForwardErr) < forwardErrDecayMs;
 }
 
-// backpressureVal shows how relumeTV shields the Hue Bridge Pro. coalesceRate (drops/s)
+// backpressureVal shows how relume-tv shields the Hue Bridge Pro. coalesceRate (drops/s)
 // is HEALTHY — the optimistic path sparing the Pro a write it could not keep up
 // with — so it is never coloured as a fault. forwardErrors is the real failure
 // signal (down Pro / 503 overflow); it appears in amber only while recent, then
@@ -130,7 +130,7 @@ function tvModel(dt) {
   return i >= 0 ? dt.slice(i + 1) : dt;
 }
 
-// _startedAtMs holds relumeTV's start time (ms epoch) so the uptime can tick every
+// _startedAtMs holds relume-tv's start time (ms epoch) so the uptime can tick every
 // second between snapshot pushes. fmtUptime renders only the largest unit, spelled
 // out with correct singular/plural: weeks once past 7 days, then days/hours/
 // minutes/seconds (e.g. "1 week", "2 days", "1 hour", "50 seconds").
@@ -195,7 +195,7 @@ function tickLiveness() {
   if (sub) sub.textContent = livenessSub();
 }
 
-// receivedSub shows how fast relumeTV is receiving from the TV: DTLS frames/s while the TV
+// receivedSub shows how fast relume-tv is receiving from the TV: DTLS frames/s while the TV
 // streams (incl. the outbound REST fallback — the receive side is still DTLS), else inbound
 // REST control calls/s on the plain-REST path, else a longdash. Keyed off the live counters
 // (not health) so entertainment-fallback correctly stays on fps.
@@ -204,7 +204,7 @@ function receivedSub(s) {
   if (s.restRecvRate > 0) return `${s.restRecvRate} calls/s`;
   return "—";
 }
-// sentSub shows how fast relumeTV drives the Hue Bridge Pro: DTLS frames/s (the 50 Hz
+// sentSub shows how fast relume-tv drives the Hue Bridge Pro: DTLS frames/s (the 50 Hz
 // sendLoop) while streaming, REST writes/s on the REST/fallback path, else a longdash.
 function sentSub(s) {
   if (s.proSendFps > 0)   return `${s.proSendFps} fps`;
@@ -240,12 +240,12 @@ const SETUP_STEPS = [
   {
     title: "Reboot your TV",
     body: () =>
-      "On the TV: <b>Android Settings → Device Preferences → Restart</b>. After it boots, the TV re-detects relumeTV automatically.",
+      "On the TV: <b>Android Settings → Device Preferences → Restart</b>. After it boots, the TV re-detects relume-tv automatically.",
     action: () =>
       `<div class="action"><span class="dot pulse"></span><div><div class="big">Waiting for the TV to reboot…</div></div></div>`,
   },
   {
-    title: "Start the relumeTV scan on your TV",
+    title: "Start the relume-tv scan on your TV",
     body: (s) =>
       `In the TV's <b>Ambilight+Hue</b> settings, start the bridge search, pick <b>${esc(s.bridgeName)}</b> and <b>link</b> it (confirm the pairing on the TV — this is essential, not just selecting it). Then wait here: <b>do not assign any bulbs yet</b> — that's the final step, after the Hue Bridge Pro is back on.`,
     action: () =>
@@ -256,7 +256,7 @@ const SETUP_STEPS = [
     body: (s) =>
       s.currentStep > 5
         ? "Hue Bridge Pro is back — detected."
-        : "Plug the Hue Bridge Pro back in. relumeTV reconnects automatically.",
+        : "Plug the Hue Bridge Pro back in. relume-tv reconnects automatically.",
     action: () =>
       `<div class="action"><span class="dot pulse"></span><div><div class="big">Waiting for the Hue Bridge Pro…</div></div></div>`,
   },
@@ -354,15 +354,15 @@ function renderDashboard(s) {
       </div>
       <div class="pipe row2">
         <div class="step"><div class="lbl">Lights</div><div class="val">${driven}</div><div class="sub">Driven by TV</div></div>
-        <div class="step"><div class="lbl">Jitter-reduction <span class="info" tabindex="0" data-tip="How much relumeTV's ${s.smoothingTauMs || 40} ms easing shrinks the biggest brightness jump on the DTLS stream to the Hue Bridge Pro vs the TV input. Higher is smoother; 0% when not streaming or nothing jumped.">i</span></div><div class="val">${jitterDisplay(s)}</div><div class="sub">vs TV input</div></div>
-        <div class="step"><div class="lbl">Backpressure <span class="info" tabindex="0" data-tip="Drops/s: Ambilight frames relumeTV coalesced away because the Hue Bridge Pro could not keep up — healthy, it spares the Hue Bridge Pro writes it cannot accept. Errors: failed writes to the Hue Bridge Pro (unreachable / 503 overflow) — the real fault signal.">i</span></div><div class="val">${backpressureVal(s)}</div><div class="sub">${backpressureSub(s)}</div></div>
+        <div class="step"><div class="lbl">Jitter-reduction <span class="info" tabindex="0" data-tip="How much relume-tv's ${s.smoothingTauMs || 40} ms easing shrinks the biggest brightness jump on the DTLS stream to the Hue Bridge Pro vs the TV input. Higher is smoother; 0% when not streaming or nothing jumped.">i</span></div><div class="val">${jitterDisplay(s)}</div><div class="sub">vs TV input</div></div>
+        <div class="step"><div class="lbl">Backpressure <span class="info" tabindex="0" data-tip="Drops/s: Ambilight frames relume-tv coalesced away because the Hue Bridge Pro could not keep up — healthy, it spares the Hue Bridge Pro writes it cannot accept. Errors: failed writes to the Hue Bridge Pro (unreachable / 503 overflow) — the real fault signal.">i</span></div><div class="val">${backpressureVal(s)}</div><div class="sub">${backpressureSub(s)}</div></div>
         <div class="step"><div class="lbl">Received</div><div class="val">${esc(receivedSub(s))}</div><div class="sub">from TV</div></div>
         <div class="step"><div class="lbl">Sent</div><div class="val">${esc(sentSub(s))}</div><div class="sub">to Hue Bridge Pro</div></div>
       </div>
       <div class="grid">${pending}
         <div class="card"><h3>Lights <span class="cnt">${shown.length} shown · ${driven} driven</span></h3><div class="lights">${lights}</div></div>
       </div>
-      <div class="note"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg><b>Tip</b> — after relumeTV restarts, if the hue lights stop responding, open the TV's Ambilight menu and toggle the Ambilight style (not Hue+Ambilight menu) off and back to follow video.</div>
+      <div class="note"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg><b>Tip</b> — after relume-tv restarts, if the hue lights stop responding, open the TV's Ambilight menu and toggle the Ambilight style (not Hue+Ambilight menu) off and back to follow video.</div>
       <div class="card log${logCollapsed ? " collapsed" : ""}"><h3 class="log-head" role="button" tabindex="0" aria-expanded="${!logCollapsed}" aria-controls="log">Live events<span class="chev" aria-hidden="true"></span></h3><div id="log"></div></div>
     </div>`;
 }

@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/trick77/relumetv/internal/bridgepro"
-	"github.com/trick77/relumetv/internal/config"
+	"github.com/trick77/relume-tv/internal/bridgepro"
+	"github.com/trick77/relume-tv/internal/config"
 )
 
 func TestParseServeOptions_discoveryDiagnostics(t *testing.T) {
@@ -219,7 +219,7 @@ func testWatcher(t *testing.T, pro *config.BridgePro,
 	applyProvider func(*config.BridgePro),
 ) (*proWatcher, *config.Config) {
 	t.Helper()
-	cfg, err := config.Load(filepath.Join(t.TempDir(), "relumetv.json"))
+	cfg, err := config.Load(filepath.Join(t.TempDir(), "relume-tv.json"))
 	if err != nil {
 		t.Fatalf("config.Load: %v", err)
 	}

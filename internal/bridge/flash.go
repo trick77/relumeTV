@@ -3,11 +3,11 @@ package bridge
 import (
 	"log/slog"
 
-	"github.com/trick77/relumetv/internal/translate"
+	"github.com/trick77/relume-tv/internal/translate"
 )
 
 // TurnOffControlled turns the TV-controlled Ambilight bulbs off. It is used both when
-// relumeTV restarts/shuts down (the TV's REST control session drops, so those lights
+// relume-tv restarts/shuts down (the TV's REST control session drops, so those lights
 // would otherwise stay frozen on their last Ambilight color until the TV reconnects)
 // and when the TV goes idle (it just stops sending its REST writes — there is no off
 // signal). targetUUIDs are the Hue Bridge Pro light UUIDs the TV is currently driving

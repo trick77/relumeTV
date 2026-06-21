@@ -1,4 +1,4 @@
-// Package webui provides relumeTV's web UI: a guided setup assistant and a live
+// Package webui provides relume-tv's web UI: a guided setup assistant and a live
 // status dashboard. It is on by default (disabled with -headless) and never
 // touches the TV- or Pro-facing control paths.
 package webui

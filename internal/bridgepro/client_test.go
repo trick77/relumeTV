@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/trick77/relumetv/internal/config"
+	"github.com/trick77/relume-tv/internal/config"
 )
 
 // hostOf strips the "https://" scheme from an httptest server URL, leaving

@@ -3,7 +3,7 @@ package entertainment
 import (
 	"testing"
 
-	"github.com/trick77/relumetv/internal/huestream"
+	"github.com/trick77/relume-tv/internal/huestream"
 )
 
 func TestToHueV1State_XY(t *testing.T) {

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/trick77/relumetv/internal/bridgepro"
+	"github.com/trick77/relume-tv/internal/bridgepro"
 )
 
 // downClient models an unreachable Hue Bridge Pro: every write fails, so the provider's

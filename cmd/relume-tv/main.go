@@ -1,4 +1,4 @@
-// Command relumetv is a software bridge that connects a Philips Ambilight TV to
+// Command relume-tv is a software bridge that connects a Philips Ambilight TV to
 // a Hue Bridge Pro by presenting itself to the TV as a Gen-2 bridge and
 // forwarding commands to the Pro.
 package main
@@ -18,15 +18,15 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/trick77/relumetv/internal/bridge"
-	"github.com/trick77/relumetv/internal/bridgepro"
-	"github.com/trick77/relumetv/internal/clipv1"
-	"github.com/trick77/relumetv/internal/config"
-	"github.com/trick77/relumetv/internal/diag"
-	"github.com/trick77/relumetv/internal/entertainment"
-	"github.com/trick77/relumetv/internal/mdns"
-	"github.com/trick77/relumetv/internal/ssdp"
-	"github.com/trick77/relumetv/internal/webui"
+	"github.com/trick77/relume-tv/internal/bridge"
+	"github.com/trick77/relume-tv/internal/bridgepro"
+	"github.com/trick77/relume-tv/internal/clipv1"
+	"github.com/trick77/relume-tv/internal/config"
+	"github.com/trick77/relume-tv/internal/diag"
+	"github.com/trick77/relume-tv/internal/entertainment"
+	"github.com/trick77/relume-tv/internal/mdns"
+	"github.com/trick77/relume-tv/internal/ssdp"
+	"github.com/trick77/relume-tv/internal/webui"
 )
 
 // version is set at build time via -ldflags "-X main.version=..." (CI).
@@ -42,7 +42,7 @@ func main() {
 
 	switch cmd {
 	case "version", "-version", "--version":
-		fmt.Println("relumeTV", version)
+		fmt.Println("relume-tv", version)
 		return
 	case "serve":
 		if err := runServe(os.Args[2:], log); err != nil {
@@ -111,7 +111,7 @@ const (
 
 func parseServeOptions(args []string) (serveOptions, error) {
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
-	cfgPath := fs.String("config", "relumetv.json", "path to the configuration file")
+	cfgPath := fs.String("config", "relume-tv.json", "path to the configuration file")
 	httpPort := fs.Int("http-port", 80, "HTTP port of the emulated bridge")
 	advIP := fs.String("advertise-ip", "", "advertised IP (empty = auto-detect)")
 	debug := fs.Bool("debug", false, "verbose diagnostics: SSDP/HTTP datagrams + mDNS observer")
@@ -256,7 +256,7 @@ func runServe(args []string, log *slog.Logger) error {
 			return fmt.Errorf("auto-detect advertise-ip: %w (use -advertise-ip)", err)
 		}
 	}
-	log.Info("relumeTV", "version", version)
+	log.Info("relume-tv", "version", version)
 	log.Info("identity", "serial", cfg.Identity.Serial, "bridgeid", cfg.Identity.BridgeID(), "advertise", ip)
 	// Dump the saved state on startup (no secrets): which Hue Bridge Pro is paired and
 	// which TVs are already paired. An already-paired TV explains an "instant"
@@ -307,19 +307,19 @@ func runServe(args []string, log *slog.Logger) error {
 	// frame below) so the web UI can show the stream's frames/s. Harmless when no UI
 	// runs or no DTLS stream is active (reports 0).
 	frameStats := newFrameStats()
-	// proSendStats tracks relumeTV's *outgoing* DTLS rate to the Pro (50 Hz sendLoop),
+	// proSendStats tracks relume-tv's *outgoing* DTLS rate to the Pro (50 Hz sendLoop),
 	// the counterpart to frameStats' incoming rate. proStats bundles the REST-path
 	// counters: write rate, coalesced drops/s, and cumulative forward errors. Only
 	// the DTLS or the REST counters are non-zero at a time, depending on the path.
 	proSendStats := newFrameStats()
-	// restRecvStats tracks the rate of inbound REST control calls the TV sends relumeTV
+	// restRecvStats tracks the rate of inbound REST control calls the TV sends relume-tv
 	// (per-light state PUTs + group-action PUTs), the REST-path counterpart to frameStats'
 	// incoming DTLS rate. Surfaced as the UI "Received" card's REST reading; 0 unless the TV
 	// is driving over REST.
 	restRecvStats := newFrameStats()
 	proStats := newProStats()
 	// jitterStats holds the per-window brightness jump on the incoming TV stream vs
-	// relumeTV's smoothed sent stream, so the UI can show how much the DTLS-path easing
+	// relume-tv's smoothed sent stream, so the UI can show how much the DTLS-path easing
 	// cut the flicker. Fed by the receiver (input) and streamer (sent) rollups below.
 	jitterStats := newJitterStats()
 
@@ -355,7 +355,7 @@ func runServe(args []string, log *slog.Logger) error {
 	defer stop()
 
 	// Pair the Hue Bridge Pro backend in the background, independently of the TV: the
-	// TV can discover/pair relumeTV before the Pro is paired; relumeTV just returns an
+	// TV can discover/pair relume-tv before the Pro is paired; relume-tv just returns an
 	// empty light list until the Pro pairing completes, then hot-loads the lights.
 	if pro == nil {
 		log.Warn("no hue bridge pro paired yet – auto-pairing in background; TAP the hue bridge pro link button")
@@ -386,11 +386,11 @@ func runServe(args []string, log *slog.Logger) error {
 			jitterStats:   jitterStats,
 			setup:         setup,
 			// The name the TV shows for this bridge — matches the TV-facing /config
-			// name and UPnP friendlyName ("relumeTV-XXXXXX", a single token; the TV
+			// name and UPnP friendlyName ("relume-tv-XXXXXX", a single token; the TV
 			// truncates at the first space). NOTE: the mDNS instance the TV discovers
 			// is still "Philips Hue - …" (internal/mdns), deliberately unchanged so
 			// discovery keeps working.
-			advName: "relumeTV-" + bridgeID[len(bridgeID)-6:],
+			advName: "relume-tv-" + bridgeID[len(bridgeID)-6:],
 			version: version,
 			started: time.Now(),
 			// The configured DTLS easing time constant (ms), so the Stream card's
@@ -421,13 +421,13 @@ func runServe(args []string, log *slog.Logger) error {
 	clip.OnRESTControl = restRecvStats.Mark
 
 	// entStreamer is hoisted to function scope so the shutdown path can release
-	// relumeTV's own entertainment stream on the Pro synchronously (Phase D), rather
+	// relume-tv's own entertainment stream on the Pro synchronously (Phase D), rather
 	// than racing the receiver's async OnStreamStop against process exit.
 	var entStreamer *entertainment.ProStreamer
 
 	if entertainmentMode {
 		// Entertainment mode: run the real DTLS receiver on :2100. It decrypts the
-		// TV's stream (PSK = the clientkey relumeTV minted at pairing) and decodes the
+		// TV's stream (PSK = the clientkey relume-tv minted at pairing) and decodes the
 		// HueStream frames.
 		recv := entertainment.NewReceiver(ip, cfg.PSKForUser, log)
 		// Count stream frames as activity so the idle-off monitor doesn't turn the
@@ -441,7 +441,7 @@ func runServe(args []string, log *slog.Logger) error {
 		// streamer's sent-side jump (below) it yields the jitter-reduction metric.
 		recv.OnWindowStats = func(briJump, _ uint32) { jitterStats.setInput(briJump) }
 
-		// Phase C: relumeTV opens its OWN entertainment stream to the Pro over DTLS and
+		// Phase C: relume-tv opens its OWN entertainment stream to the Pro over DTLS and
 		// re-encodes the decoded TV frames at full rate, avoiding the per-light REST writes
 		// that overflow the Pro's command queue (503). The streamer auto-falls back to the
 		// REST forward (Phase B) if DTLS cannot establish — so it is created unconditionally
@@ -475,11 +475,11 @@ func runServe(args []string, log *slog.Logger) error {
 		// its Ambilight zone (POST/PUT /groups), restrict the Pro config to that
 		// subset so lights in other rooms are never driven. Also filters the REST fallback.
 		clip.OnGroupMembers = streamer.SetRequestedMembers
-		// Persist/reuse relumeTV's own entertainment_configuration across restarts
+		// Persist/reuse relume-tv's own entertainment_configuration across restarts
 		// instead of re-finding it each stream (Phase D).
 		streamer.SetConfigStore(cfg.LoadEntConfigID, func(id string) {
 			if err := cfg.SaveEntConfigID(id); err != nil {
-				log.Warn("persisting relumeTV entertainment config id", "err", err)
+				log.Warn("persisting relume-tv entertainment config id", "err", err)
 			}
 		})
 		entStreamer = streamer
@@ -558,7 +558,7 @@ func runServe(args []string, log *slog.Logger) error {
 		return err
 	}
 	shutdownHTTP(httpSrv)
-	// Release relumeTV's own entertainment stream on the Pro before turning the lights
+	// Release relume-tv's own entertainment stream on the Pro before turning the lights
 	// off, so the Pro area is deactivated (StopStream uses the client's own timeout, not
 	// the cancelled ctx) and never leaks past process exit (Phase D).
 	stopEntertainment(entStreamer)
@@ -640,7 +640,7 @@ func newProvider(client *bridgepro.Client, controlled *bridge.ControlledSet, liv
 	p.OnControlled = controlled.Seen
 	p.OnColor = live.SetState
 	// Record each successful REST write to the Pro so the UI can show the live
-	// outgoing write rate when relumeTV drives the Pro over REST (no DTLS stream).
+	// outgoing write rate when relume-tv drives the Pro over REST (no DTLS stream).
 	p.OnForward = stats.writes.Mark
 	// Backpressure signals for the UI: coalesced (healthy drops/s the optimistic
 	// path spared the Pro) and forward errors (the real failure signal, cumulative).
@@ -707,7 +707,7 @@ func idleShouldFire(now, lastSeen time.Time, fired bool, idleTimeout time.Durati
 // power-off (step 3) and power-on (step 5) transitions feel responsive in the wizard.
 const setupWatcherInterval = 4 * time.Second
 
-// autoPairPro pairs relumeTV with the Hue Bridge Pro in the background, independently of
+// autoPairPro pairs relume-tv with the Hue Bridge Pro in the background, independently of
 // the TV side. It discovers the Pro via local mDNS (the only discovery path),
 // selects the first bridge that is really a Pro (modelid BSB003), pins the leaf
 // certificate, then polls until the user taps the Pro's physical link button (the one
@@ -715,7 +715,7 @@ const setupWatcherInterval = 4 * time.Second
 // wizard, and on success persists the credentials, hot-loads the light backend and
 // starts the setup reachability watcher (steps 3 & 5).
 func autoPairPro(ctx context.Context, cfg *config.Config, clip *clipv1.Server, controlled *bridge.ControlledSet, live *liveColors, stats *proStats, setup *setupStatus, skipTLS bool, log *slog.Logger) {
-	// Browse mDNS for Hue bridges, excluding relumeTV's own announcement (it advertises
+	// Browse mDNS for Hue bridges, excluding relume-tv's own announcement (it advertises
 	// itself as a Hue bridge to the TV under this same bridge id).
 	discover := func() ([]bridgepro.DiscoveredBridge, error) {
 		return bridgepro.Discover(cfg.Identity.BridgeID())
@@ -730,7 +730,7 @@ func autoPairPro(ctx context.Context, cfg *config.Config, clip *clipv1.Server, c
 			setup.setPrecond(true, host, true, "")
 		case errors.Is(derr, ErrNoProBridge):
 			// (b) a bridge was found but it is not a Pro — surface the actual modelid.
-			msg := "A Hue bridge was found, but it is not a Hue Bridge Pro (BSB003). relumeTV requires a Hue Bridge Pro."
+			msg := "A Hue bridge was found, but it is not a Hue Bridge Pro (BSB003). relume-tv requires a Hue Bridge Pro."
 			log.Warn("hue bridge pro not paired yet: discovered bridge is not a Hue Bridge Pro; retrying", "err", derr)
 			setup.setPrecond(true, "", false, msg)
 		case errors.Is(derr, ErrProModelUnknown):
@@ -773,7 +773,7 @@ func autoPairPro(ctx context.Context, cfg *config.Config, clip *clipv1.Server, c
 	}
 
 	log.Info("waiting for the hue bridge pro link button — TAP it now", "host", host)
-	paired, perr := bridgepro.NewPairer("relumetv#"+hostname()).
+	paired, perr := bridgepro.NewPairer("relume-tv#"+hostname()).
 		WaitForLinkButton(ctx, pro, time.Time{}, func(attempt int) {
 			if attempt%6 == 0 {
 				log.Info("still waiting for the hue bridge pro link button — TAP it", "host", host)
@@ -835,12 +835,12 @@ func sleepCtx(ctx context.Context, d time.Duration) bool {
 
 // runAvahiService prints an Avahi static service file with which a Linux host
 // running avahi-daemon announces the _hue._tcp service. Needed when avahi
-// occupies port 5353 and relumeTV's built-in mDNS announcer therefore can't bind:
+// occupies port 5353 and relume-tv's built-in mDNS announcer therefore can't bind:
 //
-//	relumetv avahi-service > /etc/avahi/services/relumetv-hue.service
+//	relume-tv avahi-service > /etc/avahi/services/relume-tv-hue.service
 func runAvahiService(args []string) error {
 	fs := flag.NewFlagSet("avahi-service", flag.ExitOnError)
-	cfgPath := fs.String("config", "relumetv.json", "path to the configuration file")
+	cfgPath := fs.String("config", "relume-tv.json", "path to the configuration file")
 	port := fs.Int("http-port", 80, "advertised port (must match the serve http-port)")
 	_ = fs.Parse(args)
 

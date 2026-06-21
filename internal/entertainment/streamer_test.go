@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/trick77/relumetv/internal/bridgepro"
-	"github.com/trick77/relumetv/internal/huestream"
+	"github.com/trick77/relume-tv/internal/bridgepro"
+	"github.com/trick77/relume-tv/internal/huestream"
 )
 
 // fakeConn is a non-blocking net.Conn for the streamer tests: Write succeeds
@@ -217,7 +217,7 @@ func TestProStreamer_ensureConfig_noSubsetDrivesAllColorLights(t *testing.T) {
 // subset — otherwise the Pro would keep driving the lights outside the subset. This
 // guards the reuse path, where the member-loop filter alone would not apply.
 func TestProStreamer_ensureConfig_recreatesAllLightsConfigOnSubsetShrink(t *testing.T) {
-	// Given: an existing relumeTV config over both lights, but the TV now wants only 1.
+	// Given: an existing relume-tv config over both lights, but the TV now wants only 1.
 	pro := twoLightPro(nil)
 	pro.configs = []bridgepro.EntertainmentConfig{{ID: testConfigID}}
 	pro.configs[0].Metadata.Name = configName
@@ -304,7 +304,7 @@ func configFull(id string, base int, svcRIDs ...string) *bridgepro.Entertainment
 }
 
 func TestProStreamer_ensureConfig_reusesMatchingConfig(t *testing.T) {
-	// Given: a relumeTV config that already covers the current light set (svc-A).
+	// Given: a relume-tv config that already covers the current light set (svc-A).
 	pro := oneLightPro()
 	pro.configs = []bridgepro.EntertainmentConfig{{ID: testConfigID}}
 	pro.configs[0].Metadata.Name = configName
@@ -325,7 +325,7 @@ func TestProStreamer_ensureConfig_reusesMatchingConfig(t *testing.T) {
 }
 
 func TestProStreamer_ensureConfig_recreatesOnLightSetChange(t *testing.T) {
-	// Given: an existing relumeTV config that covers a now-gone light (svc-OLD), while
+	// Given: an existing relume-tv config that covers a now-gone light (svc-OLD), while
 	// the current color light maps to svc-A — the set changed under the config.
 	pro := oneLightPro()
 	pro.configs = []bridgepro.EntertainmentConfig{{ID: "stale-1"}}
@@ -377,7 +377,7 @@ func TestProStreamer_ensureConfig_cachesAcrossCalls(t *testing.T) {
 }
 
 func TestProStreamer_ensureConfig_reusesPersistedIDAndSaves(t *testing.T) {
-	// Given: a persisted id pointing at a config whose NAME is not `relumetv` (proves
+	// Given: a persisted id pointing at a config whose NAME is not `relume-tv` (proves
 	// the id-based match, not the name fallback). It covers the current light set.
 	pro := oneLightPro()
 	pro.configs = []bridgepro.EntertainmentConfig{{ID: testConfigID}}
@@ -406,7 +406,7 @@ func TestProStreamer_ensureConfig_reusesPersistedIDAndSaves(t *testing.T) {
 }
 
 func TestProStreamer_ensureConfig_transientGetDoesNotDuplicate(t *testing.T) {
-	// Given: a listed relumeTV config (so it exists), but reading it back fails
+	// Given: a listed relume-tv config (so it exists), but reading it back fails
 	// transiently — recreating would mint a duplicate.
 	pro := oneLightPro()
 	pro.configs = []bridgepro.EntertainmentConfig{{ID: testConfigID}}
@@ -426,7 +426,7 @@ func TestProStreamer_ensureConfig_transientGetDoesNotDuplicate(t *testing.T) {
 }
 
 func TestProStreamer_establishStopsLeftoverActiveConfig(t *testing.T) {
-	// Given: a reused relumeTV config left active=true (relumeTV restarted mid-stream),
+	// Given: a reused relume-tv config left active=true (relume-tv restarted mid-stream),
 	// so the first StartStream is rejected.
 	pro := oneLightPro()
 	pro.configs = []bridgepro.EntertainmentConfig{{ID: testConfigID, Status: "active"}}

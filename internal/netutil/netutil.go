@@ -1,4 +1,4 @@
-// Package netutil provides small networking helpers shared across relumeTV's
+// Package netutil provides small networking helpers shared across relume-tv's
 // discovery components (SSDP, mDNS announcer, diagnostics).
 package netutil
 

@@ -6,14 +6,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/trick77/relumetv/internal/config"
+	"github.com/trick77/relume-tv/internal/config"
 )
 
 // newTestPairer returns a Pairer whose pair attempt succeeds only on/after
 // successOn (0-based) and whose capture is a no-op, so no network is touched.
 func newTestPairer(successOn int, attempts *int) *Pairer {
 	return &Pairer{
-		DeviceType: "relumetv#test",
+		DeviceType: "relume-tv#test",
 		Interval:   time.Millisecond,
 		capture:    func(*config.BridgePro) {},
 		pair: func(*config.BridgePro, string) (*PairResult, error) {

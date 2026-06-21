@@ -1,24 +1,24 @@
-# relumeTV — software bridge: Philips Ambilight TV <-> Hue Bridge Pro
+# relume-tv — software bridge: Philips Ambilight TV <-> Hue Bridge Pro
 #
 # IMPORTANT: host networking is mandatory. SSDP and mDNS discovery use multicast
 # and must sit directly in the TV's LAN — bridge/NAT networks block it.
 #
 # Pulls the prebuilt image from GHCR (built by the release workflow). To build
-# locally instead, run: docker build -f Containerfile -t relumetv:dev .
+# locally instead, run: docker build -f Containerfile -t relume-tv:dev .
 services:
-  relumetv:
-    image: ghcr.io/trick77/relumetv:latest
-    container_name: relumetv
+  relume-tv:
+    image: ghcr.io/trick77/relume-tv:latest
+    container_name: relume-tv
     network_mode: host
     restart: unless-stopped
     volumes:
       # Named volume holds the persistent state (identity, TV tokens, Pro pairing).
-      - relumetv-data:/data
+      - relume-tv-data:/data
     # Default port 80 (like a real gen-2 bridge). Under rootless Docker, ports
     # <1024 need the host sysctl `net.ipv4.ip_unprivileged_port_start=80`, see README.
     # The Bridge Pro is paired automatically in the background on first run — just
     # TAP the Pro's physical link button. The TV pairs itself (auto-pair).
-    # Config defaults to relumetv.json; the image's WORKDIR is /data, so it lands
+    # Config defaults to relume-tv.json; the image's WORKDIR is /data, so it lands
     # in the named volume above.
     command: ["serve"]
     # Web UI (setup assistant + live dashboard) is ON by default on port 33100.
@@ -28,4 +28,4 @@ services:
     # command: ["serve", "-headless"]
 
 volumes:
-  relumetv-data:
+  relume-tv-data:

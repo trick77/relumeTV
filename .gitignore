@@ -1,10 +1,10 @@
 # Binaries
-/relumetv
-/cmd/relumetv/relumetv
+/relume-tv
+/cmd/relume-tv/relume-tv
 
 # Laufzeit-Zustand
 *.json.tmp
-relumetv.json
+relume-tv.json
 /data/
 
 # Logs

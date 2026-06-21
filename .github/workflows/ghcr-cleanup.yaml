@@ -23,8 +23,8 @@ jobs:
       # multi-arch (amd64/arm64) pulls of retained tags stay intact.
       - uses: dataaxiom/ghcr-cleanup-action@v1
         with:
-          # GHCR package names are lowercase; the action defaults `package` to the
-          # mixed-case repo slug (relumeTV), which 404s the registry API login.
-          package: relumetv
+          # Pin the GHCR package name explicitly so the action targets the right
+          # package regardless of how it derives the default from the repo slug.
+          package: relume-tv
           keep-n-tagged: 10
           delete-untagged: true

@@ -14,7 +14,7 @@ import (
 )
 
 // ModelHueBridgePro is the modelid a real Hue Bridge Pro reports — in its mDNS TXT
-// record (modelid=...) and in /api/0/config. relumeTV only drives a Pro, so a discovered
+// record (modelid=...) and in /api/0/config. relume-tv only drives a Pro, so a discovered
 // bridge whose modelid differs is rejected as "not a Hue Bridge Pro". NOTE: this string
 // is matched against the real hardware — if it is wrong, EVERY Pro is rejected, so any
 // mismatch must surface the actual observed modelid loudly (see the selection callers).
@@ -40,9 +40,9 @@ type DiscoveredBridge struct {
 // purely local — no Philips cloud, so no rate limits and no internet dependency. A
 // powered-off bridge simply does not answer (empty result).
 //
-// excludeBridgeID drops relumeTV's OWN announcement: relumeTV advertises itself as a Hue
+// excludeBridgeID drops relume-tv's OWN announcement: relume-tv advertises itself as a Hue
 // bridge (_hue._tcp, modelid BSB002) to the TV, so without this filter a setup with no
-// real bridge present would "discover" relumeTV and mislabel it as a non-Pro bridge.
+// real bridge present would "discover" relume-tv and mislabel it as a non-Pro bridge.
 func Discover(excludeBridgeID string) ([]DiscoveredBridge, error) {
 	resolver, err := zeroconf.NewResolver(nil)
 	if err != nil {
@@ -66,7 +66,7 @@ func Discover(excludeBridgeID string) ([]DiscoveredBridge, error) {
 		}
 		bridgeID, modelID := parseHueTXT(e.Text)
 		if excludeBridgeID != "" && strings.EqualFold(bridgeID, excludeBridgeID) {
-			continue // relumeTV's own announcement
+			continue // relume-tv's own announcement
 		}
 		key := bridgeID
 		if key == "" {

@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/pion/dtls/v3"
-	"github.com/trick77/relumetv/internal/huestream"
+	"github.com/trick77/relume-tv/internal/huestream"
 )
 
 // TestReceiver_decodesStreamOverDTLS drives the receiver end-to-end: a pion DTLS

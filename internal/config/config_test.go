@@ -24,7 +24,7 @@ func TestIdentity_Derivations(t *testing.T) {
 
 func TestLoad_GeneratesIdentityStableAcrossReloadAfterCommit(t *testing.T) {
 	// Given
-	path := filepath.Join(t.TempDir(), "relumetv.json")
+	path := filepath.Join(t.TempDir(), "relume-tv.json")
 
 	// When: a fresh load generates an identity (in memory, not yet on disk)
 	c1, err := Load(path)
@@ -54,7 +54,7 @@ func TestLoad_GeneratesIdentityStableAcrossReloadAfterCommit(t *testing.T) {
 
 func TestLoad_FreshSerialWhenRestartedBeforeCommit(t *testing.T) {
 	// Given: a fresh load that is NOT committed (restart mid-setup)
-	path := filepath.Join(t.TempDir(), "relumetv.json")
+	path := filepath.Join(t.TempDir(), "relume-tv.json")
 	c1, err := Load(path)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
@@ -74,7 +74,7 @@ func TestLoad_FreshSerialWhenRestartedBeforeCommit(t *testing.T) {
 
 func TestLoad_StampsSchemaVersionAndPersistsOnCommit(t *testing.T) {
 	// Given: a fresh config
-	path := filepath.Join(t.TempDir(), "relumetv.json")
+	path := filepath.Join(t.TempDir(), "relume-tv.json")
 	c, err := Load(path)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
@@ -96,7 +96,7 @@ func TestLoad_StampsSchemaVersionAndPersistsOnCommit(t *testing.T) {
 
 func TestSave_IsNoOpUntilCommit(t *testing.T) {
 	// Given: a fresh (uncommitted) config
-	path := filepath.Join(t.TempDir(), "relumetv.json")
+	path := filepath.Join(t.TempDir(), "relume-tv.json")
 	c, err := Load(path)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
@@ -156,7 +156,7 @@ func TestSave_IsNoOpUntilCommit(t *testing.T) {
 
 func TestLoad_MigratesLegacyZeroVersion(t *testing.T) {
 	// Given: a legacy config with no schemaVersion field
-	path := filepath.Join(t.TempDir(), "relumetv.json")
+	path := filepath.Join(t.TempDir(), "relume-tv.json")
 	if err := os.WriteFile(path, []byte(`{"identity":{"serial":"2c4d54ea2832"},"apiUsers":{}}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +175,7 @@ func TestLoad_MigratesLegacyZeroVersion(t *testing.T) {
 
 func TestLoad_RejectsNewerSchemaVersion(t *testing.T) {
 	// Given: a config written by a newer build
-	path := filepath.Join(t.TempDir(), "relumetv.json")
+	path := filepath.Join(t.TempDir(), "relume-tv.json")
 	if err := os.WriteFile(path, []byte(`{"schemaVersion":9999,"identity":{"serial":"2c4d54ea2832"}}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -189,7 +189,7 @@ func TestLoad_RejectsNewerSchemaVersion(t *testing.T) {
 func TestLoad_RemovesOrphanedTempFile(t *testing.T) {
 	// Given: a real config plus a leftover .tmp from a crashed save
 	dir := t.TempDir()
-	path := filepath.Join(dir, "relumetv.json")
+	path := filepath.Join(dir, "relume-tv.json")
 	if _, err := Load(path); err != nil {
 		t.Fatalf("Load: %v", err)
 	}
@@ -220,7 +220,7 @@ func contains(haystack, needle []byte) bool {
 
 func TestEntConfigID_RoundTripsAndClears(t *testing.T) {
 	// Given
-	path := filepath.Join(t.TempDir(), "relumetv.json")
+	path := filepath.Join(t.TempDir(), "relume-tv.json")
 	c, _ := Load(path)
 
 	// When: save an id (Commit so deferred persistence writes it to disk)
@@ -249,7 +249,7 @@ func TestEntConfigID_RoundTripsAndClears(t *testing.T) {
 
 func TestSetPro_DoesNotClobberEntConfigID(t *testing.T) {
 	// Given: a persisted ent config id
-	path := filepath.Join(t.TempDir(), "relumetv.json")
+	path := filepath.Join(t.TempDir(), "relume-tv.json")
 	c, _ := Load(path)
 	if err := c.SaveEntConfigID("cfg-uuid"); err != nil {
 		t.Fatalf("SaveEntConfigID: %v", err)
@@ -268,7 +268,7 @@ func TestSetPro_DoesNotClobberEntConfigID(t *testing.T) {
 
 func TestAddApiUser_Persists(t *testing.T) {
 	// Given
-	path := filepath.Join(t.TempDir(), "relumetv.json")
+	path := filepath.Join(t.TempDir(), "relume-tv.json")
 	c, _ := Load(path)
 
 	// When (Commit so deferred persistence writes it to disk)

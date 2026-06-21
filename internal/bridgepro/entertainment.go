@@ -3,7 +3,7 @@ package bridgepro
 import "fmt"
 
 // EntertainmentService is the subset of a CLIP v2 entertainment resource relevant
-// for relumeTV. Every color-capable light's owning device exposes one; relumeTV maps a
+// for relume-tv. Every color-capable light's owning device exposes one; relume-tv maps a
 // light to its entertainment service via the shared owner device rid, then uses the
 // service rid as the member of an entertainment_configuration channel.
 type EntertainmentService struct {
@@ -45,7 +45,7 @@ type EntChannel struct {
 	} `json:"members"`
 }
 
-// EntertainmentConfigFull is the full entertainment_configuration resource relumeTV
+// EntertainmentConfigFull is the full entertainment_configuration resource relume-tv
 // reads back after creating it, to learn the bridge-assigned channel ids.
 type EntertainmentConfigFull struct {
 	ID       string `json:"id"`
@@ -123,8 +123,8 @@ func (c *Client) StopStream(id string) error {
 	return c.put("/clip/v2/resource/entertainment_configuration/"+id, map[string]any{"action": "stop"})
 }
 
-// DeleteEntertainmentConfig removes an entertainment_configuration by id. relumeTV
-// uses it to drop its own `relumetv` config when the color-light set changed under it
+// DeleteEntertainmentConfig removes an entertainment_configuration by id. relume-tv
+// uses it to drop its own `relume-tv` config when the color-light set changed under it
 // (so a stale config does not linger or count against the Pro's area limit). Stop
 // the stream first if it might be active — the Pro rejects deleting an active one.
 func (c *Client) DeleteEntertainmentConfig(id string) error {

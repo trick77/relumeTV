@@ -6,7 +6,7 @@ package translate
 import (
 	"strconv"
 
-	"github.com/trick77/relumetv/internal/bridgepro"
+	"github.com/trick77/relume-tv/internal/bridgepro"
 )
 
 // LightMap holds the v1 representation of the lights and the ID mapping for control.

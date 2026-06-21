@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/trick77/relumetv/internal/netutil"
+	"github.com/trick77/relume-tv/internal/netutil"
 )
 
 const mdnsGroup = "224.0.0.251:5353"

@@ -1,4 +1,4 @@
-// Package config holds the persistent state of relumeTV: the stable
+// Package config holds the persistent state of relume-tv: the stable
 // fake bridge identity (towards the TV), the pairing tokens issued by the TV
 // and the pairing data for the real Hue Bridge Pro.
 package config
@@ -16,7 +16,7 @@ import (
 	"sync"
 )
 
-// Identity is the stable identity with which relumeTV presents itself to the TV
+// Identity is the stable identity with which relume-tv presents itself to the TV
 // as a Gen 2 bridge (BSB002). It is generated once and persisted,
 // because the TV caches bridge identities.
 type Identity struct {
@@ -109,7 +109,7 @@ type Config struct {
 	Identity      Identity            `json:"identity"`
 	ApiUsers      map[string]*ApiUser `json:"apiUsers"`
 	Pro           *BridgePro          `json:"bridgePro,omitempty"`
-	// EntConfigID is the id of relumeTV's own entertainment_configuration on the Pro,
+	// EntConfigID is the id of relume-tv's own entertainment_configuration on the Pro,
 	// persisted so the entertainment streamer can reuse it across restarts instead of
 	// re-finding (or recreating) it on each stream. Top-level rather than inside Pro
 	// so SetPro's copy-on-write reconnect never clobbers it. Access via
@@ -166,7 +166,7 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("parse config: %w", err)
 	}
 	if c.SchemaVersion > CurrentSchemaVersion {
-		return nil, fmt.Errorf("config schema version %d is newer than this build supports (%d); upgrade relumeTV", c.SchemaVersion, CurrentSchemaVersion)
+		return nil, fmt.Errorf("config schema version %d is newer than this build supports (%d); upgrade relume-tv", c.SchemaVersion, CurrentSchemaVersion)
 	}
 	// A zero version is a legacy/first-schema file: adopt the current version so the
 	// next save stamps it. Add real per-version migrations here as the schema evolves.
@@ -286,7 +286,7 @@ func (c *Config) SetPro(p *BridgePro) error {
 	return c.save()
 }
 
-// LoadEntConfigID returns the persisted relumeTV entertainment_configuration id (empty
+// LoadEntConfigID returns the persisted relume-tv entertainment_configuration id (empty
 // if none). The streamer uses it as the first candidate to reuse across restarts.
 func (c *Config) LoadEntConfigID() string {
 	c.mu.Lock()
@@ -294,7 +294,7 @@ func (c *Config) LoadEntConfigID() string {
 	return c.EntConfigID
 }
 
-// SaveEntConfigID persists the relumeTV entertainment_configuration id (an empty id
+// SaveEntConfigID persists the relume-tv entertainment_configuration id (an empty id
 // clears it, e.g. when the streamer deleted a stale config). A no-op write when the
 // id is unchanged, so the streamer can call it freely without churning the file.
 func (c *Config) SaveEntConfigID(id string) error {

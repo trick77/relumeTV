@@ -1,6 +1,6 @@
-# relumeTV — Architecture Review (resolved)
+# relume-tv — Architecture Review (resolved)
 
-Original review date: 2026-06-17 · Scope: full `internal/*` + `cmd/relumetv` + build/CI.
+Original review date: 2026-06-17 · Scope: full `internal/*` + `cmd/relume-tv` + build/CI.
 Security was out of scope by request (LAN-only, no external access).
 
 > **Status: backlog cleared.** All original findings have been remediated and verified

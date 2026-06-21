@@ -1,4 +1,4 @@
-# relumeTV
+# relume-tv
 
 > **⚠️ Disclaimer — read this first**
 >
@@ -21,11 +21,11 @@ Developed and tested against a **Philips 65OLED806** (Android TV 11). The rest o
 **OLED806 series (48/55/65/77")** shares the same platform and firmware and should behave the
 same; other pre-2023 Ambilight models are untested but may work. Note that 2025/2026 TVs ship
 the new **AmbiScape** feature, which talks to bulbs directly over Matter and bypasses the Hue
-Bridge entirely — those TVs neither need nor work with relumeTV.
+Bridge entirely — those TVs neither need nor work with relume-tv.
 
 ## What this does
 
-relumeTV sits between the TV and the Bridge Pro: to the TV it impersonates an old gen-2 bridge
+relume-tv sits between the TV and the Bridge Pro: to the TV it impersonates an old gen-2 bridge
 (BSB002) speaking the v1 HTTP API, and it proxies every request to the real Bridge Pro over
 HTTPS/CLIP v2. See [docs/DESIGN.md](docs/DESIGN.md) for identity, pairing, and the two control
 modes.
@@ -35,13 +35,13 @@ modes.
 - **A Philips Ambilight TV** with the built-in **Ambilight+Hue** feature (the older
   integration, roughly pre-2023 models) — the TV is what discovers and drives the bridge.
 - **A Hue Bridge Pro (BSB003)**, already set up with your lights and reachable on the LAN.
-- **A Linux host** to run relumeTV on. Discovery uses multicast (mDNS/SSDP), so the container
+- **A Linux host** to run relume-tv on. Discovery uses multicast (mDNS/SSDP), so the container
   needs `network_mode: host` — **Docker Desktop on macOS/Windows won't work**, its
   host-networking mode doesn't reliably carry the multicast traffic.
-- **TV, relumeTV host, and Bridge Pro on the same L2 network / VLAN**, with multicast allowed
+- **TV, relume-tv host, and Bridge Pro on the same L2 network / VLAN**, with multicast allowed
   (no client/AP isolation between them). For the lowest latency, connect all three over wired
   Ethernet — Wi-Fi can add noticeable lag to the Ambilight follow.
-- **TCP port 80 free on the host** — relumeTV emulates a gen-2 bridge, which the TV reaches on
+- **TCP port 80 free on the host** — relume-tv emulates a gen-2 bridge, which the TV reaches on
   `:80`. The TV **hardcodes** this port and ignores any port advertised over mDNS/SSDP, so `:80`
   is effectively mandatory — don't move it. Under rootless Docker, binding `:80` also requires
   `sysctl net.ipv4.ip_unprivileged_port_start=80` (or run the container with the privilege to
@@ -62,7 +62,7 @@ modes.
 ### Data & secrets
 
 State (bridge identity, TV tokens, **Bridge Pro app key + client key**) lives in
-`./data/relumetv.json`. This file holds secrets.
+`./data/relume-tv.json`. This file holds secrets.
 
 ## Usage
 
@@ -91,10 +91,10 @@ State (bridge identity, TV tokens, **Bridge Pro app key + client key**) lives in
 ## Development
 
 ```bash
-go build -o relumetv ./cmd/relumetv
+go build -o relume-tv ./cmd/relume-tv
 go test ./...
 ```
 
 ## Documentation
 
-- **[docs/DESIGN.md](docs/DESIGN.md)** — how relumeTV works: identity, pairing, control modes.
+- **[docs/DESIGN.md](docs/DESIGN.md)** — how relume-tv works: identity, pairing, control modes.

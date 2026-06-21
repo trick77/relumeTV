@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// proStats bundles relumeTV's outgoing-to-Pro counters so they thread through the
+// proStats bundles relume-tv's outgoing-to-Pro counters so they thread through the
 // provider constructors as one value instead of three parameters. writes and
 // coalesces are rolling per-second rates (successful REST writes and frames
 // dropped by the optimistic path); fwdErrs is a cumulative count of failed Pro
@@ -101,7 +101,7 @@ func (f *frameStats) trim(now time.Time) {
 const jitterStaleAfter = 12 * time.Second
 
 // jitterStats holds the latest per-window max brightness jump on the incoming TV
-// stream (input) and on relumeTV's smoothed sent stream (sent). The gap between them
+// stream (input) and on relume-tv's smoothed sent stream (sent). The gap between them
 // is the jitter the DTLS-path easing removed. Only the brightness axis is kept — it
 // is the visible flicker — and only the most recent 5s window, stamped so the metric
 // reads as "no value" (UI longdash) once the stream stops refreshing it.
@@ -117,7 +117,7 @@ func newJitterStats() *jitterStats { return &jitterStats{} }
 func (j *jitterStats) setInput(briJump uint32) { j.inputBri.Store(briJump) }
 
 // setSent records the latest sent-stream brightness jump and stamps freshness. The
-// sent side only fires while relumeTV is streaming to the Pro over DTLS, so its
+// sent side only fires while relume-tv is streaming to the Pro over DTLS, so its
 // timestamp is what gates the metric on/off.
 func (j *jitterStats) setSent(briJump uint32) {
 	j.sentBri.Store(briJump)
@@ -126,7 +126,7 @@ func (j *jitterStats) setSent(briJump uint32) {
 
 // Reduction returns the latest input and sent brightness jumps and whether they are
 // fresh. ok is false (UI shows a longdash) when no sent-side window has landed within
-// jitterStaleAfter — i.e. relumeTV is not streaming to the Pro over DTLS.
+// jitterStaleAfter — i.e. relume-tv is not streaming to the Pro over DTLS.
 func (j *jitterStats) Reduction() (inBri, sentBri int, ok bool) {
 	u := j.updatedAt.Load()
 	if u == 0 || time.Since(time.Unix(0, u)) > jitterStaleAfter {

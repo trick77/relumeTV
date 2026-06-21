@@ -4,7 +4,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/trick77/relumetv/internal/bridgepro"
+	"github.com/trick77/relume-tv/internal/bridgepro"
 )
 
 // offFake records the on-state and whether a color was set for every SetLight call.

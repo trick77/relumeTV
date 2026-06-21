@@ -4,24 +4,24 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/trick77/relumetv/internal/config"
+	"github.com/trick77/relume-tv/internal/config"
 )
 
-func TestRender_defaultFriendlyNameIsRelumeTV(t *testing.T) {
+func TestRender_defaultFriendlyNameIsRelumeTv(t *testing.T) {
 	// Given
 	id := config.Identity{Serial: "2c4d54ea2832"}
 
 	// When
 	xml, err := Render(id, "192.0.2.10", 80)
 
-	// Then: TV-visible name is relumeTV; discovery-critical fields unchanged
+	// Then: TV-visible name is relume-tv; discovery-critical fields unchanged
 	if err != nil {
 		t.Fatalf("Render: %v", err)
 	}
 	for _, want := range []string{
 		// Single-token name with the bridge-id suffix (BridgeID of this serial ends
 		// EA2832). No space — the TV truncates the displayed name at the first space.
-		"<friendlyName>relumeTV-EA2832</friendlyName>",
+		"<friendlyName>relume-tv-EA2832</friendlyName>",
 		"<deviceType>urn:schemas-upnp-org:device:Basic:1</deviceType>",
 		"<manufacturer>Signify</manufacturer>",
 		"<manufacturerURL>http://www.meethue.com</manufacturerURL>",

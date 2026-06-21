@@ -1,27 +1,27 @@
-# AGENTS.md — relumeTV
+# AGENTS.md — relume-tv
 
-Module `github.com/trick77/relumetv`. Binary `relumetv` (`cmd/relumetv`).
+Module `github.com/trick77/relume-tv`. Binary `relume-tv` (`cmd/relume-tv`).
 Emulates a gen-2 Hue Bridge (BSB002) toward a Philips Ambilight TV; proxies to a real Hue
 Bridge Pro (BSB003) via CLIP v2.
 
 All repo content (docs, code comments, logs) is English.
 
 ## build/test
-- `go build -o relumetv ./cmd/relumetv`
+- `go build -o relume-tv ./cmd/relume-tv`
 - `go test ./...`
-- diagnostics: `relumetv serve -debug` (SSDP header log + mDNS observer + HTTP body log);
+- diagnostics: `relume-tv serve -debug` (SSDP header log + mDNS observer + HTTP body log);
   `-disable-ssdp` runs mDNS-only (like ha-hue-entertainment) to isolate SSDP from discovery
 - modes: `-mode entertainment` (DEFAULT; M4) or `-mode rest` (explicit fallback, proven REST-follow
-  — relumeTV gives the generic stream-activation ack so the TV stays on per-light PUTs). Entertainment:
+  — relume-tv gives the generic stream-activation ack so the TV stays on per-light PUTs). Entertainment:
   confirms stream activation for real, runs the DTLS-PSK receiver on :2100 (PSK = the clientkey
-  relumeTV minted for the TV) to decode the TV's HueStream, AND opens relumeTV's OWN entertainment
-  stream TO the Pro over DTLS — creates/reuses a `relumetv` entertainment_configuration, re-encodes
+  relume-tv minted for the TV) to decode the TV's HueStream, AND opens relume-tv's OWN entertainment
+  stream TO the Pro over DTLS — creates/reuses a `relume-tv` entertainment_configuration, re-encodes
   frames as HueStream v2 at ~50Hz; PSK to the Pro = the Pro's appKey/clientkey. Auto-falls back to
   the per-light REST forward if DTLS can't establish (DTLS and REST are mutually exclusive — never
   both). The DTLS path EXISTS because per-light REST forwarding alone overflows the Pro's command
-  queue (503). A relumeTV restart mid-stream orphans the TV's session: toggle Ambilight (not
+  queue (503). A relume-tv restart mid-stream orphans the TV's session: toggle Ambilight (not
   Ambilight+Hue) on the TV to reconnect.
-- env diagnostics (no -debug flood): `RELUMETV_GAP_TRACE=1` logs inter-write gaps (idle-off
+- env diagnostics (no -debug flood): `RELUME_TV_GAP_TRACE=1` logs inter-write gaps (idle-off
   calibration). grep `ENTERTAINMENT` / `ambilight activity`.
 - commands: `serve` (default), `avahi-service`, `version`
 - pairing is auto-accepted (no link button, no UI) — but ONLY for the TV (source IP == `-tv-ip`, or
@@ -38,7 +38,7 @@ All repo content (docs, code comments, logs) is English.
   lights. Runs independently of the TV side. `clipv1.Server` light provider is swapped at runtime
   (RWMutex). Once paired, `proWatcher` health-checks the Pro every 60s and, on failure, re-discovers
   its IP (cloud) / re-pins the cert / hot-swaps the provider — no re-pairing (appKey/clientKey persist).
-- state lives in a Docker named volume `relumetv-data` (compose) at `/data/relumetv.json`.
+- state lives in a Docker named volume `relume-tv-data` (compose) at `/data/relume-tv.json`.
 - container build file is `Containerfile` (not Dockerfile); compose file is `compose.yaml`
 
 ## identity invariants (TV rejects otherwise)
@@ -51,14 +51,14 @@ All repo content (docs, code comments, logs) is English.
 - UUID identical across SSDP USN, description.xml UDN. bridgeid identical across SSDP hue-bridgeid header, mDNS TXT, /config.
 
 ## discovery (the hard part)
-- CONFIRMED root cause of "TV fetches description.xml but never lists/pairs relumeTV": a powered-on
+- CONFIRMED root cause of "TV fetches description.xml but never lists/pairs relume-tv": a powered-on
   real **Bridge Pro** on the same LAN (it also announces `_hue._tcp` as BSB003). Power the Pro OFF →
-  the 65OLED806 instantly lists relumeTV and sends `POST /api` (`devicetype=65OLED806/12`). Open
-  product problem: relumeTV must win over a powered-on Pro (the TV de-dupes/prefers BSB003) — NOT yet
-  solved. (relumeTV proxies control TO the Pro, so Pro-off only validates discovery/pairing.)
+  the 65OLED806 instantly lists relume-tv and sends `POST /api` (`devicetype=65OLED806/12`). Open
+  product problem: relume-tv must win over a powered-on Pro (the TV de-dupes/prefers BSB003) — NOT yet
+  solved. (relume-tv proxies control TO the Pro, so Pro-off only validates discovery/pairing.)
 - mDNS announce MUST register exactly once and NEVER re-register/re-announce via
   `Server.Shutdown()`: grandcat/zeroconf's Shutdown multicasts an mDNS goodbye (TTL 0) that evicts
-  relumeTV from the TV's cache → bridge flickers out of the Ambilight list. This (not the descriptor)
+  relume-tv from the TV's cache → bridge flickers out of the Ambilight list. This (not the descriptor)
   was the real discovery bug; fixed in `internal/mdns/announce.go`.
 - Measured (65OLED806/Android 11): the TV actively queries `_hue._tcp` then fetches plain
   `/description.xml`; NO hue SSDP M-SEARCH (only `MediaServer`), NO cloud. So mDNS announce is the
@@ -86,19 +86,19 @@ All repo content (docs, code comments, logs) is English.
 ## deployment
 - needs same L2 as TV (SSDP+mDNS multicast) → Docker `network_mode: host`.
 - rootless can't bind <1024. If TV hardcodes API port 80 (unconfirmed; SRV/LOCATION port may be honored instead), use host `sysctl net.ipv4.ip_unprivileged_port_start=80`, NOT a root container.
-- CI: push/PR to master runs tests; push to master builds+pushes image to ghcr.io/trick77/relumetv (semver tag auto-bumped).
+- CI: push/PR to master runs tests; push to master builds+pushes image to ghcr.io/trick77/relume-tv (semver tag auto-bumped).
 
 ## toolchain trap
 - go 1.26 + grandcat/zeroconf v1.0.0 pulls ancient golang.org/x/net that fails to link (`syscall.recvmsg`). Keep x/net, x/sys, x/crypto upgraded.
 
 ## secrets
-- `relumetv.json` holds Pro appKey/clientkey + TV tokens. Gitignored. Never commit.
+- `relume-tv.json` holds Pro appKey/clientkey + TV tokens. Gitignored. Never commit.
 
 ## status
-M1 discovery+pairing: VERIFIED on 65OLED806 — TV lists relumeTV and completes `POST /api` — but ONLY
+M1 discovery+pairing: VERIFIED on 65OLED806 — TV lists relume-tv and completes `POST /api` — but ONLY
 with the real Bridge Pro powered OFF (coexistence is the open problem). M2 Pro client, M3 REST light
 control: done+verified on real Pro. M4 entertainment (DTLS+HueStream): Phase A–C done and VERIFIED on
-the real TV+Pro (2026-06-16) — relumeTV decodes the TV stream and streams it on to the Pro over its own
+the real TV+Pro (2026-06-16) — relume-tv decodes the TV stream and streams it on to the Pro over its own
 DTLS entertainment_configuration; the 503 command-queue overflow is gone. Phase D (config persistence
 + activation lifecycle) is next. Pairing is auto-accepted (TV-only) + idempotent; mDNS is
 register-once (no goodbye); description.xml is text/xml.
