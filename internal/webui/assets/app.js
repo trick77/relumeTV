@@ -64,29 +64,6 @@ function modeSub(s) {
   return "Per-light writes to the Hue Bridge Pro";
 }
 
-// streamVal shows the live entertainment frame rate while the TV is streaming to the
-// Pro: it shows the TV input rate, plus relumeTV's upsampled send rate (in → out fps)
-// when relumeTV is emitting its own frames (proSendFps>0); on the REST paths it shows
-// relumeTV's outgoing write rate to the Pro (writes/s). Idle/unpaired states show a dash.
-function streamVal(s) {
-  switch (s.health) {
-    case "streaming-pro":
-      // Show the upsampled send rate (in → out) only when relumeTV is pushing its own
-      // frames (proSendFps>0); otherwise show just the TV input rate rather than a
-      // confusing "→ 0". Entertainment is up either way.
-      return (s.proSendFps || 0) > 0
-        ? `<span class="ok">●</span> ${s.streamFps || 0} → ${s.proSendFps} fps`
-        : `<span class="ok">●</span> ${s.streamFps || 0} fps`;
-    case "entertainment-fallback":
-      // Amber dot: streaming, but degraded (DTLS to the Pro failed → REST fallback).
-      return `<span class="warn">●</span> ${s.streamFps || 0} fps in`;
-    case "active-rest":
-      return `<span class="ok">●</span> ${s.proWriteRate || 0} writes/s`;
-    default:
-      return "—";
-  }
-}
-
 // jitterDisplay shows how much relumeTV's easing cut the stream's brightness jitter —
 // the reduction of the smoothed sent max jump vs the TV input max jump over the last
 // window. Defaults to 0% (rather than a dash) when there is no current measurement —
@@ -337,14 +314,14 @@ function renderDashboard(s) {
       </div>
       <div class="pipe row2">
         <div class="step"><div class="lbl">Lights</div><div class="val">${driven}</div><div class="sub">Driven by TV</div></div>
-        <div class="step"><div class="lbl">Stream <span class="info" tabindex="0" data-tip="Jitter is the largest brightness jump between two consecutive frames. relumeTV eases each colour toward the latest TV frame with a ${s.smoothingTauMs || 40} ms time constant, so the TV's hard scene cuts reach the lamps as a fast fade instead of a flicker. The figure is the reduction this buys: −45% means the biggest jump on the stream sent to the Hue Bridge Pro is 45% smaller than on the TV input — more negative is smoother. Smoothing applies on the DTLS path to the Hue Bridge Pro; the figure reads 0% when there is no such stream, when nothing jumped, or when the cut passed through unsmoothed (e.g. tau set to 0).">i</span></div><div class="val">${streamVal(s)}</div><div class="sub">Jitter ${jitterDisplay(s)}</div></div>
+        <div class="step"><div class="lbl">Jitter <span class="info" tabindex="0" data-tip="Jitter is the largest brightness jump between two consecutive frames. relumeTV eases each colour toward the latest TV frame with a ${s.smoothingTauMs || 40} ms time constant, so the TV's hard scene cuts reach the lamps as a fast fade instead of a flicker. The figure is the reduction this buys: −45% means the biggest jump on the stream sent to the Hue Bridge Pro is 45% smaller than on the TV input — more negative is smoother. Smoothing applies on the DTLS path to the Hue Bridge Pro; the figure reads 0% when there is no such stream, when nothing jumped, or when the cut passed through unsmoothed (e.g. tau set to 0).">i</span></div><div class="val">${jitterDisplay(s)}</div><div class="sub">vs TV input</div></div>
         <div class="step"><div class="lbl">Backpressure <span class="info" tabindex="0" data-tip="Drops/s: Ambilight frames relumeTV coalesced away because the Hue Bridge Pro could not keep up — healthy, it spares the Hue Bridge Pro writes it cannot accept. Errors: failed writes to the Hue Bridge Pro (unreachable / 503 overflow) — the real fault signal.">i</span></div><div class="val">${backpressureVal(s)}</div><div class="sub">${backpressureSub(s)}</div></div>
         <div class="step"><div class="lbl">Liveness</div><div class="val" id="liveness">—</div><div class="sub">Since last write</div></div>
       </div>
       <div class="grid">${pending}
         <div class="card"><h3>Lights <span class="cnt">${shown.length} shown · ${driven} driven</span></h3><div class="lights">${lights}</div></div>
       </div>
-      <div class="note">Tip: after relumeTV restarts, if Ambilight+Hue stops responding, open the TV's Ambilight menu and toggle the <b>Ambilight</b> function (not Hue) off and back to your setting (e.g. Vivid).</div>
+      <div class="note"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg><b>Tip</b> — after relumeTV restarts, if Ambilight+Hue stops responding, open the TV's Ambilight menu and toggle the <b>Ambilight</b> function (not Hue+Ambilight menu) off and back to follow video.</div>
       <div class="card log"><h3>Live events</h3><div id="log"></div></div>
     </div>`;
 }
@@ -383,9 +360,16 @@ window.addEventListener("resize", () => {
 
 // Tooltip for .info[data-tip] icons. The element lives on <body> (not inside the
 // .pipe, whose overflow:hidden would clip it) and is positioned under the icon.
-// Event delegation on document survives the full-innerHTML re-renders. Works on
-// hover/focus and toggles on click (touch).
+// Event delegation on document survives the full-innerHTML re-renders. On devices
+// with a real pointer it shows on hover/focus; on touch-only devices hover/focus
+// are suppressed so the tap (a single click) cleanly toggles the tip instead of the
+// hover showing it only for the click to immediately hide it again.
+const _canHover = window.matchMedia("(hover: hover)").matches;
 let _tipEl = null;
+// Track the shown tip by its data-tip text, NOT the icon node: renderDashboard rebuilds
+// app.innerHTML every snapshot (~1s), so the icon nodes are recreated and a stored node
+// reference would go stale — tap-to-dismiss would then never match the new node.
+let _shownKey = null;
 function tipNode() {
   if (!_tipEl) {
     _tipEl = document.createElement("div");
@@ -402,30 +386,47 @@ function showTip(icon) {
   tip.style.left = Math.min(r.left, window.innerWidth - 272) + "px";
   tip.style.top = r.bottom + 8 + "px";
   tip.classList.add("show");
+  _shownKey = icon.getAttribute("data-tip");
 }
 function hideTip() {
   if (_tipEl) _tipEl.classList.remove("show");
+  _shownKey = null;
 }
 document.addEventListener("mouseover", (e) => {
+  if (!_canHover) return;
   const icon = e.target.closest?.(".info[data-tip]");
   if (icon) showTip(icon);
 });
 document.addEventListener("mouseout", (e) => {
-  if (e.target.closest?.(".info[data-tip]")) hideTip();
+  if (_canHover && e.target.closest?.(".info[data-tip]")) hideTip();
 });
 document.addEventListener("focusin", (e) => {
+  if (!_canHover) return;
   const icon = e.target.closest?.(".info[data-tip]");
   if (icon) showTip(icon);
 });
-document.addEventListener("focusout", hideTip);
+document.addEventListener("focusout", () => {
+  if (_canHover) hideTip();
+});
 document.addEventListener("click", (e) => {
   const icon = e.target.closest?.(".info[data-tip]");
   if (!icon) {
     hideTip();
     return;
   }
-  const tip = tipNode();
-  tip.classList.contains("show") ? hideTip() : showTip(icon);
+  // Tap the same icon again to dismiss; tap a different one to switch.
+  _shownKey === icon.getAttribute("data-tip") ? hideTip() : showTip(icon);
+});
+// Keyboard activation (Enter/Space). focusin is gated to hover devices (so a touch tap,
+// which also focuses the icon, doesn't show-then-hide via the click); this keydown keeps
+// the tip reachable for keyboard users on non-hover devices. A bare <span> emits no
+// synthetic click on Enter, so there is no double-trigger.
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Enter" && e.key !== " ") return;
+  const icon = e.target.closest?.(".info[data-tip]");
+  if (!icon) return;
+  e.preventDefault();
+  _shownKey === icon.getAttribute("data-tip") ? hideTip() : showTip(icon);
 });
 
 async function boot() {
