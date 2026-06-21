@@ -804,8 +804,8 @@ func (s *Server) handleCreateGroup(w http.ResponseWriter, r *http.Request) {
 	// Honor the TV's group membership: the lights array is the subset of lights the TV
 	// put in its Ambilight zone. Remember it (and push it to the streamer) so relumeTV
 	// only ever drives those — lights in other rooms stay untouched. Gated on
-	// type==Entertainment: the TV may also post a LightGroup (entertainment stickiness,
-	// see TROUBLESHOOTING), which must not clobber the entertainment subset.
+	// type==Entertainment: the TV may also post a LightGroup (entertainment stickiness),
+	// which must not clobber the entertainment subset.
 	if g.Type == "Entertainment" {
 		if ids, ok := parseGroupLights(body); ok {
 			s.setRequestedMembers(ids)

@@ -32,8 +32,10 @@ modes.
 
 - **A Philips Ambilight TV** with the built-in **Ambilight+Hue** feature (the older
   integration, roughly pre-2023 models) — the TV is what discovers and drives the bridge.
-  Developed and tested against a **Philips 65OLED806**, Android TV 11; other Ambilight models
-  may behave differently. **Note:** 2025/2026 TVs ship the new **AmbiScape** feature instead,
+  Developed and tested against a **Philips 65OLED806**, Android TV 11. The rest of the
+  **OLED806 series (48/55/65/77")** shares the same Android TV platform and firmware and
+  should behave the same; other pre-2023 Ambilight models are untested but may work.
+  **Note:** 2025/2026 TVs ship the new **AmbiScape** feature instead,
   which talks to bulbs directly over Matter and bypasses the Hue Bridge entirely — those TVs
   neither need nor work with relumeTV.
 - **A Hue Bridge Pro (BSB003)**, already set up with your lights and reachable on the LAN.
@@ -44,20 +46,21 @@ modes.
   (no client/AP isolation between them).
 - **TCP port 80 free on the host** — relumeTV emulates a gen-2 bridge, which the TV reaches on
   `:80`. The TV **hardcodes** this port and ignores any port advertised over mDNS/SSDP, so `:80`
-  is effectively mandatory — don't move it. Under rootless Docker, see the
-  [port-80 note](docs/TROUBLESHOOTING.md#rootless-docker-and-port-80).
+  is effectively mandatory — don't move it. Under rootless Docker, binding `:80` also requires
+  `sysctl net.ipv4.ip_unprivileged_port_start=80` (or run the container with the privilege to
+  bind low ports).
 
 ## Quick start (Docker)
 
-```bash
-# 1. Start the service. Pairing with the Hue Bridge Pro runs automatically via the guided
-#    setup wizard in the web UI (local mDNS discovery) on port 33100 — just briefly TAP
-#    the link button on the Hue Bridge Pro when prompted (do not hold it).
-docker compose up -d
+1. Start the service:
 
-# 2. On the TV, start the Ambilight+Hue bridge search and select relumeTV.
-#    relumeTV auto-accepts the TV's pairing — no button to press on relumeTV's side.
-```
+   ```bash
+   docker compose up -d
+   ```
+
+2. Open the web UI at `http://<host>:33100` and follow the guided setup wizard. It walks
+   through pairing the Bridge Pro (a brief **TAP** of its link button when prompted — do not
+   hold it), rebooting the TV, the TV's Ambilight+Hue scan, and assigning the bulbs.
 
 The image is pulled from `ghcr.io/trick77/relumetv` (built by the release workflow).
 To build locally instead: `docker build -f Containerfile -t relumetv:dev .`
@@ -74,7 +77,7 @@ State (bridge identity, TV tokens, **Bridge Pro app key + client key**) lives in
 | Command | Purpose |
 |---------|---------|
 | `serve` | Run the service (discovery + bridge emulation). Default. |
-| `avahi-service` | Emit an Avahi service file (see the avahi caveat in the troubleshooting guide). |
+| `avahi-service` | Emit an Avahi service file (for hosts where a system Avahi daemon owns mDNS). |
 | `version` | Print the version. |
 
 ### Flags (`serve`)
@@ -91,18 +94,11 @@ State (bridge identity, TV tokens, **Bridge Pro app key + client key**) lives in
 - **`-ui-port`** &nbsp;·&nbsp; default `0` — Override the web UI port with a custom value (`0` = the predefined port `33100`). Must differ from `-http-port` (80). Ignored when `-headless` is set.
 - **`-debug`** &nbsp;·&nbsp; default off — SSDP/HTTP diagnostics + mDNS observer.
 
-Discovery-debugging flags (`-discovery-burst-*`) are documented in
-[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
-
 ## Troubleshooting
 
 The most common reason the TV never lists relumeTV: **a powered-on Bridge Pro (or any other Hue
 bridge) on the same LAN wins discovery and hides it.** Power the other bridge off — or block it
 from the cloud — before scanning, then run the TV's Ambilight+Hue search again.
-
-Everything else — entertainment reconnect, the avahi/mDNS port clash, rootless port 80, and the
-deeper discovery/coexistence problem with the experimental identity flags — is in the
-**[troubleshooting guide](docs/TROUBLESHOOTING.md)**.
 
 ## Development
 
@@ -114,4 +110,3 @@ go test ./...
 ## Documentation
 
 - **[docs/DESIGN.md](docs/DESIGN.md)** — how relumeTV works: identity, pairing, control modes.
-- **[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)** — discovery, common issues, debug flags.

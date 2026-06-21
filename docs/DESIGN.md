@@ -103,13 +103,13 @@ bottleneck:
    5s for the TV's DTLS stream; if none arrives it **stickily** reverts to REST-follow (stops
    confirming activations and reports the group stream inactive), so the TV resumes PUTs. This is
    a safety net for TVs/firmwares that don't open the stream. It does **not** cover a relumeTV
-   restart mid-session (the TV then sends nothing to fall back to — see
-   [TROUBLESHOOTING.md](TROUBLESHOOTING.md)). The fallback is logged unambiguously:
+   restart mid-session (the TV then sends nothing to fall back to). The fallback is logged
+   unambiguously:
    `entertainment: TV did NOT open the DTLS stream in time — FALLING BACK to REST-follow`.
 
 A relumeTV restart in the middle of a session orphans the TV's stream; the TV then only polls
 light state and the lights go idle. Toggling Ambilight (not Ambilight+Hue) off and on on the TV
-re-runs the activation handshake. See [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
+re-runs the activation handshake.
 
 ## Web UI
 

@@ -1151,7 +1151,7 @@ func pairTV(t *testing.T, ts *httptest.Server) string {
 }
 
 // A LightGroup POST (entertainment stickiness — the TV re-creates its group as a
-// plain LightGroup, see TROUBLESHOOTING) must NOT replace the Entertainment subset.
+// plain LightGroup) must NOT replace the Entertainment subset.
 // This guards the type=="Entertainment" gate in handleCreateGroup.
 func TestCreateGroup_lightGroupPOSTDoesNotClobberEntertainmentSubset(t *testing.T) {
 	s, ts := newTestServer(t)
