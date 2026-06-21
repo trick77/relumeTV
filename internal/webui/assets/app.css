@@ -123,9 +123,16 @@ body {
 .pendrow .info b { font-size: 13px; }
 .pendrow .info div { font-size: 11px; color: var(--dim); }
 
-/* dashboard footnote / tip — subtle, never a banner */
-.note { margin: 16px 2px 0; font-size: 12.5px; line-height: 1.5; color: var(--faint); }
-.note b { color: var(--dim); font-weight: 650; }
+/* dashboard footnote / tip — a softly tinted frame with a bulb icon, still restrained.
+   No flex on .note: a flex container would split the text runs and the inline <b> into
+   separate items and break the paragraph into columns — hence padding + absolute SVG. */
+.note {
+  position: relative; margin: 16px 2px 0; padding: 12px 14px 12px 38px;
+  border: 1px solid var(--line); border-radius: 12px; background: rgba(240, 180, 41, .04);
+  font-size: 12.5px; line-height: 1.5; color: var(--dim);
+}
+.note b { color: var(--txt); font-weight: 650; }
+.note svg { position: absolute; left: 13px; top: 13px; color: var(--warn); }
 
 /* live log */
 .log { margin-top: 20px; }
