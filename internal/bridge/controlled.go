@@ -16,8 +16,8 @@ import (
 // is only the initial state, before the TV has ever driven a light.
 //
 // It is in-memory only and deliberately not persisted: after a restart the set is
-// empty until the TV drives lights again, and the flash is a no-op while empty (we
-// never flash lights we have not captured). See flashColor.
+// empty until the TV drives lights again, and the turn-off is a no-op while empty (we
+// never turn off lights we have not captured). See TurnOffControlled.
 type ControlledSet struct {
 	window time.Duration
 	now    func() time.Time

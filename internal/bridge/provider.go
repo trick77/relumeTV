@@ -29,7 +29,7 @@ type LightProvider struct {
 
 	// OnControlled, if set, is called with the Hue Bridge Pro UUID of each light the TV
 	// drives, on every per-light forward. It feeds the sliding-window ControlledSet
-	// so the restart/idle flash and idle-off touch only the bulbs the TV is
+	// so the restart/idle turn-off touches only the bulbs the TV is
 	// currently driving, not the whole home. Wired by main.
 	OnControlled func(uuid string)
 
@@ -134,7 +134,7 @@ func (p *LightProvider) UUIDForV1(v1id string) (string, bool) {
 }
 
 // V1ForUUID returns the numeric v1 light ID for a v2 resource UUID — the inverse of
-// UUIDForV1. Used to intersect a flash target (a list of Pro UUIDs) with the TV's
+// UUIDForV1. Used to intersect a turn-off target (a list of Pro UUIDs) with the TV's
 // current Ambilight membership, which is keyed by v1 id.
 func (p *LightProvider) V1ForUUID(uuid string) (string, bool) {
 	p.mu.Lock()
@@ -226,7 +226,7 @@ func (p *LightProvider) forward(v1id string, v1state map[string]any) error {
 	// Translate first and skip a no-op write: a state that yields an empty v2 body
 	// (e.g. a group action carrying only non-light-state keys like "scene", which
 	// StateV1ToV2 drops) must not reach the Pro — and must NOT mark the light as
-	// controlled. Marking it would taint the controlled set (the restart/idle flash
+	// controlled. Marking it would taint the controlled set (the restart/idle turn-off
 	// targets it) for a light that was never actually driven. The target TV does not
 	// send empty-yielding states on the per-light REST path, so this only ever fires
 	// for the group-action fan-out and is otherwise inert.
@@ -245,7 +245,7 @@ func (p *LightProvider) forward(v1id string, v1state map[string]any) error {
 		}
 	}
 	// Write to the Pro FIRST, then mark the light driven. Marking it before the write
-	// would taint the ControlledSet (the restart/idle flash targets it) and surface a UI
+	// would taint the ControlledSet (the restart/idle turn-off targets it) and surface a UI
 	// colour for a light that a down/overloaded Pro never actually received — so a failed
 	// write must leave both untouched.
 	if err := p.client.SetLight(uuid, v2); err != nil {

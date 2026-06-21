@@ -1220,7 +1220,7 @@ func TestGroupAction_restrictedToRequestedSubset(t *testing.T) {
 }
 
 // A per-light REST write to an off-zone light must be dropped: it must neither reach
-// the Pro (so the light stays dark) nor taint the ControlledSet the restart/idle flash
+// the Pro (so the light stays dark) nor taint the ControlledSet the restart/idle turn-off
 // targets. The TV still gets a v1 success so it does not retry. Guards the AllowsMember
 // gate in handleSetLightState (the per-light counterpart to the group-action gate).
 func TestSetLightState_offZoneLightIsNotForwarded(t *testing.T) {

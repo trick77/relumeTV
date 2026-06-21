@@ -45,7 +45,7 @@ func (s *Server) UUIDForV1(v1id string) (string, bool) {
 }
 
 // V1ForUUID maps a Hue Bridge Pro UUID back to its v1 light id — the inverse of
-// UUIDForV1. Used to intersect a flash target (Pro UUIDs) with the TV's current
+// UUIDForV1. Used to intersect a turn-off target (Pro UUIDs) with the TV's current
 // Ambilight membership (keyed by v1 id). Best-effort type-assert like UUIDForV1.
 func (s *Server) V1ForUUID(uuid string) (string, bool) {
 	p := s.lightProvider()

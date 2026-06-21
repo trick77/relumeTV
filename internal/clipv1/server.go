@@ -55,7 +55,7 @@ type Server struct {
 	EntertainmentMode bool
 
 	// ControlledLights, if set, returns the Hue Bridge Pro light UUIDs the TV is
-	// currently driving (the flash-target set). Surfaced in the activity rollup so
+	// currently driving (the turn-off target set). Surfaced in the activity rollup so
 	// the live Ambilight light set is visible. Wired to ControlledSet by main.
 	ControlledLights func() []string
 
@@ -364,7 +364,7 @@ func (s *Server) recordLightRead(id string) { s.activity.recordLightRead(id) }
 // MarkActivity stamps the most-recent-activity time from a non-REST source — the
 // entertainment DTLS stream. In entertainment mode the TV streams frames over DTLS
 // instead of REST writes, so without this the idle-off monitor (which watches
-// LastActivity) would treat an actively-streaming TV as idle and flash the lights
+// LastActivity) would treat an actively-streaming TV as idle and turn the lights
 // off mid-stream. The stream stopping then correctly lets idle-off fire.
 func (s *Server) MarkActivity() { s.activity.markActivity() }
 
@@ -432,7 +432,7 @@ func (s *Server) flushActivity(window time.Duration) {
 	if secs > 0 {
 		attrs = append(attrs, "read_hz", round1(float64(reads)/secs))
 	}
-	// Active (flash-target) lights the TV is currently driving — count and IDs.
+	// Active (turn-off target) lights the TV is currently driving — count and IDs.
 	if s.ControlledLights != nil {
 		ids := s.ControlledLights()
 		attrs = append(attrs, "active_lights", len(ids), "active_light_ids", ids)
@@ -691,8 +691,8 @@ func (s *Server) handleSetLightState(w http.ResponseWriter, r *http.Request) {
 	}
 	// Defense in depth: restrict the per-light write to the TV's requested Ambilight
 	// subset so an off-zone light is never driven — and, just as important, never
-	// recorded in the ControlledSet that the restart/idle flash targets (the flash must
-	// only ever touch driven lights). With no subset declared (AllowsMember true for
+	// recorded in the ControlledSet that the restart/idle turn-off targets (the turn-off
+	// must only ever touch driven lights). With no subset declared (AllowsMember true for
 	// all) this is the previous behaviour. Mirrors the group-action fan-out gate. We
 	// still return the normal v1 success so the TV sees no error and does not retry.
 	// The gate runs before recordWriteTime/noteRESTDriving so a dropped off-zone write

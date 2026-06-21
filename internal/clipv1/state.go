@@ -63,7 +63,7 @@ func (a *activityTracker) recordLightRead(id string) {
 // markActivity stamps the most-recent-activity time from a non-REST source — the
 // entertainment DTLS stream. In entertainment mode the TV streams frames over
 // DTLS instead of REST writes, so without this the idle-off monitor (which
-// watches lastActivity) would treat an actively-streaming TV as idle and flash
+// watches lastActivity) would treat an actively-streaming TV as idle and turn
 // the lights off mid-stream. The stream stopping then correctly lets idle-off fire.
 func (a *activityTracker) markActivity() {
 	a.mu.Lock()

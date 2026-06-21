@@ -48,7 +48,7 @@ everything to CLIP v2 against the Pro.
 - `internal/translate` — v1↔v2 translation + v1-id↔UUID mapping.
 - `internal/entertainment` — DTLS-PSK receiver (from the TV) + the streamer (to the Pro).
 - `internal/huestream` — the HueStream wire format (parse + encode).
-- `internal/bridge` — wiring frontend↔backend, the coalescing light provider, restart/idle flashes.
+- `internal/bridge` — wiring frontend↔backend, the coalescing light provider, restart/idle turn-off.
 - `cmd/relumetv` — subcommands: `serve` (default), `avahi-service`, `version`.
 
 ## Pairing

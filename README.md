@@ -39,7 +39,8 @@ modes.
   needs `network_mode: host` — **Docker Desktop on macOS/Windows won't work**, its
   host-networking mode doesn't reliably carry the multicast traffic.
 - **TV, relumeTV host, and Bridge Pro on the same L2 network / VLAN**, with multicast allowed
-  (no client/AP isolation between them).
+  (no client/AP isolation between them). For the lowest latency, connect all three over wired
+  Ethernet — Wi-Fi can add noticeable lag to the Ambilight follow.
 - **TCP port 80 free on the host** — relumeTV emulates a gen-2 bridge, which the TV reaches on
   `:80`. The TV **hardcodes** this port and ignores any port advertised over mDNS/SSDP, so `:80`
   is effectively mandatory — don't move it. Under rootless Docker, binding `:80` also requires
@@ -57,8 +58,6 @@ modes.
 2. Open the web UI at `http://<host>:33100` and follow the guided setup wizard. It walks
    through pairing the Bridge Pro (a brief **TAP** of its link button when prompted — do not
    hold it), rebooting the TV, the TV's Ambilight+Hue scan, and assigning the bulbs.
-
-The image is pulled from `ghcr.io/trick77/relumetv`.
 
 ### Data & secrets
 
@@ -79,7 +78,7 @@ State (bridge identity, TV tokens, **Bridge Pro app key + client key**) lives in
 
 - **`-mode`** &nbsp;·&nbsp; default `entertainment` — Control mode: `entertainment` (low-latency DTLS stream to the Pro; auto-falls back to REST if the TV never opens its stream) or `rest` (per-light REST-follow). See [docs/DESIGN.md](docs/DESIGN.md#control-modes).
 - **`-advertise-ip`** &nbsp;·&nbsp; default auto — IP advertised via mDNS/SSDP; set it on a multi-homed host.
-- **`-idle-off-timeout`** &nbsp;·&nbsp; default `30s` — When the TV stops driving the lights for this long, flash them and turn them off (the TV sends no off signal, it just goes silent). `0` disables.
+- **`-idle-off-timeout`** &nbsp;·&nbsp; default `5s` — When the TV stops driving the lights for this long, turn them off (the TV sends no off signal, it just goes silent). `0` disables.
 - **`-entertainment-dtls-timeout`** &nbsp;·&nbsp; default `5s` — Entertainment mode: how long to wait, after confirming the TV's stream activation, for the TV to open its DTLS stream before reverting to REST-follow. Raise it if a TV opens its stream slower.
 - **`-entertainment-fallback-recovery`** &nbsp;·&nbsp; default `90s` — Entertainment mode: how long a latched REST fallback persists before the next TV stream activation may recover it (so a transient DTLS failure no longer pins the TV to REST until restart). Set `0` to disable (fallback stays sticky until restart).
 - **`-entertainment-smooth-tau`** &nbsp;·&nbsp; default `40ms` — Entertainment mode: exponential-smoothing time constant for easing the TV's hard scene cuts on the DTLS send path. Lower is snappier but flickers more, higher is smoother but laggier. Set `0` to disable smoothing (frames forwarded verbatim).

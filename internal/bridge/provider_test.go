@@ -155,7 +155,7 @@ func TestForward_failedWriteDoesNotMarkControlled(t *testing.T) {
 	err := p.forward("1", map[string]any{"ct": 200})
 
 	// Then: the error propagates and the light is NEITHER marked controlled (so the
-	// restart/idle flash won't target a bulb the TV never actually drove) NOR surfaced to
+	// restart/idle turn-off won't target a bulb the TV never actually drove) NOR surfaced to
 	// the UI as a live colour it never received.
 	if err == nil {
 		t.Fatal("forward: expected an error from a failed write, got nil")

@@ -110,8 +110,8 @@ func parseServeOptions(args []string) (serveOptions, error) {
 	burstInterval := fs.Duration("discovery-burst-interval", time.Second, "interval for discovery-burst announcements")
 	disableSSDP := fs.Bool("disable-ssdp", false, "do not run the SSDP responder (mDNS-only, like ha-hue-entertainment) — diagnostic")
 	skipTLS := fs.Bool("skip-tls-verify", false, "skip TLS verification to the Hue Bridge Pro (instead of cert pinning)")
-	idleOffTimeout := fs.Duration("idle-off-timeout", 30*time.Second, "when the TV stops sending light writes for this long, flash the lights green twice and turn them off (0 = disabled)")
-	controlledLightWindow := fs.Duration("controlled-light-window", time.Minute, "sliding window: a light counts as a current Ambilight light only if the TV drove it within this window; the restart/idle flash and idle-off touch only those (so config changes are forgotten after the window)")
+	idleOffTimeout := fs.Duration("idle-off-timeout", 5*time.Second, "when the TV stops sending light writes for this long, turn the lights off (0 = disabled)")
+	controlledLightWindow := fs.Duration("controlled-light-window", time.Minute, "sliding window: a light counts as a current Ambilight light only if the TV drove it within this window; the restart/idle turn-off touches only those (so config changes are forgotten after the window)")
 	mode := fs.String("mode", "entertainment", "control mode: 'entertainment' (default, low-latency DTLS stream to the Pro; auto-falls back to REST if the TV never opens its stream) or 'rest' (per-light REST-follow)")
 	dtlsFallbackTimeout := fs.Duration("entertainment-dtls-timeout", 5*time.Second, "entertainment mode: how long to wait after confirming the TV's stream activation for the TV to open its DTLS stream on :2100 before reverting to REST-follow")
 	dtlsFallbackRecovery := fs.Duration("entertainment-fallback-recovery", 90*time.Second, "entertainment mode: how long a latched REST fallback persists before the next TV activation may recover it (0 disables: fallback stays sticky until restart)")
@@ -172,7 +172,7 @@ func deriveServeConfig(opts serveOptions) (serveConfig, error) {
 	}
 
 	// The controlled-light window must exceed the idle-off timeout, or the set would
-	// already be empty by the time idle-off fires (nothing left to flash off).
+	// already be empty by the time idle-off fires (nothing left to turn off).
 	window := opts.controlledLightWindow
 	raised := false
 	if minWindow := opts.idleOffTimeout + 15*time.Second; opts.idleOffTimeout > 0 && window < minWindow {
@@ -263,8 +263,8 @@ func runServe(args []string, log *slog.Logger) error {
 	log.Info("control mode", "mode", opts.mode)
 
 	// controlled tracks the lights the TV is currently driving for Ambilight (a
-	// sliding window). The restart/idle flash and idle-off target only these — and
-	// nothing when the set is empty, so we never flash uncaptured lights. The window
+	// sliding window). The restart/idle turn-off targets only these — and
+	// nothing when the set is empty, so we never turn off uncaptured lights. The window
 	// was sized in deriveServeConfig to exceed the idle-off timeout.
 	window := sc.controlledWindow
 	if sc.windowRaised {
@@ -280,7 +280,7 @@ func runServe(args []string, log *slog.Logger) error {
 	// enough to empty soon after the stream stops, long enough to stay full across
 	// frame jitter (DTLS streams ~50 Hz, REST writes a few Hz while content plays).
 	// Deliberately separate from the ControlledSet window (which the idle/restart
-	// flash relies on and must outlast the idle-off timeout).
+	// turn-off relies on and must outlast the idle-off timeout).
 	liveColors := newLiveColors(drivenLightWindow)
 
 	// frameStats tracks the live entertainment frame rate (fed once per decoded TV
@@ -336,10 +336,10 @@ func runServe(args []string, log *slog.Logger) error {
 		log.Warn("no hue bridge pro paired yet – auto-pairing in background; TAP the hue bridge pro link button")
 		go autoPairPro(ctx, cfg, clip, controlled, liveColors, proStats, setup, opts.skipTLS, log)
 	} else {
-		// No restart flash at startup: the controlled set is empty here (no TV write
-		// captured yet), so we have nothing to flash. The restart indicator is the
-		// shutdown flash below — on `docker compose up -d` the old container gets
-		// SIGTERM and blinks the currently-driven Ambilight bulbs red+off first.
+		// No restart turn-off at startup: the controlled set is empty here (no TV write
+		// captured yet), so we have nothing to turn off. The lights are turned off on
+		// shutdown below — on `docker compose up -d` the old container gets SIGTERM and
+		// turns the currently-driven Ambilight bulbs off first.
 		// Keep the already-paired Pro reachable across reboots / IP changes.
 		w := newProWatcher(cfg, clip, controlled, liveColors, proStats, opts.skipTLS, log)
 		go w.run(ctx)
@@ -399,7 +399,7 @@ func runServe(args []string, log *slog.Logger) error {
 		// TV's stream (PSK = the clientkey relumeTV minted at pairing) and decodes the
 		// HueStream frames.
 		recv := entertainment.NewReceiver(ip, cfg.PSKForUser, log)
-		// Count stream frames as activity so the idle-off monitor doesn't flash the
+		// Count stream frames as activity so the idle-off monitor doesn't turn the
 		// lights off mid-stream (the TV streams via DTLS, not REST writes, here), and
 		// record each frame's arrival so the UI can show the live frame rate.
 		recv.OnActivity = func() {
@@ -478,9 +478,9 @@ func runServe(args []string, log *slog.Logger) error {
 		}()
 	}
 
-	// Detect the TV going silent (switched off / control session broke) and flash
-	// the lights green twice, then off — the TV sends no off signal, it just stops
-	// writing. Disabled when the timeout is 0.
+	// Detect the TV going silent (switched off / control session broke) and turn
+	// the lights off — the TV sends no off signal, it just stops writing. Disabled
+	// when the timeout is 0.
 	if opts.idleOffTimeout > 0 {
 		log.Info("idle-off monitor active", "timeout", opts.idleOffTimeout.String())
 		go monitorIdle(ctx, clip, cfg, controlled, opts.idleOffTimeout, log)
@@ -533,39 +533,40 @@ func runServe(args []string, log *slog.Logger) error {
 		return err
 	}
 	shutdownHTTP(httpSrv)
-	// Release relumeTV's own entertainment stream on the Pro before flashing, so the
-	// Pro area is deactivated (StopStream uses the client's own timeout, not the
-	// cancelled ctx) and never leaks past process exit (Phase D).
+	// Release relumeTV's own entertainment stream on the Pro before turning the lights
+	// off, so the Pro area is deactivated (StopStream uses the client's own timeout, not
+	// the cancelled ctx) and never leaks past process exit (Phase D).
 	stopEntertainment(entStreamer)
-	// Stop accepting TV writes first (above), then signal the restart on the lights.
-	// GetPro reads the current pairing under the mutex (watchPro may have reconnected
-	// it to a new IP since startup).
+	// Stop accepting TV writes first (above), then turn the driven lights off so they
+	// don't stay frozen on their last Ambilight color across the restart. GetPro reads
+	// the current pairing under the mutex (watchPro may have reconnected it to a new IP
+	// since startup).
 	if shutPro := cfg.GetPro(); shutPro != nil {
-		flashRestartBounded(bridgepro.New(shutPro), log, inZoneUUIDs(clip, controlled.Current()), shutdownFlashBudget)
+		turnOffBounded(bridgepro.New(shutPro), log, inZoneUUIDs(clip, controlled.Current()), shutdownTurnOffBudget)
 	}
 	return nil
 }
 
-// shutdownFlashBudget caps the total time the restart flash may take on shutdown.
-// FlashRestart runs synchronously and each light write blocks on the Hue Bridge Pro's
-// HTTP timeout; if the Pro is unreachable at shutdown, an unbounded flash would
+// shutdownTurnOffBudget caps the total time the shutdown turn-off may take.
+// TurnOffControlled runs synchronously and each light write blocks on the Hue Bridge
+// Pro's HTTP timeout; if the Pro is unreachable at shutdown, an unbounded turn-off would
 // stall well past the container stop grace (then get SIGKILLed). This bounds it so
 // the process exits promptly.
-const shutdownFlashBudget = 3 * time.Second
+const shutdownTurnOffBudget = 3 * time.Second
 
-// flashRestartBounded runs the restart flash with a hard total deadline: it returns
-// after the flash completes or after max elapses (whichever first). On timeout the
-// flash goroutine is abandoned — the process is exiting anyway.
-func flashRestartBounded(client *bridgepro.Client, log *slog.Logger, ids []string, max time.Duration) {
+// turnOffBounded turns the driven lights off with a hard total deadline: it returns
+// after the turn-off completes or after max elapses (whichever first). On timeout the
+// goroutine is abandoned — the process is exiting anyway.
+func turnOffBounded(client *bridgepro.Client, log *slog.Logger, ids []string, max time.Duration) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		bridge.FlashRestart(client, log, ids)
+		bridge.TurnOffControlled(client, log, "shutdown", ids)
 	}()
 	select {
 	case <-done:
 	case <-time.After(max):
-		log.Warn("restart flash timed out (hue bridge pro unreachable?) — exiting anyway", "after", max.String())
+		log.Warn("shutdown turn-off timed out (hue bridge pro unreachable?) — exiting anyway", "after", max.String())
 	}
 }
 
@@ -577,12 +578,12 @@ type zoneMembership interface {
 	AllowsMember(v1id uint16) bool
 }
 
-// inZoneUUIDs filters a flash target (Hue Bridge Pro light UUIDs) down to the lights
-// still in the TV's current Ambilight zone, so the restart/idle flash never touches
+// inZoneUUIDs filters a turn-off target (Hue Bridge Pro light UUIDs) down to the lights
+// still in the TV's current Ambilight zone, so the restart/idle turn-off never touches
 // an off-zone light — even one that lingers in the ControlledSet from before the zone
 // shrank. A UUID is dropped only when its v1 id resolves AND is positively outside the
 // zone; an unresolved UUID is kept, mirroring AllowsMember's defensive "allow when
-// unknown" stance so the flash is never silently reduced to nothing. With no zone
+// unknown" stance so the turn-off is never silently reduced to nothing. With no zone
 // declared (AllowsMember true for all) the list passes through unchanged.
 func inZoneUUIDs(m zoneMembership, uuids []string) []string {
 	out := make([]string, 0, len(uuids))
@@ -607,7 +608,7 @@ func stopEntertainment(s *entertainment.ProStreamer) {
 
 // newProvider builds the Hue Bridge Pro light provider and wires it to feed the
 // sliding-window ControlledSet with each light the TV drives, so the restart/idle
-// flash and idle-off touch only the bulbs the TV is currently driving — never the
+// turn-off touches only the bulbs the TV is currently driving — never the
 // rest of the home.
 func newProvider(client *bridgepro.Client, controlled *bridge.ControlledSet, live *liveColors, stats *proStats, log *slog.Logger) *bridge.LightProvider {
 	p := bridge.NewLightProvider(client, log)
@@ -630,11 +631,11 @@ func shutdownHTTP(srv *http.Server) {
 }
 
 // monitorIdle watches the TV's Ambilight write activity and, once it has gone
-// silent for idleTimeout after having been active, flashes the Hue Bridge Pro lights
-// green twice and turns them off (bridge.FlashIdle). The TV sends no explicit
-// off signal — it just stops writing — so this inactivity timeout stands in for
-// it. It fires once per active→idle transition and re-arms when the TV resumes
-// writing. The flash is a no-op while no Pro is paired or the Pro is unreachable.
+// silent for idleTimeout after having been active, turns the Hue Bridge Pro lights
+// off (bridge.TurnOffControlled). The TV sends no explicit off signal — it just
+// stops writing — so this inactivity timeout stands in for it. It fires once per
+// active→idle transition and re-arms when the TV resumes writing. The turn-off is a
+// no-op while no Pro is paired or the Pro is unreachable.
 func monitorIdle(ctx context.Context, clip *clipv1.Server, cfg *config.Config, controlled *bridge.ControlledSet, idleTimeout time.Duration, log *slog.Logger) {
 	interval := 2 * time.Second
 	if idleTimeout < interval {
@@ -661,18 +662,18 @@ func monitorIdle(ctx context.Context, clip *clipv1.Server, cfg *config.Config, c
 			}
 			fired = true
 			// GetPro reads the pairing under its mutex — autoPairPro/watchPro may
-			// re-pair concurrently. nil while no Pro is paired: nothing to flash.
+			// re-pair concurrently. nil while no Pro is paired: nothing to turn off.
 			if pro := cfg.GetPro(); pro != nil {
-				log.Info("ambilight idle: flashing the ambilight lights off", "idle_for", now.Sub(lastSeen).Round(time.Second).String())
-				bridge.FlashIdle(bridgepro.New(pro), log, inZoneUUIDs(clip, controlled.Current()))
+				log.Info("ambilight idle: turning the ambilight lights off", "idle_for", now.Sub(lastSeen).Round(time.Second).String())
+				bridge.TurnOffControlled(bridgepro.New(pro), log, "idle-off", inZoneUUIDs(clip, controlled.Current()))
 			}
 		}
 	}
 }
 
-// idleShouldFire reports whether the idle-off flash should fire this tick: the TV
+// idleShouldFire reports whether the idle-off should fire this tick: the TV
 // has been active at least once (lastSeen non-zero), has now been silent for the
-// timeout, and the flash has not already fired for this active→idle transition.
+// timeout, and it has not already fired for this active→idle transition.
 func idleShouldFire(now, lastSeen time.Time, fired bool, idleTimeout time.Duration) bool {
 	return !fired && !lastSeen.IsZero() && now.Sub(lastSeen) >= idleTimeout
 }
