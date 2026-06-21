@@ -1,9 +1,5 @@
 # relumeTV
 
-A software bridge that connects a **Philips Ambilight TV** to a **Hue Bridge Pro (BSB003)**.
-
-![How relumeTV sits between the Ambilight TV and the Hue Bridge Pro](docs/architecture.png)
-
 > **⚠️ Disclaimer — read this first**
 >
 > This is an experimental hobby project, built for fun and scratching my own itch.
@@ -21,6 +17,12 @@ paths and v1 HTTP API surface that feature expects, so the TV can no longer find
 directly — and because Philips Hue (Signify) and the TV division (TP Vision) don't coordinate,
 there is no official fix.
 
+Developed and tested against a **Philips 65OLED806** (Android TV 11). The rest of the
+**OLED806 series (48/55/65/77")** shares the same platform and firmware and should behave the
+same; other pre-2023 Ambilight models are untested but may work. Note that 2025/2026 TVs ship
+the new **AmbiScape** feature, which talks to bulbs directly over Matter and bypasses the Hue
+Bridge entirely — those TVs neither need nor work with relumeTV.
+
 ## What this does
 
 relumeTV sits between the TV and the Bridge Pro: to the TV it impersonates an old gen-2 bridge
@@ -32,12 +34,6 @@ modes.
 
 - **A Philips Ambilight TV** with the built-in **Ambilight+Hue** feature (the older
   integration, roughly pre-2023 models) — the TV is what discovers and drives the bridge.
-  Developed and tested against a **Philips 65OLED806**, Android TV 11. The rest of the
-  **OLED806 series (48/55/65/77")** shares the same Android TV platform and firmware and
-  should behave the same; other pre-2023 Ambilight models are untested but may work.
-  **Note:** 2025/2026 TVs ship the new **AmbiScape** feature instead,
-  which talks to bulbs directly over Matter and bypasses the Hue Bridge entirely — those TVs
-  neither need nor work with relumeTV.
 - **A Hue Bridge Pro (BSB003)**, already set up with your lights and reachable on the LAN.
 - **A Linux host** to run relumeTV on. Discovery uses multicast (mDNS/SSDP), so the container
   needs `network_mode: host` — **Docker Desktop on macOS/Windows won't work**, its
@@ -62,13 +58,12 @@ modes.
    through pairing the Bridge Pro (a brief **TAP** of its link button when prompted — do not
    hold it), rebooting the TV, the TV's Ambilight+Hue scan, and assigning the bulbs.
 
-The image is pulled from `ghcr.io/trick77/relumetv` (built by the release workflow).
-To build locally instead: `docker build -f Containerfile -t relumetv:dev .`
+The image is pulled from `ghcr.io/trick77/relumetv`.
 
 ### Data & secrets
 
 State (bridge identity, TV tokens, **Bridge Pro app key + client key**) lives in
-`./data/relumetv.json`. This file holds secrets — do not share or commit it (it is gitignored).
+`./data/relumetv.json`. This file holds secrets.
 
 ## Usage
 
@@ -83,7 +78,6 @@ State (bridge identity, TV tokens, **Bridge Pro app key + client key**) lives in
 ### Flags (`serve`)
 
 - **`-mode`** &nbsp;·&nbsp; default `entertainment` — Control mode: `entertainment` (low-latency DTLS stream to the Pro; auto-falls back to REST if the TV never opens its stream) or `rest` (per-light REST-follow). See [docs/DESIGN.md](docs/DESIGN.md#control-modes).
-- **`-http-port`** &nbsp;·&nbsp; default `80` — HTTP port the TV connects to. The TV hardcodes `:80` and ignores any other advertised port, so changing this will almost certainly break discovery/pairing — leave it at `80`.
 - **`-advertise-ip`** &nbsp;·&nbsp; default auto — IP advertised via mDNS/SSDP; set it on a multi-homed host.
 - **`-idle-off-timeout`** &nbsp;·&nbsp; default `30s` — When the TV stops driving the lights for this long, flash them and turn them off (the TV sends no off signal, it just goes silent). `0` disables.
 - **`-entertainment-dtls-timeout`** &nbsp;·&nbsp; default `5s` — Entertainment mode: how long to wait, after confirming the TV's stream activation, for the TV to open its DTLS stream before reverting to REST-follow. Raise it if a TV opens its stream slower.
@@ -91,7 +85,7 @@ State (bridge identity, TV tokens, **Bridge Pro app key + client key**) lives in
 - **`-entertainment-smooth-tau`** &nbsp;·&nbsp; default `40ms` — Entertainment mode: exponential-smoothing time constant for easing the TV's hard scene cuts on the DTLS send path. Lower is snappier but flickers more, higher is smoother but laggier. Set `0` to disable smoothing (frames forwarded verbatim).
 - **`-skip-tls-verify`** &nbsp;·&nbsp; default off — Skip Bridge Pro certificate pinning (fallback).
 - **`-headless`** &nbsp;·&nbsp; default off — Disable the web UI. The web UI (setup assistant + live status dashboard) is **on by default** on the predefined port `33100`. ⚠️ **No authentication: with `network_mode: host` the dashboard is reachable by anyone on the LAN out of the box.** Pass `-headless` to turn it off on untrusted networks. (`-ui` is still accepted as a no-op for backward compatibility.)
-- **`-ui-port`** &nbsp;·&nbsp; default `0` — Override the web UI port with a custom value (`0` = the predefined port `33100`). Must differ from `-http-port` (80). Ignored when `-headless` is set.
+- **`-ui-port`** &nbsp;·&nbsp; default `33100` — Web UI port. Pass `0` to use the predefined port `33100`, or any other value to override it. Must differ from the HTTP port (80). Ignored when `-headless` is set.
 - **`-debug`** &nbsp;·&nbsp; default off — SSDP/HTTP diagnostics + mDNS observer.
 
 ## Troubleshooting
