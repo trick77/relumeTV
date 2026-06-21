@@ -459,7 +459,7 @@ func (s *ProStreamer) sendLoop(ctx context.Context) {
 			seq := s.st.seq
 			s.st.mu.Unlock()
 			if sent != prev {
-				s.log.Info("hue bridge pro entertainment stream", "frames_5s", sent-prev, "channels", ch, "seq", seq,
+				s.log.Debug("hue bridge pro entertainment stream", "frames_5s", sent-prev, "channels", ch, "seq", seq,
 					"bri_max_jump", briJump, "col_max_jump", colJump)
 				prev = sent
 			}

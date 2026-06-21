@@ -19,6 +19,11 @@ type activityTracker struct {
 	// path the TV could push Ambilight frames over. Tallied so the activity Hz
 	// reading cannot be faked out by frames arriving on the group endpoint.
 	groupActionWrites uint64
+	// lightReads counts GET /lights/{id} polls (the TV's high-frequency light-state
+	// reads). Accumulated like the writes so the poll rate stays visible in the Hz
+	// rollup instead of flooding the log one line per request. Deliberately not fed
+	// into total_hz/per_light_hz — those stay the control-write telltale.
+	lightReads uint64
 	// lastWriteAt is the time of the most recent Ambilight light-state write,
 	// stamped in recordWriteTime (so it is independent of Debug, unlike the
 	// counters above). The idle-off monitor reads it via lastActivity.
@@ -43,6 +48,15 @@ func (a *activityTracker) recordLightWrite(id string) {
 func (a *activityTracker) recordGroupActionWrite() {
 	a.mu.Lock()
 	a.groupActionWrites++
+	a.mu.Unlock()
+}
+
+// recordLightRead accumulates one GET /lights/{id} poll for the summary. It
+// deliberately does NOT touch lightsTouched: reads must not skew per_light_hz,
+// which stays the control-write rate.
+func (a *activityTracker) recordLightRead(id string) {
+	a.mu.Lock()
+	a.lightReads++
 	a.mu.Unlock()
 }
 
@@ -99,6 +113,7 @@ func (a *activityTracker) lastActivity() time.Time {
 type activitySnapshot struct {
 	lightWrites       uint64
 	groupActionWrites uint64
+	lightReads        uint64
 	lights            int
 	lastWriteAt       time.Time
 }
@@ -112,11 +127,13 @@ func (a *activityTracker) snapshotAndReset() activitySnapshot {
 	snap := activitySnapshot{
 		lightWrites:       a.lightWrites,
 		groupActionWrites: a.groupActionWrites,
+		lightReads:        a.lightReads,
 		lights:            len(a.lightsTouched),
 		lastWriteAt:       a.lastWriteAt,
 	}
 	a.lightWrites = 0
 	a.groupActionWrites = 0
+	a.lightReads = 0
 	a.lightsTouched = map[string]struct{}{}
 	return snap
 }

@@ -256,7 +256,7 @@ func (r *Receiver) handle(ctx context.Context, conn net.Conn) {
 				r.OnWindowStats(bJump, cJump)
 			}
 			if f != nil && total != prev {
-				r.log.Info("entertainment stream", "from", remote,
+				r.log.Debug("entertainment stream", "from", remote,
 					"frames_5s", total-prev, "frames_dropped", drops, "channels", len(f.Channels),
 					"colorspace", f.ColorSpaceName(),
 					"bri_min", bMin, "bri_max", bMax, "bri_max_jump", bJump,

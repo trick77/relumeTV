@@ -287,6 +287,11 @@ func (s *Server) logRequests(next http.Handler) http.Handler {
 			// The group-action path is the other high-frequency control route;
 			// accumulate it too so it does not flood and shows up in the Hz rollup.
 			s.recordGroupActionWrite()
+		} else if id, ok := lightStateReadID(r); ok {
+			// The TV polls GET /lights/{id} every few seconds; logging each one
+			// floods the log. Accumulate and surface the poll rate in the Hz
+			// rollup instead of emitting a line per request.
+			s.recordLightRead(id)
 		} else if s.isTVRequest(r) {
 			s.log.Info("http", "method", r.Method, "path", r.URL.Path, "from", r.RemoteAddr)
 		}
@@ -318,6 +323,26 @@ func lightStateWriteID(r *http.Request) (string, bool) {
 	return id, true
 }
 
+// lightStateReadID returns the light ID of a GET /api/{user}/lights/{id} request
+// (the TV's high-frequency light-state poll), and whether it matched. A bare
+// GET /api/{user}/lights (no ID) and the /state-suffixed write path both do not
+// match, so the collection listing keeps its normal logging.
+func lightStateReadID(r *http.Request) (string, bool) {
+	if r.Method != http.MethodGet {
+		return "", false
+	}
+	const lights = "/lights/"
+	i := strings.Index(r.URL.Path, lights)
+	if i < 0 || strings.HasSuffix(r.URL.Path, "/state") {
+		return "", false
+	}
+	id := r.URL.Path[i+len(lights):]
+	if id == "" || strings.Contains(id, "/") {
+		return "", false
+	}
+	return id, true
+}
+
 // isGroupActionWrite reports whether r is a PUT /api/{user}/groups/{id}/action —
 // the group-based high-frequency control path (alternative to per-light writes).
 func isGroupActionWrite(r *http.Request) bool {
@@ -332,6 +357,9 @@ func (s *Server) recordLightWrite(id string) { s.activity.recordLightWrite(id) }
 
 // recordGroupActionWrite accumulates one group-action write for the summary.
 func (s *Server) recordGroupActionWrite() { s.activity.recordGroupActionWrite() }
+
+// recordLightRead accumulates one GET /lights/{id} poll for the summary.
+func (s *Server) recordLightRead(id string) { s.activity.recordLightRead(id) }
 
 // MarkActivity stamps the most-recent-activity time from a non-REST source — the
 // entertainment DTLS stream. In entertainment mode the TV streams frames over DTLS
@@ -369,9 +397,12 @@ func (s *Server) LogActivitySummary(ctx context.Context, interval time.Duration)
 func (s *Server) flushActivity(window time.Duration) {
 	snap := s.activity.snapshotAndReset()
 	writes, groupWrites, lights := snap.lightWrites, snap.groupActionWrites, snap.lights
+	reads := snap.lightReads
 	lastWrite := snap.lastWriteAt
 	total := writes + groupWrites
-	if total == 0 {
+	// Fire the rollup even in pure DTLS-streaming mode where the only REST traffic
+	// is the TV's light-state polls (no control writes at all).
+	if total+reads == 0 {
 		return
 	}
 	// total_hz / per_light_hz turn the raw counts into the update rate — the
@@ -390,10 +421,16 @@ func (s *Server) flushActivity(window time.Duration) {
 	attrs := []any{
 		"light_state_writes", writes,
 		"group_action_writes", groupWrites,
+		"light_reads", reads,
 		"lights", lights,
 		"window", window.String(),
 		"total_hz", round1(totalHz),
 		"per_light_hz", round1(perLightHz),
+	}
+	// read_hz surfaces the TV's GET /lights/{id} poll rate. Kept out of total_hz /
+	// per_light_hz, which stay the control-write telltale.
+	if secs > 0 {
+		attrs = append(attrs, "read_hz", round1(float64(reads)/secs))
 	}
 	// Active (flash-target) lights the TV is currently driving — count and IDs.
 	if s.ControlledLights != nil {

@@ -1019,6 +1019,38 @@ func TestRequestLog_tvUserAgent_thenLoggedInNonDebug(t *testing.T) {
 	}
 }
 
+func TestRequestLog_tvLightPoll_thenAccumulatedNotLogged(t *testing.T) {
+	// Given: a non-debug server with a captured log
+	s, ts := newTestServer(t)
+	var buf strings.Builder
+	s.log = slog.New(slog.NewTextHandler(&buf, nil))
+
+	// When: the TV polls a single light's state via GET /lights/{id}
+	req, err := http.NewRequest(http.MethodGet, ts.URL+"/api/abc/lights/1", nil)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("User-Agent", tvUserAgent)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	resp.Body.Close()
+
+	// Then: the per-request line is suppressed, but the poll is accumulated
+	if strings.Contains(buf.String(), "msg=http") {
+		t.Fatalf("light poll should not be logged per request: %s", buf.String())
+	}
+
+	// And: the activity rollup surfaces it as light_reads
+	buf.Reset()
+	s.flushActivity(time.Second)
+	out := buf.String()
+	if !strings.Contains(out, "ambilight activity") || !strings.Contains(out, "light_reads=1") {
+		t.Fatalf("expected light_reads=1 in activity rollup, got %q", out)
+	}
+}
+
 func TestGroupsExposeMinimalEntertainmentGroup(t *testing.T) {
 	// Given
 	_, ts := newTestServer(t)
