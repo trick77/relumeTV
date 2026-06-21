@@ -39,8 +39,10 @@ modes.
   needs `network_mode: host` — **Docker Desktop on macOS/Windows won't work**, its
   host-networking mode doesn't reliably carry the multicast traffic.
 - **TV, relume-tv host, and Bridge Pro on the same L2 network / VLAN**, with multicast allowed
-  (no client/AP isolation between them). For the lowest latency, connect all three over wired
-  Ethernet — Wi-Fi can add noticeable lag to the Ambilight follow.
+  (no client/AP isolation between them).
+- **Wired Ethernet for all three (TV, relume-tv host, and Bridge Pro)** — strongly recommended.
+  Wi-Fi adds latency and jitter to the entertainment stream, which can show up as visible color
+  lag or stutter in the bulbs following the Ambilight. Cable everything you can.
 - **TCP port 80 free on the host** — relume-tv emulates a gen-2 bridge, which the TV reaches on
   `:80`. The TV **hardcodes** this port and ignores any port advertised over mDNS/SSDP, so `:80`
   is effectively mandatory — don't move it. Under rootless Docker, binding `:80` also requires
