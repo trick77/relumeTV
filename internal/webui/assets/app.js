@@ -340,13 +340,44 @@ function renderDashboard(s) {
         <div class="card"><h3>Lights <span class="cnt">${shown.length} shown · ${driven} driven</span></h3><div class="lights">${lights}</div></div>
       </div>
       <div class="note"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/></svg><b>Tip</b> — after relumeTV restarts, if the hue lights stop responding, open the TV's Ambilight menu and toggle the Ambilight function (not Hue+Ambilight menu) off and back to follow video.</div>
-      <div class="card log"><h3>Live events</h3><div id="log"></div></div>
+      <div class="card log${logCollapsed ? " collapsed" : ""}"><h3 class="log-head" role="button" tabindex="0" aria-expanded="${!logCollapsed}" aria-controls="log">Live events<span class="chev" aria-hidden="true"></span></h3><div id="log"></div></div>
     </div>`;
 }
 
+// Live-events log: collapsed by default, toggled by its header. renderDashboard rebuilds
+// app.innerHTML every snapshot (~1s), so the collapse state lives here (not in the DOM)
+// and is baked into the card markup (the `collapsed` class + event count) on each render.
+let logCollapsed = true;
+function toggleLog() {
+  logCollapsed = !logCollapsed;
+  const card = document.querySelector(".card.log");
+  if (!card) return;
+  card.classList.toggle("collapsed", logCollapsed);
+  const head = card.querySelector(".log-head");
+  if (head) head.setAttribute("aria-expanded", String(!logCollapsed));
+}
+document.addEventListener("click", (e) => {
+  if (e.target.closest?.(".log-head")) toggleLog();
+});
+document.addEventListener("keydown", (e) => {
+  if ((e.key === "Enter" || e.key === " ") && e.target.closest?.(".log-head")) {
+    e.preventDefault();
+    toggleLog();
+  }
+});
+
 let logLines = [];
+// Level decoration: INFO/DEBUG read like the timestamp (faint); WARN/ERROR get a soft,
+// on-palette tint so they stand out without a hard red. Mapped from known level prefixes
+// (not interpolated) so the level string can never inject a class.
+const lvlClass = (lvl) => {
+  const l = (lvl || "").toUpperCase();
+  if (l.startsWith("WARN")) return " tag-warn";
+  if (l.startsWith("ERROR")) return " tag-error";
+  return "";
+};
 const logRow = (e) =>
-  `<div class="logrow"><span class="ts">${esc((e.time || "").slice(11, 19))}</span><span class="tag">${esc(e.level)}</span><span class="msg">${esc(e.msg)}</span>${e.attrs ? `<span class="attrs">${esc(e.attrs)}</span>` : ``}</div>`;
+  `<div class="logrow"><span class="ts">${esc((e.time || "").slice(11, 19))}</span><span class="tag${lvlClass(e.level)}">${esc(e.level)}</span><span class="msg">${esc(e.msg)}</span>${e.attrs ? `<span class="attrs">${esc(e.attrs)}</span>` : ``}</div>`;
 
 function render(s) {
   _startedAtMs = s.startedAt ? Date.parse(s.startedAt) : null;

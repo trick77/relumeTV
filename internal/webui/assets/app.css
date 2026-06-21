@@ -136,6 +136,18 @@ body {
 
 /* live log */
 .log { margin-top: 20px; }
+.log-head { cursor: pointer; user-select: none; }
+.log-head:hover { color: var(--txt); }
+.log-head:focus-visible { outline: 1px solid var(--dim); outline-offset: 3px; border-radius: 3px; }
+/* chevron: down = expanded, right = collapsed */
+.log-head .chev {
+  margin-left: auto; width: 7px; height: 7px;
+  border-right: 2px solid currentColor; border-bottom: 2px solid currentColor;
+  transform: rotate(45deg); transition: transform .15s ease; opacity: .8;
+}
+.card.log.collapsed .chev { transform: rotate(-45deg); }
+.card.log.collapsed h3 { margin-bottom: 0; }
+.card.log.collapsed #log { display: none; }
 .logrow {
   display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; padding: 5px 0;
   border-bottom: 1px solid rgba(35, 38, 47, .5);
@@ -143,7 +155,9 @@ body {
 }
 .logrow:last-child { border: 0; }
 .logrow .ts { color: var(--faint); flex-shrink: 0; }
-.logrow .tag { flex-shrink: 0; width: 52px; font-weight: 600; color: var(--accent); }
+.logrow .tag { flex-shrink: 0; width: 52px; color: var(--faint); }
+.logrow .tag.tag-warn { color: var(--warn); }
+.logrow .tag.tag-error { color: var(--err); }
 .logrow .msg { color: var(--dim); min-width: 0; }
 .logrow .attrs { color: var(--faint); min-width: 0; word-break: break-word; }
 
