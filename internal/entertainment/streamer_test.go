@@ -556,6 +556,47 @@ func TestProStreamer_resolvesProTargetLive(t *testing.T) {
 	}
 }
 
+// TestProStreamer_teardownStopsTheStartingClient verifies teardown stops the stream on the
+// client that STARTED it (st.pro), not one the resolver returns afterwards — so an IP change
+// (proWatcher re-SetPro) between establish and teardown can't aim StopStream at the wrong host.
+func TestProStreamer_teardownStopsTheStartingClient(t *testing.T) {
+	proA := oneLightPro()
+	proB := oneLightPro()
+	var useB atomic.Bool
+	s := NewProStreamer(nil, "", "", nil, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	s.SetProResolver(func() (ProClient, string, string, []byte, bool) {
+		if useB.Load() {
+			return proB, "10.0.0.99", "proapp", []byte("0123456789abcdef"), true
+		}
+		return proA, "10.0.0.1", "proapp", []byte("0123456789abcdef"), true
+	})
+	s.dial = func(context.Context, string, int, string, []byte) (net.Conn, error) {
+		return &fakeConn{}, nil
+	}
+
+	// Establish on client A.
+	s.Start("tv")
+	deadline := time.Now().Add(2 * time.Second)
+	for s.Path() != "dtls" && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if s.Path() != "dtls" {
+		t.Fatalf("path = %q, want dtls", s.Path())
+	}
+
+	// The resolver now points at a different client/host (a proWatcher IP-change SetPro)…
+	useB.Store(true)
+	// …but Stop must tear down on client A — the one that started this stream.
+	s.Stop("tv")
+
+	if len(proA.stopped) == 0 {
+		t.Fatalf("StopStream was not called on the starting client A (proA.stopped=%v)", proA.stopped)
+	}
+	if len(proB.stopped) != 0 {
+		t.Fatalf("StopStream was wrongly called on the post-change client B (proB.stopped=%v)", proB.stopped)
+	}
+}
+
 // TestProStreamer_reconnectStress hammers Start→Push→Stop in a tight loop (the fast
 // TV-reconnect pattern) and proves PROBLEM 1: an old run must not write s.st.conn
 // after Stop tore it down, orphaning a DTLS conn that nothing closes.
