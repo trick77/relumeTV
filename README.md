@@ -88,12 +88,6 @@ State (bridge identity, TV tokens, **Bridge Pro app key + client key**) lives in
 - **`-ui-port`** &nbsp;·&nbsp; default `33100` — Web UI port. Pass `0` to use the predefined port `33100`, or any other value to override it. Must differ from the HTTP port (80). Ignored when `-headless` is set.
 - **`-debug`** &nbsp;·&nbsp; default off — SSDP/HTTP diagnostics + mDNS observer.
 
-## Troubleshooting
-
-The most common reason the TV never lists relumeTV: **a powered-on Bridge Pro (or any other Hue
-bridge) on the same LAN wins discovery and hides it.** Power the other bridge off — or block it
-from the cloud — before scanning, then run the TV's Ambilight+Hue search again.
-
 ## Development
 
 ```bash
