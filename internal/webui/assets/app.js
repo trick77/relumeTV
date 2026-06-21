@@ -311,7 +311,7 @@ function renderSetup(s) {
   }).join("");
   app.innerHTML = `
     <div class="wrap">
-      <div class="top"><div class="brand">re<span>lume</span>TV</div><div class="ver">v${esc(s.version)}${s.firstRun ? " · first run" : ""}</div></div>
+      <div class="top"><div class="brand">re<span>lume</span>-tv</div><div class="ver">v${esc(s.version)}${s.firstRun ? " · first run" : ""}</div></div>
       <p class="lead">Six steps until your Ambilight TV drives the Hue Bridge Pro.</p>
       ${banner}
       <div class="steps">${steps}</div>
@@ -343,7 +343,7 @@ function renderDashboard(s) {
     : "";
   app.innerHTML = `
     <div class="wrap">
-      <div class="top"><div class="brand">re<span>lume</span>TV</div><div class="ver">v${esc(s.version)}</div>
+      <div class="top"><div class="brand">re<span>lume</span>-tv</div><div class="ver">v${esc(s.version)}</div>
         <div class="spacer"></div><div class="health"><span class="${healthDotClass(s.health)}"></span> ${esc(healthLabel(s.health))}</div></div>
       <div class="pipe">
         <div class="step"><div class="lbl">Hue Bridge Pro</div><div class="val">${s.proPaired ? `<span class="ok">✓</span> Paired` : "— Unpaired"}</div><div class="sub">${esc(s.proHost)}${s.proBridgeId ? `<br>${esc(s.proBridgeId.toUpperCase())}` : ""}</div></div>
