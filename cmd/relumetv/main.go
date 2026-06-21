@@ -24,7 +24,6 @@ import (
 	"github.com/trick77/relumetv/internal/config"
 	"github.com/trick77/relumetv/internal/diag"
 	"github.com/trick77/relumetv/internal/entertainment"
-	"github.com/trick77/relumetv/internal/huestream"
 	"github.com/trick77/relumetv/internal/mdns"
 	"github.com/trick77/relumetv/internal/ssdp"
 	"github.com/trick77/relumetv/internal/webui"
@@ -410,67 +409,61 @@ func runServe(args []string, log *slog.Logger) error {
 		// streamer's sent-side jump (below) it yields the jitter-reduction metric.
 		recv.OnWindowStats = func(briJump, _ uint32) { jitterStats.setInput(briJump) }
 
-		if pro != nil {
-			// Phase C: relumeTV opens its OWN entertainment stream to the Pro over DTLS
-			// and re-encodes the decoded TV frames at full rate, avoiding the per-light
-			// REST writes that overflow the Pro's command queue (503). The streamer
-			// auto-falls back to the REST forward (Phase B) if DTLS cannot establish.
-			proClient := bridgepro.New(pro)
-			clientKey, _ := hex.DecodeString(pro.ClientKey)
-			streamer := entertainment.NewProStreamer(proClient, pro.Host, pro.AppKey, clientKey, clip.ForwardLight, log)
-			// Easing time constant for the DTLS send path (configurable; 0 = off).
-			streamer.SetSmoothTau(opts.smoothTau)
-			// Surface the live DTLS-passthrough colours to the web UI (the REST path is
-			// covered by the provider's OnColor via the fallback sink).
-			streamer.OnColor = liveColors.SetStates
-			// Record each frame sent to the Pro over DTLS so the UI can show the live
-			// outgoing send rate (the 50 Hz counterpart to the TV's ~25 Hz input).
-			streamer.OnSend = proSendStats.Mark
-			// Record the smoothed sent stream's per-window brightness jump; the gap
-			// below the receiver's input jump is how much the easing cut the flicker.
-			streamer.OnWindowStats = func(briJump, _ uint32) { jitterStats.setSent(briJump) }
-			// Honor the TV's group membership: when the TV declares which lights belong to
-			// its Ambilight zone (POST/PUT /groups), restrict the Pro config to that
-			// subset so lights in other rooms are never driven.
-			clip.OnGroupMembers = streamer.SetRequestedMembers
-			// Persist/reuse relumeTV's own entertainment_configuration across restarts
-			// instead of re-finding it each stream (Phase D).
-			streamer.SetConfigStore(cfg.LoadEntConfigID, func(id string) {
-				if err := cfg.SaveEntConfigID(id); err != nil {
-					log.Warn("persisting relumeTV entertainment config id", "err", err)
-				}
-			})
-			entStreamer = streamer
-			// The TV opening its DTLS stream cancels the activation-fallback watchdog
-			// (clip) and establishes the Pro stream (streamer).
-			recv.OnStreamStart = func(remote string) {
-				clip.MarkDTLSStreamUp()
-				streamer.Start(remote)
+		// Phase C: relumeTV opens its OWN entertainment stream to the Pro over DTLS and
+		// re-encodes the decoded TV frames at full rate, avoiding the per-light REST writes
+		// that overflow the Pro's command queue (503). The streamer auto-falls back to the
+		// REST forward (Phase B) if DTLS cannot establish — so it is created unconditionally
+		// (its fallback sink IS clip.ForwardLight). It resolves its Pro target LIVE from
+		// cfg.GetPro() on each establish, so a pairing completed by autoPairPro or an IP
+		// change followed by proWatcher takes effect on the next stream without rebuilding it.
+		streamer := entertainment.NewProStreamer(nil, "", "", nil, clip.ForwardLight, log)
+		streamer.SetProResolver(func() (entertainment.ProClient, string, string, []byte, bool) {
+			p := cfg.GetPro()
+			if p == nil || p.ClientKey == "" {
+				return nil, "", "", nil, false
 			}
-			recv.OnStreamStop = func(remote string) {
-				clip.MarkDTLSStreamDown()
-				streamer.Stop(remote)
+			clientKey, err := hex.DecodeString(p.ClientKey)
+			if err != nil {
+				return nil, "", "", nil, false
 			}
-			recv.OnFrame = streamer.Push
-			log.Info("entertainment mode: DTLS receiver on udp :2100 → streaming to the hue bridge pro over DTLS (REST fallback)")
-		} else {
-			// No Pro paired yet: forward decoded frames to the Pro via the coalescing
-			// REST provider (Phase B) until pairing completes. The channel id IS the v1
-			// light id the TV referenced in its entertainment group.
-			recv.OnStreamStart = func(string) { clip.MarkDTLSStreamUp() }
-			recv.OnStreamStop = func(string) { clip.MarkDTLSStreamDown() }
-			recv.OnFrame = func(_ string, f *huestream.Frame) {
-				for _, ch := range f.Channels {
-					// Honor the TV subset here too (defense in depth): ch.ID is the v1
-					// light id; skip channels outside the TV's requested Ambilight set.
-					if !clip.AllowsMember(ch.ID) {
-						continue
-					}
-					clip.ForwardLight(strconv.Itoa(int(ch.ID)), entertainment.ToHueV1State(f.ColorSpace, ch))
-				}
+			return bridgepro.New(p), p.Host, p.AppKey, clientKey, true
+		})
+		// Easing time constant for the DTLS send path (configurable; 0 = off).
+		streamer.SetSmoothTau(opts.smoothTau)
+		// Surface the live DTLS-passthrough colours to the web UI (the REST path is
+		// covered by the provider's OnColor via the fallback sink).
+		streamer.OnColor = liveColors.SetStates
+		// Record each frame sent to the Pro over DTLS so the UI can show the live
+		// outgoing send rate (the 50 Hz counterpart to the TV's ~25 Hz input).
+		streamer.OnSend = proSendStats.Mark
+		// Record the smoothed sent stream's per-window brightness jump; the gap
+		// below the receiver's input jump is how much the easing cut the flicker.
+		streamer.OnWindowStats = func(briJump, _ uint32) { jitterStats.setSent(briJump) }
+		// Honor the TV's group membership: when the TV declares which lights belong to
+		// its Ambilight zone (POST/PUT /groups), restrict the Pro config to that
+		// subset so lights in other rooms are never driven. Also filters the REST fallback.
+		clip.OnGroupMembers = streamer.SetRequestedMembers
+		// Persist/reuse relumeTV's own entertainment_configuration across restarts
+		// instead of re-finding it each stream (Phase D).
+		streamer.SetConfigStore(cfg.LoadEntConfigID, func(id string) {
+			if err := cfg.SaveEntConfigID(id); err != nil {
+				log.Warn("persisting relumeTV entertainment config id", "err", err)
 			}
-			log.Info("entertainment mode: DTLS receiver on udp :2100 → REST forward (no hue bridge pro paired yet)")
+		})
+		entStreamer = streamer
+		// The TV opening its DTLS stream cancels the activation-fallback watchdog
+		// (clip) and establishes the Pro stream (streamer). When no Pro is paired yet the
+		// streamer stays on the REST fallback (clip.ForwardLight) until pairing completes.
+		recv.OnStreamStart = func(remote string) {
+			clip.MarkDTLSStreamUp()
+			streamer.Start(remote)
 		}
+		recv.OnStreamStop = func(remote string) {
+			clip.MarkDTLSStreamDown()
+			streamer.Stop(remote)
+		}
+		recv.OnFrame = streamer.Push
+		log.Info("entertainment mode: DTLS receiver on udp :2100 → streaming to the hue bridge pro over DTLS (REST fallback)")
 		go func() {
 			if err := recv.Run(ctx); err != nil && ctx.Err() == nil {
 				log.Warn("entertainment receiver", "err", err)

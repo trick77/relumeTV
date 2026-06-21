@@ -174,7 +174,7 @@ func TestProStreamer_ensureConfig_honorsRequestedSubset(t *testing.T) {
 	s.SetRequestedMembers([]uint16{1})
 
 	// When
-	_, remap, _, channels, err := s.ensureConfig()
+	_, remap, _, channels, err := s.ensureConfig(s.resolvedPro())
 
 	// Then
 	if err != nil {
@@ -198,7 +198,7 @@ func TestProStreamer_ensureConfig_noSubsetDrivesAllColorLights(t *testing.T) {
 	pro := twoLightPro(configFull(testConfigID, 5, "svc-A", "svc-B"))
 
 	// When
-	_, _, _, channels, err := quietStreamer(pro, nil).ensureConfig()
+	_, _, _, channels, err := quietStreamer(pro, nil).ensureConfig(pro)
 
 	// Then
 	if err != nil {
@@ -230,7 +230,7 @@ func TestProStreamer_ensureConfig_recreatesAllLightsConfigOnSubsetShrink(t *test
 	s.SetRequestedMembers([]uint16{1})
 
 	// When
-	id, _, reused, channels, err := s.ensureConfig()
+	id, _, reused, channels, err := s.ensureConfig(s.resolvedPro())
 
 	// Then
 	if err != nil {
@@ -258,12 +258,19 @@ func quietStreamer(pro ProClient, fallback FallbackSink) *ProStreamer {
 		slog.New(slog.NewTextHandler(io.Discard, nil)))
 }
 
+// resolvedPro returns the streamer's current Pro client via its resolver — the same way
+// run() obtains the target before calling ensureConfig in production.
+func (s *ProStreamer) resolvedPro() ProClient {
+	pro, _, _, _, _ := s.resolve()
+	return pro
+}
+
 func TestProStreamer_ensureConfig_remapFromGroundTruth(t *testing.T) {
 	// Given
 	s := quietStreamer(oneLightPro(), nil)
 
 	// When
-	id, remap, reused, channels, err := s.ensureConfig()
+	id, remap, reused, channels, err := s.ensureConfig(s.resolvedPro())
 
 	// Then
 	if err != nil {
@@ -303,7 +310,7 @@ func TestProStreamer_ensureConfig_reusesMatchingConfig(t *testing.T) {
 	pro.configs[0].Metadata.Name = configName
 
 	// When
-	id, _, reused, _, err := quietStreamer(pro, nil).ensureConfig()
+	id, _, reused, _, err := quietStreamer(pro, nil).ensureConfig(pro)
 
 	// Then: reused as-is, nothing deleted or created.
 	if err != nil {
@@ -328,7 +335,7 @@ func TestProStreamer_ensureConfig_recreatesOnLightSetChange(t *testing.T) {
 	}
 
 	// When
-	id, remap, reused, _, err := quietStreamer(pro, nil).ensureConfig()
+	id, remap, reused, _, err := quietStreamer(pro, nil).ensureConfig(pro)
 
 	// Then: the stale config is stopped+deleted and a fresh one created.
 	if err != nil {
@@ -354,10 +361,10 @@ func TestProStreamer_ensureConfig_cachesAcrossCalls(t *testing.T) {
 	s := quietStreamer(pro, nil)
 
 	// When: two ensureConfig calls
-	if _, _, _, _, err := s.ensureConfig(); err != nil {
+	if _, _, _, _, err := s.ensureConfig(s.resolvedPro()); err != nil {
 		t.Fatalf("first ensureConfig: %v", err)
 	}
-	if _, _, reused, _, err := s.ensureConfig(); err != nil {
+	if _, _, reused, _, err := s.ensureConfig(s.resolvedPro()); err != nil {
 		t.Fatalf("second ensureConfig: %v", err)
 	} else if !reused {
 		t.Fatalf("second call should reuse the cached config")
@@ -381,7 +388,7 @@ func TestProStreamer_ensureConfig_reusesPersistedIDAndSaves(t *testing.T) {
 	s.SetConfigStore(func() string { return testConfigID }, func(id string) { saved = id })
 
 	// When
-	id, _, reused, _, err := s.ensureConfig()
+	id, _, reused, _, err := s.ensureConfig(s.resolvedPro())
 
 	// Then: reused via the persisted id and re-saved.
 	if err != nil {
@@ -407,7 +414,7 @@ func TestProStreamer_ensureConfig_transientGetDoesNotDuplicate(t *testing.T) {
 	pro.getErr = fmt.Errorf("temporary network blip")
 
 	// When
-	_, _, _, _, err := quietStreamer(pro, nil).ensureConfig()
+	_, _, _, _, err := quietStreamer(pro, nil).ensureConfig(pro)
 
 	// Then: it fails (→ REST fallback + backoff re-list) instead of creating a duplicate.
 	if err == nil {
@@ -488,6 +495,64 @@ func TestProStreamer_noClientKeyStaysREST(t *testing.T) {
 	// Then: path stays REST and no establishment goroutine runs
 	if s.Path() != "rest" {
 		t.Fatalf("path = %q, want rest", s.Path())
+	}
+}
+
+// TestProStreamer_resolvesProTargetLive verifies the streamer reads its Pro target from
+// the resolver on each establish, so a pairing that completes AFTER construction (C-1) and
+// a host that differs from any construction-time snapshot (C-2) both take effect on the
+// next stream — without rebuilding the streamer.
+func TestProStreamer_resolvesProTargetLive(t *testing.T) {
+	var mu sync.Mutex
+	var pro ProClient // nil until "paired"
+	var host string
+	s := NewProStreamer(nil, "", "", nil,
+		func(string, map[string]any) {}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	var fallbackHits atomic.Int32
+	s.fallback = func(string, map[string]any) { fallbackHits.Add(1) }
+	s.SetProResolver(func() (ProClient, string, string, []byte, bool) {
+		mu.Lock()
+		defer mu.Unlock()
+		if pro == nil {
+			return nil, "", "", nil, false
+		}
+		return pro, host, "proapp", []byte("0123456789abcdef"), true
+	})
+	var dialedHost atomic.Value // string
+	s.dial = func(_ context.Context, h string, _ int, _ string, _ []byte) (net.Conn, error) {
+		dialedHost.Store(h)
+		return &fakeConn{}, nil
+	}
+
+	// 1) No pairing yet: Start stays on REST and a frame forwards via the fallback.
+	s.Start("tv")
+	if s.Path() != "rest" {
+		t.Fatalf("path = %q before pairing, want rest", s.Path())
+	}
+	s.Push("tv", &huestream.Frame{ColorSpace: huestream.ColorSpaceXY,
+		Channels: []huestream.Channel{{ID: 1, A: 0x4000, B: 0x6000, C: 0x8000}}})
+	if fallbackHits.Load() == 0 {
+		t.Fatal("frame before pairing was not forwarded via the REST fallback")
+	}
+	s.Stop("tv")
+
+	// 2) Pairing completes at a specific host — the NEXT stream must engage DTLS there.
+	mu.Lock()
+	pro = oneLightPro()
+	host = "10.0.0.42"
+	mu.Unlock()
+
+	s.Start("tv")
+	defer s.Stop("tv")
+	deadline := time.Now().Add(2 * time.Second)
+	for s.Path() != "dtls" && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if s.Path() != "dtls" {
+		t.Fatalf("path = %q after pairing, want dtls (resolver should have engaged DTLS)", s.Path())
+	}
+	if got, _ := dialedHost.Load().(string); got != "10.0.0.42" {
+		t.Fatalf("dialed host = %q, want 10.0.0.42 (the live-resolved target, not a construction snapshot)", got)
 	}
 }
 

@@ -100,12 +100,16 @@ type FallbackSink func(v1id string, state map[string]any)
 // HueStream v2 at a steady rate. If anything fails it falls back to the REST sink
 // (Phase B) so the lights still follow — DTLS and REST are mutually exclusive.
 type ProStreamer struct {
-	pro       ProClient
-	host      string
-	appKey    string
-	clientKey []byte
-	fallback  FallbackSink
-	log       *slog.Logger
+	// resolve returns the current Pro target (read at the top of each establish attempt
+	// and in Start), so a pairing completed by autoPairPro or an IP change followed by
+	// proWatcher — both of which persist via config.SetPro — takes effect on the next
+	// stream WITHOUT reconstructing the streamer (the snapshot-at-construction was the
+	// stale-host bug). ok=false means no usable pairing yet → the REST fallback. Defaults
+	// to a static resolver over the construction-time target (NewProStreamer); main wires
+	// the live config-backed one via SetProResolver.
+	resolve  func() (pro ProClient, host, appKey string, clientKey []byte, ok bool)
+	fallback FallbackSink
+	log      *slog.Logger
 
 	// OnColor, if set, is called once per DTLS-passthrough frame with a map of v1
 	// light id → v1 state ({on,bri,xy}), so the web UI can show the live streamed
@@ -167,6 +171,7 @@ func (s *ProStreamer) SetConfigStore(load func() string, save func(string)) {
 type state struct {
 	mu         sync.Mutex
 	conn       net.Conn
+	pro        ProClient // the client that started the live stream; teardown stops it on this exact target
 	configID   string
 	colorSpace uint8
 	remap      map[uint16]uint8            // TV v1 light id → Pro channel id
@@ -191,12 +196,26 @@ type state struct {
 // hex-decoded); an empty key means DTLS is impossible and the streamer stays on the
 // REST fallback permanently (with a one-time warning).
 func NewProStreamer(pro ProClient, host, appKey string, clientKey []byte, fallback FallbackSink, log *slog.Logger) *ProStreamer {
-	return &ProStreamer{
-		pro: pro, host: host, appKey: appKey, clientKey: clientKey,
+	s := &ProStreamer{
 		fallback: fallback, log: log,
 		dial:        dialPro,
 		smoothAlpha: defaultSmoothAlpha,
 	}
+	// Default static resolver over the construction-time target — used by tests and any
+	// caller that does not wire a live resolver. A non-empty clientKey means DTLS is
+	// possible.
+	s.resolve = func() (ProClient, string, string, []byte, bool) {
+		return pro, host, appKey, clientKey, pro != nil && len(clientKey) > 0
+	}
+	return s
+}
+
+// SetProResolver wires a live resolver for the Pro target, read at the top of each
+// establish attempt (and in Start), so a pairing or IP change picked up by the
+// background paths (autoPairPro / proWatcher, via config.SetPro) takes effect on the
+// next stream. ok=false → no usable pairing yet → REST fallback. Call before Start.
+func (s *ProStreamer) SetProResolver(fn func() (pro ProClient, host, appKey string, clientKey []byte, ok bool)) {
+	s.resolve = fn
 }
 
 // SetSmoothTau sets the DTLS-path easing time constant (see DefaultSmoothTau). A tau
@@ -270,8 +289,11 @@ func (s *ProStreamer) Start(remote string) {
 	if s.running {
 		return
 	}
-	if len(s.clientKey) == 0 {
-		s.log.Warn("hue bridge pro entertainment unavailable: no clientKey on this pairing — re-pair to enable DTLS; staying on REST forward")
+	if _, _, _, _, ok := s.resolve(); !ok {
+		// No usable Pro pairing yet (fresh install before autoPairPro completes, or no
+		// clientKey on this pairing). Stay on the REST fallback; the next stream after
+		// pairing completes resolves the live target and engages DTLS.
+		s.log.Info("hue bridge pro entertainment: no usable pairing yet, staying on REST forward", "tv", remote)
 		s.setPath("rest")
 		return
 	}
@@ -393,20 +415,27 @@ func (s *ProStreamer) run(ctx context.Context, done chan struct{}) {
 // establish ensures the relumeTV entertainment_configuration exists and is started,
 // then dials the DTLS-PSK client and builds the TV→Pro channel map.
 func (s *ProStreamer) establish(ctx context.Context) error {
-	configID, remap, reused, channels, err := s.ensureConfig()
+	// Resolve the Pro target LIVE each attempt: a reconnect after an IP change (proWatcher
+	// re-SetPro) or a freshly completed pairing (autoPairPro) is picked up here, on the
+	// next establish, rather than dialing a host captured at construction.
+	pro, host, appKey, clientKey, ok := s.resolve()
+	if !ok {
+		return fmt.Errorf("no usable hue bridge pro pairing")
+	}
+	configID, remap, reused, channels, err := s.ensureConfig(pro)
 	if err != nil {
 		return fmt.Errorf("ensure config: %w", err)
 	}
 	s.log.Info("hue bridge pro entertainment config ready", "id", configID, "name", configName, "reused", reused, "channels", channels)
 
-	if err := s.pro.StartStream(configID); err != nil {
+	if err := pro.StartStream(configID); err != nil {
 		// A reused config can be left active=true if relumeTV restarted mid-stream
 		// (the Pro keeps the area active, ownerless). Starting an already-active
 		// configuration is rejected, so stop it and retry once — otherwise Phase C
 		// would fall back to REST permanently on every subsequent run.
 		s.log.Warn("hue bridge pro entertainment start rejected, stopping a leftover-active config and retrying", "id", configID, "err", err)
-		_ = s.pro.StopStream(configID)
-		if err := s.pro.StartStream(configID); err != nil {
+		_ = pro.StopStream(configID)
+		if err := pro.StartStream(configID); err != nil {
 			return fmt.Errorf("start stream (after stop): %w", err)
 		}
 	}
@@ -416,16 +445,17 @@ func (s *ProStreamer) establish(ctx context.Context) error {
 	if port == 0 {
 		port = 2100
 	}
-	s.log.Info("hue bridge pro DTLS stream connecting", "host", fmt.Sprintf("%s:%d", s.host, port), "identity", s.appKey)
-	conn, err := s.dial(ctx, s.host, port, s.appKey, s.clientKey)
+	s.log.Info("hue bridge pro DTLS stream connecting", "host", fmt.Sprintf("%s:%d", host, port), "identity", appKey)
+	conn, err := s.dial(ctx, host, port, appKey, clientKey)
 	if err != nil {
-		_ = s.pro.StopStream(configID)
+		_ = pro.StopStream(configID)
 		return fmt.Errorf("dtls dial: %w", err)
 	}
 	s.log.Info("hue bridge pro DTLS stream connected")
 
 	s.st.mu.Lock()
 	s.st.conn = conn
+	s.st.pro = pro
 	s.st.configID = configID
 	s.st.remap = remap
 	s.st.latest = map[uint8]huestream.Channel{}
@@ -560,7 +590,9 @@ func (s *ProStreamer) teardown() {
 	s.st.mu.Lock()
 	conn := s.st.conn
 	configID := s.st.configID
+	pro := s.st.pro
 	s.st.conn = nil
+	s.st.pro = nil
 	s.st.configID = ""
 	s.st.path = "rest"
 	s.st.mu.Unlock()
@@ -568,8 +600,10 @@ func (s *ProStreamer) teardown() {
 	if conn != nil {
 		_ = conn.Close()
 	}
-	if configID != "" {
-		if err := s.pro.StopStream(configID); err != nil {
+	// Stop on the SAME client that started this stream (st.pro), not a freshly resolved
+	// one — after an IP change the new target's StopStream would address the wrong host.
+	if configID != "" && pro != nil {
+		if err := pro.StopStream(configID); err != nil {
 			s.log.Warn("hue bridge pro entertainment stop stream", "id", configID, "err", err)
 		} else {
 			s.log.Info("hue bridge pro entertainment stream stopped", "id", configID)
@@ -586,12 +620,12 @@ func (s *ProStreamer) setPath(p string) {
 // ensureConfig finds the relumeTV entertainment_configuration (or creates one
 // covering all color-capable lights), then reads it back to learn the
 // bridge-assigned channel ids and build the TV-v1-id → Pro-channel-id map.
-func (s *ProStreamer) ensureConfig() (id string, remap map[uint16]uint8, reused bool, channels int, err error) {
-	lights, err := s.pro.Lights()
+func (s *ProStreamer) ensureConfig(pro ProClient) (id string, remap map[uint16]uint8, reused bool, channels int, err error) {
+	lights, err := pro.Lights()
 	if err != nil {
 		return "", nil, false, 0, fmt.Errorf("lights: %w", err)
 	}
-	services, err := s.pro.EntertainmentServices()
+	services, err := pro.EntertainmentServices()
 	if err != nil {
 		return "", nil, false, 0, fmt.Errorf("entertainment services: %w", err)
 	}
@@ -652,7 +686,7 @@ func (s *ProStreamer) ensureConfig() (id string, remap map[uint16]uint8, reused 
 	// Fast path: a config id resolved earlier this process — reuse it without listing,
 	// as long as it still exists and covers the current light set.
 	if cached := s.cachedID(); cached != "" {
-		if full, gerr := s.pro.GetEntertainmentConfig(cached); gerr == nil && configCoversServices(full, desired) {
+		if full, gerr := pro.GetEntertainmentConfig(cached); gerr == nil && configCoversServices(full, desired) {
 			remap = remapFromConfig(full, svcToV1)
 			if len(remap) == 0 {
 				return "", nil, false, 0, fmt.Errorf("no channels mapped to TV light ids")
@@ -664,7 +698,7 @@ func (s *ProStreamer) ensureConfig() (id string, remap map[uint16]uint8, reused 
 
 	// Slow path: list the Pro's configs (authoritative — prevents duplicate creates)
 	// and pick the persisted id if still present, else a config named `relumetv`.
-	configs, err := s.pro.EntertainmentConfigs()
+	configs, err := pro.EntertainmentConfigs()
 	if err != nil {
 		return "", nil, false, 0, fmt.Errorf("entertainment configs: %w", err)
 	}
@@ -690,7 +724,7 @@ func (s *ProStreamer) ensureConfig() (id string, remap map[uint16]uint8, reused 
 	// Validate the candidate covers the current light set; if it changed (or the
 	// config vanished), drop the stale config and recreate it.
 	if id != "" {
-		full, gerr := s.pro.GetEntertainmentConfig(id)
+		full, gerr := pro.GetEntertainmentConfig(id)
 		switch {
 		case gerr == nil && configCoversServices(full, desired):
 			remap = remapFromConfig(full, svcToV1)
@@ -704,8 +738,8 @@ func (s *ProStreamer) ensureConfig() (id string, remap map[uint16]uint8, reused 
 			// The color-light set changed under the config — stop (in case it is
 			// active) and delete it so it never lingers or hits the Pro's area limit.
 			s.log.Info("hue bridge pro entertainment config stale (light set changed), recreating", "id", id)
-			_ = s.pro.StopStream(id)
-			if derr := s.pro.DeleteEntertainmentConfig(id); derr != nil {
+			_ = pro.StopStream(id)
+			if derr := pro.DeleteEntertainmentConfig(id); derr != nil {
 				s.log.Warn("hue bridge pro entertainment delete stale config", "id", id, "err", derr)
 			}
 		default:
@@ -719,13 +753,13 @@ func (s *ProStreamer) ensureConfig() (id string, remap map[uint16]uint8, reused 
 	}
 
 	// Create a fresh config and persist its id for reuse next stream/restart.
-	id, err = s.pro.CreateEntertainmentConfig(configName, members)
+	id, err = pro.CreateEntertainmentConfig(configName, members)
 	if err != nil {
 		return "", nil, false, 0, fmt.Errorf("create config: %w", err)
 	}
 
 	// Read back the bridge-assigned channels (ground truth — do not assume 0..N-1).
-	full, err := s.pro.GetEntertainmentConfig(id)
+	full, err := pro.GetEntertainmentConfig(id)
 	if err != nil {
 		return "", nil, false, 0, fmt.Errorf("get config: %w", err)
 	}
