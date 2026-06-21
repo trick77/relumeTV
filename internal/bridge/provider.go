@@ -244,14 +244,18 @@ func (p *LightProvider) forward(v1id string, v1state map[string]any) error {
 			return fmt.Errorf("unknown light id %q", v1id)
 		}
 	}
+	// Write to the Pro FIRST, then mark the light driven. Marking it before the write
+	// would taint the ControlledSet (the restart/idle flash targets it) and surface a UI
+	// colour for a light that a down/overloaded Pro never actually received — so a failed
+	// write must leave both untouched.
+	if err := p.client.SetLight(uuid, v2); err != nil {
+		return err
+	}
 	if p.OnControlled != nil {
 		p.OnControlled(uuid)
 	}
 	if p.OnColor != nil {
 		p.OnColor(v1id, v1state)
-	}
-	if err := p.client.SetLight(uuid, v2); err != nil {
-		return err
 	}
 	if p.OnForward != nil {
 		p.OnForward()

@@ -144,6 +144,30 @@ func TestForward_emptyV2StateSkipsWriteAndControlled(t *testing.T) {
 	}
 }
 
+func TestForward_failedWriteDoesNotMarkControlled(t *testing.T) {
+	// Given: a provider whose Pro write always fails (down/overloaded)
+	p := newTestProvider(downClient{})
+	var controlled, colored int
+	p.OnControlled = func(string) { controlled++ }
+	p.OnColor = func(string, map[string]any) { colored++ }
+
+	// When: a real state is forwarded but the Pro rejects the write
+	err := p.forward("1", map[string]any{"ct": 200})
+
+	// Then: the error propagates and the light is NEITHER marked controlled (so the
+	// restart/idle flash won't target a bulb the TV never actually drove) NOR surfaced to
+	// the UI as a live colour it never received.
+	if err == nil {
+		t.Fatal("forward: expected an error from a failed write, got nil")
+	}
+	if controlled != 0 {
+		t.Errorf("OnControlled calls = %d, want 0 on a failed write", controlled)
+	}
+	if colored != 0 {
+		t.Errorf("OnColor calls = %d, want 0 on a failed write", colored)
+	}
+}
+
 func TestSetLightV1_isAsyncAndForwards(t *testing.T) {
 	// Given: a provider over a fake Hue Bridge Pro
 	fc := &fakeClient{}
