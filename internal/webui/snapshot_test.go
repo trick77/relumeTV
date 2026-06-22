@@ -13,6 +13,7 @@ type fakeSource struct {
 	coalesce int
 	fwdErrs  int
 	lastErr  time.Time
+	proOff   bool // when true, the Pro's REST state for light "1" reports on:false
 }
 
 func (f fakeSource) Version() string      { return "1.4.2" }
@@ -28,7 +29,7 @@ func (f fakeSource) LightsV1() (map[string]any, bool) {
 	return map[string]any{
 		"1": map[string]any{
 			"name":  "Sofa",
-			"state": map[string]any{"on": true, "bri": float64(200), "xy": []any{0.5, 0.4}},
+			"state": map[string]any{"on": !f.proOff, "bri": float64(200), "xy": []any{0.5, 0.4}},
 		},
 	}, true
 }
@@ -100,6 +101,44 @@ func TestBuildSnapshot_LiveColorOverridesButDoesNotDrive(t *testing.T) {
 	}
 	if l.X != 0.1 || l.Y != 0.2 || l.Bri != 99 {
 		t.Fatalf("live colour should still override Pro REST state, got %+v", l)
+	}
+	// Not driven, but the Pro REST state reports on:true (proOff defaults false),
+	// so the light reads On from the Pro's real state — completing the on/off
+	// truth table alongside the driven and idle-off cases.
+	if !l.On {
+		t.Fatalf("non-driven light with Pro REST on:true should read On, got %+v", l)
+	}
+}
+
+// A light no longer in the driven window must reflect the Pro's REST on/off
+// state, NOT the last (sticky) streamed on-state. The TV switched off and
+// idle-off turned the light off (Pro REST on:false); the sticky LiveColor still
+// carries On:true from the last frame. The dashboard must render it Off so the
+// swatch goes dark instead of staying lit on the stale colour.
+func TestBuildSnapshot_OffStateWinsWhenNotDriven(t *testing.T) {
+	src := fakeSource{
+		driven: nil, // no longer driven
+		proOff: true, // Pro REST reports on:false (idle-off turned it off)
+		live:   map[string]LiveColor{"1": {X: 0.1, Y: 0.2, Bri: 99, On: true}},
+	}
+	l := BuildSnapshot(src).Lights[0]
+	if l.On {
+		t.Fatalf("non-driven light must reflect the Pro's real on:false, got On=%v", l.On)
+	}
+}
+
+// A driven light trusts the live stream's on-state over the Pro's REST state,
+// which is stale during DTLS passthrough: the Pro may report on:false while the
+// TV is actively streaming the light on.
+func TestBuildSnapshot_DrivenTrustsLiveOnState(t *testing.T) {
+	src := fakeSource{
+		driven: []string{"1"},
+		proOff: true, // Pro REST stale (on:false) during DTLS passthrough
+		live:   map[string]LiveColor{"1": {X: 0.1, Y: 0.2, Bri: 99, On: true}},
+	}
+	l := BuildSnapshot(src).Lights[0]
+	if !l.On {
+		t.Fatalf("driven light must trust the live stream's on:true, got On=%v", l.On)
 	}
 }
 

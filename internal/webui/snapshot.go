@@ -295,9 +295,19 @@ func BuildSnapshot(src StateSource) Snapshot {
 			// the light driven — that is DrivenV1IDs' job (a windowed signal), so a
 			// light keeps its last colour after a stop without staying "driven". Only
 			// override the colour fields actually present, so an xy-less write (e.g. a
-			// bare on/off REST write) does not blank the swatch to black.
+			// bare on/off REST write) does not blank the swatch to black. The on-state
+			// is carved out below: it only follows the live stream while the light is
+			// actively driven (see the inner comment).
 			if lc, ok := live[id]; ok {
-				lv.On = lc.On
+				// Only trust the live stream's on-state while the TV is actively
+				// driving this light: the Pro's REST on/off is stale during DTLS
+				// passthrough. Once the light leaves the driven window, keep the
+				// Pro's real REST state so the swatch reflects the actual off
+				// after idle-off turns the light off, instead of staying lit on
+				// the last (sticky) streamed frame.
+				if lv.Driven {
+					lv.On = lc.On
+				}
 				if lc.Bri > 0 {
 					lv.Bri = lc.Bri
 				}
