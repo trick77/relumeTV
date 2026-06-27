@@ -154,25 +154,6 @@ func TestSave_IsNoOpUntilCommit(t *testing.T) {
 	}
 }
 
-func TestLoad_MigratesLegacyZeroVersion(t *testing.T) {
-	// Given: a legacy config with no schemaVersion field
-	path := filepath.Join(t.TempDir(), "relume-tv.json")
-	if err := os.WriteFile(path, []byte(`{"identity":{"serial":"2c4d54ea2832"},"apiUsers":{}}`), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	// When
-	c, err := Load(path)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-
-	// Then: it is adopted to the current version
-	if c.SchemaVersion != CurrentSchemaVersion {
-		t.Errorf("SchemaVersion = %d, want %d", c.SchemaVersion, CurrentSchemaVersion)
-	}
-}
-
 func TestLoad_RejectsNewerSchemaVersion(t *testing.T) {
 	// Given: a config written by a newer build
 	path := filepath.Join(t.TempDir(), "relume-tv.json")

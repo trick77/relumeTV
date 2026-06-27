@@ -98,8 +98,7 @@ func (p *BridgePro) LogValue() slog.Value {
 
 // CurrentSchemaVersion is the schema version this binary writes. Bump it whenever a
 // breaking change to the on-disk layout needs an explicit migration. A loaded config
-// with a higher version than this is refused (the binary is too old to understand it);
-// a missing/zero version is treated as the first schema and stamped on the next save.
+// with a higher version than this is refused (the binary is too old to understand it).
 const CurrentSchemaVersion = 1
 
 // Config is the entire persistent state.
@@ -167,11 +166,6 @@ func Load(path string) (*Config, error) {
 	}
 	if c.SchemaVersion > CurrentSchemaVersion {
 		return nil, fmt.Errorf("config schema version %d is newer than this build supports (%d); upgrade relume-tv", c.SchemaVersion, CurrentSchemaVersion)
-	}
-	// A zero version is a legacy/first-schema file: adopt the current version so the
-	// next save stamps it. Add real per-version migrations here as the schema evolves.
-	if c.SchemaVersion == 0 {
-		c.SchemaVersion = CurrentSchemaVersion
 	}
 	if c.ApiUsers == nil {
 		c.ApiUsers = map[string]*ApiUser{}
@@ -321,9 +315,9 @@ func (c *Config) save() error {
 	if !c.persist {
 		return nil
 	}
-	// SchemaVersion is always stamped by Load (both the fresh and legacy-zero paths),
-	// and Load is the only constructor of *Config — so every config reaching save has
-	// it set. No defensive re-stamp needed here.
+	// A fresh config is stamped with CurrentSchemaVersion by Load; an existing file is
+	// written back with whatever version it carried (the >CurrentSchemaVersion case is
+	// already refused in Load). No defensive re-stamp needed here.
 	data, err := json.MarshalIndent(c, "", "  ")
 	if err != nil {
 		return fmt.Errorf("serialize config: %w", err)

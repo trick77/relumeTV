@@ -78,7 +78,6 @@ type serveOptions struct {
 	dtlsFallbackRecovery   time.Duration
 	smoothTau              time.Duration
 	headless               bool
-	ui                     bool
 	uiPort                 int
 }
 
@@ -128,7 +127,6 @@ func parseServeOptions(args []string) (serveOptions, error) {
 	dtlsFallbackRecovery := fs.Duration("entertainment-fallback-recovery", 90*time.Second, "entertainment mode: how long a latched REST fallback persists before the next TV activation may recover it (0 disables: fallback stays sticky until restart)")
 	smoothTau := fs.Duration("entertainment-smooth-tau", entertainment.DefaultSmoothTau, "entertainment mode: exponential-smoothing time constant for easing the TV's hard scene cuts on the DTLS send path. Lower = snappier but more flicker, higher = smoother but laggier; 0 disables smoothing (frames forwarded verbatim)")
 	headless := fs.Bool("headless", false, "disable the web UI (it runs on the predefined port 33100 by default). NOTE: with network_mode: host the UI is otherwise reachable, unauthenticated, by anyone on the LAN")
-	ui := fs.Bool("ui", false, "deprecated no-op: the web UI is on by default now (kept so existing -ui invocations still parse). Use -headless to turn it off")
 	uiPort := fs.Int("ui-port", 0, "override the web UI port (0 = the predefined port 33100). Must differ from -http-port (80). Ignored when -headless is set")
 	if err := fs.Parse(args); err != nil {
 		return serveOptions{}, err
@@ -151,7 +149,6 @@ func parseServeOptions(args []string) (serveOptions, error) {
 		dtlsFallbackRecovery:   *dtlsFallbackRecovery,
 		smoothTau:              *smoothTau,
 		headless:               *headless,
-		ui:                     *ui,
 		uiPort:                 *uiPort,
 	}, nil
 }

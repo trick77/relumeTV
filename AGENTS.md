@@ -29,7 +29,7 @@ All repo content (docs, code comments, logs) is English.
   idempotent per devicetype (TV polls it fast). Pairing needs no `link` command and no UI step — it
   is driven via logs.
 - web UI (setup assistant + live dashboard) is ON by default on :33100; `-headless` disables it,
-  `-ui-port` moves it (must differ from -http-port). `-ui` is a kept no-op. NO auth, so under
+  `-ui-port` moves it (must differ from -http-port). NO auth, so under
   `network_mode: host` it is LAN-reachable by anyone — read-only, never touches the control paths.
 - backend Pro pairing is AUTOMATIC in `serve`, driven by the web-UI setup wizard: if no Pro is
   paired, a background goroutine (`autoPairPro`) discovers it via local mDNS (`_hue._tcp.local.`;

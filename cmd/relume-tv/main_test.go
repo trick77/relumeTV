@@ -311,7 +311,7 @@ func TestProWatcherTick_unreachableReconnects(t *testing.T) {
 	fetchCalled := false
 	applied := (*config.BridgePro)(nil)
 	w, cfg := testWatcher(t,
-		&config.BridgePro{Host: "192.0.2.1", AppKey: "a", ClientKey: "ck"},
+		&config.BridgePro{Host: "192.0.2.1", AppKey: "a", ClientKey: "ck", DiscoveryID: "b1"},
 		healthCheck,
 		func() ([]bridgepro.DiscoveredBridge, error) {
 			discoverCalled = true
@@ -441,10 +441,6 @@ func TestParseServeOptions_HeadlessFlag(t *testing.T) {
 	}
 	if !off.headless {
 		t.Fatal("-headless should be true when set")
-	}
-	// -ui is kept as an accepted back-compat no-op (the UI is the default now).
-	if _, err := parseServeOptions([]string{"-ui"}); err != nil {
-		t.Fatalf("-ui should still parse as a no-op: %v", err)
 	}
 }
 

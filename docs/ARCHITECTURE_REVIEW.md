@@ -33,7 +33,7 @@ REST/DTLS mutual exclusion, the sticky fallback watchdog — are sound and well-
 - **L2 — DTLS decode/forward.** `OnFrame` now flows through a small bounded queue drained by a
   forwarder goroutine; a full queue drops the newest frame (counted) so a slow sink degrades
   smoothly instead of stalling intake. Race-tested.
-- **L5 — config durability.** Added `schemaVersion` (refuse newer, migrate legacy zero), fsync of
+- **L5 — config durability.** Added `schemaVersion` (refuse newer), fsync of
   the temp file and directory on atomic save, and cleanup of orphaned `.tmp` files.
 - **L6 — health check.** The liveness probe uses the lighter `BridgeInfo()` instead of `Lights()`.
 - **L7 — defensive guards.** Short-id name fallback guarded; `toFloat` accepts int64/int32/float32;

@@ -28,18 +28,15 @@ var (
 
 // resolveProHost determines a paired Hue Bridge Pro's current host for a RECONNECT,
 // via local mDNS discovery (the only discovery path now — both the manual -bridge-ip
-// override and the Philips cloud were removed). It applies the M6 id-matching:
-//
-//   - want != "" (a reconnect with a stored DiscoveryID): pick the discovered bridge
-//     whose id == want. If none matches, return an empty host (the caller retries) —
-//     never fall back to bridges[0], which could target a DIFFERENT bridge on a
-//     multi-bridge LAN, the exact thing DiscoveryID exists to prevent.
-//   - want == "" (a legacy install with no stored id): pick bridges[0] and LOG that
-//     fallback so multi-bridge LANs are diagnosable.
+// override and the Philips cloud were removed). It applies the M6 id-matching: it picks
+// the discovered bridge whose id == want. If want is empty or none matches, it returns
+// an empty host (the caller retries) — it never falls back to bridges[0], which could
+// target a DIFFERENT bridge on a multi-bridge LAN, the exact thing DiscoveryID exists to
+// prevent.
 //
 // On success it returns the chosen host plus the discovered bridge's id so the caller
 // can persist it (DiscoveryID) for future reconnects.
-func resolveProHost(want string, discover func() ([]bridgepro.DiscoveredBridge, error), log *slog.Logger) (host, discoveryID string, err error) {
+func resolveProHost(want string, discover func() ([]bridgepro.DiscoveredBridge, error)) (host, discoveryID string, err error) {
 	bridges, derr := discover()
 	if derr != nil {
 		return "", "", derr
@@ -53,20 +50,10 @@ func resolveProHost(want string, discover func() ([]bridgepro.DiscoveredBridge, 
 				return b.InternalIPAddress, b.ID, nil
 			}
 		}
-		// Stored id not among the discovered bridges: do not guess another bridge.
-		return "", "", nil
 	}
-	// Legacy fallback: no stored DiscoveryID, so pick the first discovered bridge.
-	// Always log it (louder when several are present, since that is the case where
-	// blindly taking the first risks the wrong bridge on a multi-bridge LAN).
-	if len(bridges) > 1 {
-		log.Warn("hue bridge pro mdns discovery: no stored discovery id, multiple bridges found — picking the first",
-			"count", len(bridges), "picked", bridges[0].InternalIPAddress)
-	} else {
-		log.Info("hue bridge pro mdns discovery: no stored discovery id — picking the only discovered bridge",
-			"picked", bridges[0].InternalIPAddress)
-	}
-	return bridges[0].InternalIPAddress, bridges[0].ID, nil
+	// No stored id, or the stored id is not among the discovered bridges: do not guess
+	// another bridge.
+	return "", "", nil
 }
 
 // selectProForPairing runs mDNS discovery for the INITIAL pairing and returns the
@@ -223,29 +210,14 @@ func newProWatcher(cfg *config.Config, clip *clipv1.Server, controlled *bridge.C
 	return w
 }
 
-// run drives the health-check/reconnect cycle until ctx is cancelled. It backfills
-// the Pro's name/id once up front (for installs paired before those were captured),
-// then loops calling tick. The cadence is w.interval during setup (fast, so the
-// step 3/5 power-cycle is responsive) but drops to the gentle 60s once the setup is
-// committed — past that there is no wizard to drive and the queue-sensitive Pro
-// should not be probed every few seconds for the process's whole lifetime.
+// run drives the health-check/reconnect cycle until ctx is cancelled, looping calling
+// tick. The cadence is w.interval during setup (fast, so the step 3/5 power-cycle is
+// responsive) but drops to the gentle 60s once the setup is committed — past that there
+// is no wizard to drive and the queue-sensitive Pro should not be probed every few
+// seconds for the process's whole lifetime.
 func (w *proWatcher) run(ctx context.Context) {
-	pro := w.cfg.GetPro()
-	if pro == nil {
+	if w.cfg.GetPro() == nil {
 		return
-	}
-	// Backfill the Pro's name/id for installs paired before they were captured, so
-	// logs can reference it. Best-effort and only while the Pro is reachable. Build a
-	// fresh *BridgePro and SetPro it rather than mutating the snapshot in place —
-	// GetPro promises an immutable view to concurrent readers (monitorIdle, shutdown).
-	if pro.Name == "" && pro.BridgeID == "" {
-		if name, id, ierr := bridgepro.New(pro).BridgeInfo(); ierr == nil && (name != "" || id != "") {
-			updated := *pro
-			updated.Name, updated.BridgeID = name, id
-			if serr := w.cfg.SetPro(&updated); serr != nil {
-				w.log.Warn("persisting hue bridge pro name/id", "err", serr)
-			}
-		}
 	}
 	for sleepCtx(ctx, w.checkInterval()) {
 		w.tick()
@@ -308,7 +280,7 @@ func (w *proWatcher) tick() (reconnected bool) {
 	}
 	w.lastDiscover = time.Now()
 
-	host, discoveryID, derr := resolveProHost(pro.DiscoveryID, w.discover, w.log)
+	host, discoveryID, derr := resolveProHost(pro.DiscoveryID, w.discover)
 	if derr != nil || host == "" {
 		if pro.DiscoveryID != "" {
 			w.retryLog("hue bridge pro reconnect: stored bridge not found via discovery; will retry", "discoveryId", pro.DiscoveryID, "err", derr)
